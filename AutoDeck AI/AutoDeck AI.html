@@ -1,0 +1,2549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AutoDeck AI — Quidax Internal Tool</title>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body { font-family: Calibri, 'Segoe UI', sans-serif; background: #F4F1F9; }
+    textarea { font-family: Calibri, 'Segoe UI', sans-serif; }
+    textarea::placeholder { color: #B0A0C0; }
+    input::placeholder { color: #B0A0C0; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(123,47,190,0.25); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(123,47,190,0.4); }
+    * { scrollbar-width: thin; scrollbar-color: rgba(123,47,190,0.25) transparent; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+// ============================================================
+// TWEAKS PANEL
+// ============================================================
+
+// tweaks-panel.jsx
+// Reusable Tweaks shell + form-control helpers.
+//
+// Owns the host protocol (listens for __activate_edit_mode / __deactivate_edit_mode,
+// posts __edit_mode_available / __edit_mode_set_keys / __edit_mode_dismissed) so
+// individual prototypes don't re-roll it. Ships a consistent set of controls so you
+// don't hand-draw <input type="range">, segmented radios, steppers, etc.
+//
+// Usage (in an HTML file that loads React + Babel):
+//
+//   const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+//     "primaryColor": "#D97757",
+//     "fontSize": 16,
+//     "density": "regular",
+//     "dark": false
+//   }/*EDITMODE-END*/;
+//
+//   function App() {
+//     const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+//     return (
+//       <div style={{ fontSize: t.fontSize, color: t.primaryColor }}>
+//         Hello
+//         <TweaksPanel>
+//           <TweakSection label="Typography" />
+//           <TweakSlider label="Font size" value={t.fontSize} min={10} max={32} unit="px"
+//                        onChange={(v) => setTweak('fontSize', v)} />
+//           <TweakRadio  label="Density" value={t.density}
+//                        options={['compact', 'regular', 'comfy']}
+//                        onChange={(v) => setTweak('density', v)} />
+//           <TweakSection label="Theme" />
+//           <TweakColor  label="Primary" value={t.primaryColor}
+//                        onChange={(v) => setTweak('primaryColor', v)} />
+//           <TweakToggle label="Dark mode" value={t.dark}
+//                        onChange={(v) => setTweak('dark', v)} />
+//         </TweaksPanel>
+//       </div>
+//     );
+//   }
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+const __TWEAKS_STYLE = `
+  .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:280px;
+    max-height:calc(100vh - 32px);display:flex;flex-direction:column;
+    background:rgba(250,249,247,.78);color:#29261b;
+    -webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);
+    border:.5px solid rgba(255,255,255,.6);border-radius:14px;
+    box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 12px 40px rgba(0,0,0,.18);
+    font:11.5px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow:hidden}
+  .twk-hd{display:flex;align-items:center;justify-content:space-between;
+    padding:10px 8px 10px 14px;cursor:move;user-select:none}
+  .twk-hd b{font-size:12px;font-weight:600;letter-spacing:.01em}
+  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.55);
+    width:22px;height:22px;border-radius:6px;cursor:default;font-size:13px;line-height:1}
+  .twk-x:hover{background:rgba(0,0,0,.06);color:#29261b}
+  .twk-body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px;
+    overflow-y:auto;overflow-x:hidden;min-height:0;
+    scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.15) transparent}
+  .twk-body::-webkit-scrollbar{width:8px}
+  .twk-body::-webkit-scrollbar-track{background:transparent;margin:2px}
+  .twk-body::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:4px;
+    border:2px solid transparent;background-clip:content-box}
+  .twk-body::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.25);
+    border:2px solid transparent;background-clip:content-box}
+  .twk-row{display:flex;flex-direction:column;gap:5px}
+  .twk-row-h{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
+  .twk-lbl{display:flex;justify-content:space-between;align-items:baseline;
+    color:rgba(41,38,27,.72)}
+  .twk-lbl>span:first-child{font-weight:500}
+  .twk-val{color:rgba(41,38,27,.5);font-variant-numeric:tabular-nums}
+
+  .twk-sect{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:rgba(41,38,27,.45);padding:10px 0 0}
+  .twk-sect:first-child{padding-top:0}
+
+  .twk-field{appearance:none;width:100%;height:26px;padding:0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;
+    background:rgba(255,255,255,.6);color:inherit;font:inherit;outline:none}
+  .twk-field:focus{border-color:rgba(0,0,0,.25);background:rgba(255,255,255,.85)}
+  select.twk-field{padding-right:22px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='rgba(0,0,0,.5)' d='M0 0h10L5 6z'/></svg>");
+    background-repeat:no-repeat;background-position:right 8px center}
+
+  .twk-slider{appearance:none;-webkit-appearance:none;width:100%;height:4px;margin:6px 0;
+    border-radius:999px;background:rgba(0,0,0,.12);outline:none}
+  .twk-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+    width:14px;height:14px;border-radius:50%;background:#fff;
+    border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+  .twk-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+    background:#fff;border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+
+  .twk-seg{position:relative;display:flex;padding:2px;border-radius:8px;
+    background:rgba(0,0,0,.06);user-select:none}
+  .twk-seg-thumb{position:absolute;top:2px;bottom:2px;border-radius:6px;
+    background:rgba(255,255,255,.9);box-shadow:0 1px 2px rgba(0,0,0,.12);
+    transition:left .15s cubic-bezier(.3,.7,.4,1),width .15s}
+  .twk-seg.dragging .twk-seg-thumb{transition:none}
+  .twk-seg button{appearance:none;position:relative;z-index:1;flex:1;border:0;
+    background:transparent;color:inherit;font:inherit;font-weight:500;min-height:22px;
+    border-radius:6px;cursor:default;padding:4px 6px;line-height:1.2;
+    overflow-wrap:anywhere}
+
+  .twk-toggle{position:relative;width:32px;height:18px;border:0;border-radius:999px;
+    background:rgba(0,0,0,.15);transition:background .15s;cursor:default;padding:0}
+  .twk-toggle[data-on="1"]{background:#34c759}
+  .twk-toggle i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+  .twk-toggle[data-on="1"] i{transform:translateX(14px)}
+
+  .twk-num{display:flex;align-items:center;height:26px;padding:0 0 0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;background:rgba(255,255,255,.6)}
+  .twk-num-lbl{font-weight:500;color:rgba(41,38,27,.6);cursor:ew-resize;
+    user-select:none;padding-right:8px}
+  .twk-num input{flex:1;min-width:0;height:100%;border:0;background:transparent;
+    font:inherit;font-variant-numeric:tabular-nums;text-align:right;padding:0 8px 0 0;
+    outline:none;color:inherit;-moz-appearance:textfield}
+  .twk-num input::-webkit-inner-spin-button,.twk-num input::-webkit-outer-spin-button{
+    -webkit-appearance:none;margin:0}
+  .twk-num-unit{padding-right:8px;color:rgba(41,38,27,.45)}
+
+  .twk-btn{appearance:none;height:26px;padding:0 12px;border:0;border-radius:7px;
+    background:rgba(0,0,0,.78);color:#fff;font:inherit;font-weight:500;cursor:default}
+  .twk-btn:hover{background:rgba(0,0,0,.88)}
+  .twk-btn.secondary{background:rgba(0,0,0,.06);color:inherit}
+  .twk-btn.secondary:hover{background:rgba(0,0,0,.1)}
+
+  .twk-swatch{appearance:none;-webkit-appearance:none;width:56px;height:22px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:6px;padding:0;cursor:default;
+    background:transparent;flex-shrink:0}
+  .twk-swatch::-webkit-color-swatch-wrapper{padding:0}
+  .twk-swatch::-webkit-color-swatch{border:0;border-radius:5.5px}
+  .twk-swatch::-moz-color-swatch{border:0;border-radius:5.5px}
+`;
+
+// ── useTweaks ───────────────────────────────────────────────────────────────
+// Single source of truth for tweak values. setTweak persists via the host
+// (__edit_mode_set_keys → host rewrites the EDITMODE block on disk).
+function useTweaks(defaults) {
+  const [values, setValues] = React.useState(defaults);
+  // Accepts either setTweak('key', value) or setTweak({ key: value, ... }) so a
+  // useState-style call doesn't write a "[object Object]" key into the persisted
+  // JSON block.
+  const setTweak = React.useCallback((keyOrEdits, val) => {
+    const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
+      ? keyOrEdits : { [keyOrEdits]: val };
+    setValues((prev) => ({ ...prev, ...edits }));
+    window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*');
+  }, []);
+  return [values, setTweak];
+}
+
+// ── TweaksPanel ─────────────────────────────────────────────────────────────
+// Floating shell. Registers the protocol listener BEFORE announcing
+// availability — if the announce ran first, the host's activate could land
+// before our handler exists and the toolbar toggle would silently no-op.
+// The close button posts __edit_mode_dismissed so the host's toolbar toggle
+// flips off in lockstep; the host echoes __deactivate_edit_mode back which
+// is what actually hides the panel.
+function TweaksPanel({ title = 'Tweaks', children }) {
+  const [open, setOpen] = React.useState(false);
+  const dragRef = React.useRef(null);
+  const offsetRef = React.useRef({ x: 16, y: 16 });
+  const PAD = 16;
+
+  const clampToViewport = React.useCallback(() => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const w = panel.offsetWidth, h = panel.offsetHeight;
+    const maxRight = Math.max(PAD, window.innerWidth - w - PAD);
+    const maxBottom = Math.max(PAD, window.innerHeight - h - PAD);
+    offsetRef.current = {
+      x: Math.min(maxRight, Math.max(PAD, offsetRef.current.x)),
+      y: Math.min(maxBottom, Math.max(PAD, offsetRef.current.y)),
+    };
+    panel.style.right = offsetRef.current.x + 'px';
+    panel.style.bottom = offsetRef.current.y + 'px';
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    clampToViewport();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', clampToViewport);
+      return () => window.removeEventListener('resize', clampToViewport);
+    }
+    const ro = new ResizeObserver(clampToViewport);
+    ro.observe(document.documentElement);
+    return () => ro.disconnect();
+  }, [open, clampToViewport]);
+
+  React.useEffect(() => {
+    const onMsg = (e) => {
+      const t = e?.data?.type;
+      if (t === '__activate_edit_mode') setOpen(true);
+      else if (t === '__deactivate_edit_mode') setOpen(false);
+    };
+    window.addEventListener('message', onMsg);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  const dismiss = () => {
+    setOpen(false);
+    window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*');
+  };
+
+  const onDragStart = (e) => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const r = panel.getBoundingClientRect();
+    const sx = e.clientX, sy = e.clientY;
+    const startRight = window.innerWidth - r.right;
+    const startBottom = window.innerHeight - r.bottom;
+    const move = (ev) => {
+      offsetRef.current = {
+        x: startRight - (ev.clientX - sx),
+        y: startBottom - (ev.clientY - sy),
+      };
+      clampToViewport();
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  if (!open) return null;
+  return (
+    <>
+      <style>{__TWEAKS_STYLE}</style>
+      <div ref={dragRef} className="twk-panel" data-noncommentable=""
+           style={{ right: offsetRef.current.x, bottom: offsetRef.current.y }}>
+        <div className="twk-hd" onMouseDown={onDragStart}>
+          <b>{title}</b>
+          <button className="twk-x" aria-label="Close tweaks"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={dismiss}>✕</button>
+        </div>
+        <div className="twk-body">{children}</div>
+      </div>
+    </>
+  );
+}
+
+// ── Layout helpers ──────────────────────────────────────────────────────────
+
+function TweakSection({ label, children }) {
+  return (
+    <>
+      <div className="twk-sect">{label}</div>
+      {children}
+    </>
+  );
+}
+
+function TweakRow({ label, value, children, inline = false }) {
+  return (
+    <div className={inline ? 'twk-row twk-row-h' : 'twk-row'}>
+      <div className="twk-lbl">
+        <span>{label}</span>
+        {value != null && <span className="twk-val">{value}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── Controls ────────────────────────────────────────────────────────────────
+
+function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit = '', onChange }) {
+  return (
+    <TweakRow label={label} value={`${value}${unit}`}>
+      <input type="range" className="twk-slider" min={min} max={max} step={step}
+             value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </TweakRow>
+  );
+}
+
+function TweakToggle({ label, value, onChange }) {
+  return (
+    <div className="twk-row twk-row-h">
+      <div className="twk-lbl"><span>{label}</span></div>
+      <button type="button" className="twk-toggle" data-on={value ? '1' : '0'}
+              role="switch" aria-checked={!!value}
+              onClick={() => onChange(!value)}><i /></button>
+    </div>
+  );
+}
+
+function TweakRadio({ label, value, options, onChange }) {
+  const trackRef = React.useRef(null);
+  const [dragging, setDragging] = React.useState(false);
+  const opts = options.map((o) => (typeof o === 'object' ? o : { value: o, label: o }));
+  const idx = Math.max(0, opts.findIndex((o) => o.value === value));
+  const n = opts.length;
+
+  // The active value is read by pointer-move handlers attached for the lifetime
+  // of a drag — ref it so a stale closure doesn't fire onChange for every move.
+  const valueRef = React.useRef(value);
+  valueRef.current = value;
+
+  const segAt = (clientX) => {
+    const r = trackRef.current.getBoundingClientRect();
+    const inner = r.width - 4;
+    const i = Math.floor(((clientX - r.left - 2) / inner) * n);
+    return opts[Math.max(0, Math.min(n - 1, i))].value;
+  };
+
+  const onPointerDown = (e) => {
+    setDragging(true);
+    const v0 = segAt(e.clientX);
+    if (v0 !== valueRef.current) onChange(v0);
+    const move = (ev) => {
+      if (!trackRef.current) return;
+      const v = segAt(ev.clientX);
+      if (v !== valueRef.current) onChange(v);
+    };
+    const up = () => {
+      setDragging(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  return (
+    <TweakRow label={label}>
+      <div ref={trackRef} role="radiogroup" onPointerDown={onPointerDown}
+           className={dragging ? 'twk-seg dragging' : 'twk-seg'}>
+        <div className="twk-seg-thumb"
+             style={{ left: `calc(2px + ${idx} * (100% - 4px) / ${n})`,
+                      width: `calc((100% - 4px) / ${n})` }} />
+        {opts.map((o) => (
+          <button key={o.value} type="button" role="radio" aria-checked={o.value === value}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakSelect({ label, value, options, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <select className="twk-field" value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => {
+          const v = typeof o === 'object' ? o.value : o;
+          const l = typeof o === 'object' ? o.label : o;
+          return <option key={v} value={v}>{l}</option>;
+        })}
+      </select>
+    </TweakRow>
+  );
+}
+
+function TweakText({ label, value, placeholder, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <input className="twk-field" type="text" value={value} placeholder={placeholder}
+             onChange={(e) => onChange(e.target.value)} />
+    </TweakRow>
+  );
+}
+
+function TweakNumber({ label, value, min, max, step = 1, unit = '', onChange }) {
+  const clamp = (n) => {
+    if (min != null && n < min) return min;
+    if (max != null && n > max) return max;
+    return n;
+  };
+  const startRef = React.useRef({ x: 0, val: 0 });
+  const onScrubStart = (e) => {
+    e.preventDefault();
+    startRef.current = { x: e.clientX, val: value };
+    const decimals = (String(step).split('.')[1] || '').length;
+    const move = (ev) => {
+      const dx = ev.clientX - startRef.current.x;
+      const raw = startRef.current.val + dx * step;
+      const snapped = Math.round(raw / step) * step;
+      onChange(clamp(Number(snapped.toFixed(decimals))));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  return (
+    <div className="twk-num">
+      <span className="twk-num-lbl" onPointerDown={onScrubStart}>{label}</span>
+      <input type="number" value={value} min={min} max={max} step={step}
+             onChange={(e) => onChange(clamp(Number(e.target.value)))} />
+      {unit && <span className="twk-num-unit">{unit}</span>}
+    </div>
+  );
+}
+
+function TweakColor({ label, value, onChange }) {
+  return (
+    <div className="twk-row twk-row-h">
+      <div className="twk-lbl"><span>{label}</span></div>
+      <input type="color" className="twk-swatch" value={value}
+             onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+function TweakButton({ label, onClick, secondary = false }) {
+  return (
+    <button type="button" className={secondary ? 'twk-btn secondary' : 'twk-btn'}
+            onClick={onClick}>{label}</button>
+  );
+}
+
+Object.assign(window, {
+  useTweaks, TweaksPanel, TweakSection, TweakRow,
+  TweakSlider, TweakToggle, TweakRadio, TweakSelect,
+  TweakText, TweakNumber, TweakColor, TweakButton,
+});
+
+
+// ============================================================
+// SIDEBAR
+// ============================================================
+
+// Sidebar Navigation Component
+const Sidebar = ({ currentScreen, onNavigate, currentUser }) => {
+  const navItems = [
+    {
+      id: 'home',
+      label: 'Generate',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <path d="M9 1L11.5 6.5H17L12.5 10L14.5 16L9 12.5L3.5 16L5.5 10L1 6.5H6.5L9 1Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" fill="none"/>
+        </svg>
+      )
+    },
+    {
+      id: 'history',
+      label: 'History',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <circle cx="9" cy="9" r="7.5" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M9 5V9.5L12 11.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      )
+    },
+    {
+      id: 'admin',
+      label: 'Admin',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <path d="M9 2L10.8 6.5L16 7L12 10.5L13.5 16L9 13L4.5 16L6 10.5L2 7L7.2 6.5L9 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" fill="none"/>
+        </svg>
+      ),
+      adminOnly: true
+    }
+  ];
+
+  return (
+    <div style={{
+      width: '220px',
+      minWidth: '220px',
+      background: '#2D0A4E',
+      height: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      position: 'fixed',
+      left: 0,
+      top: 0,
+      zIndex: 100,
+      boxShadow: '4px 0 24px rgba(0,0,0,0.25)'
+    }}>
+      {/* Logo area */}
+      <div style={{
+        padding: '28px 24px 24px',
+        borderBottom: '1px solid rgba(255,255,255,0.08)'
+      }}>
+        {/* Gem icon */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+          <div style={{ position: 'relative', width: '32px', height: '32px' }}>
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+              <polygon points="16,2 30,10 30,22 16,30 2,22 2,10" fill="none" stroke="#D946A8" strokeWidth="1.5"/>
+              <polygon points="16,2 30,10 16,16 2,10" fill="#7B2FBE" opacity="0.7"/>
+              <polygon points="16,16 30,10 30,22 16,30" fill="#D946A8" opacity="0.5"/>
+              <polygon points="16,16 16,30 2,22 2,10" fill="#7B2FBE" opacity="0.4"/>
+            </svg>
+          </div>
+          <div>
+            <div style={{ color: '#FFFFFF', fontFamily: '"Arial Black", sans-serif', fontSize: '15px', fontWeight: '900', letterSpacing: '-0.3px', lineHeight: 1.1 }}>AutoDeck</div>
+            <div style={{ color: '#D946A8', fontFamily: '"Arial Black", sans-serif', fontSize: '11px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase' }}>AI</div>
+          </div>
+        </div>
+        <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: '11px', fontFamily: 'Calibri, sans-serif', letterSpacing: '0.3px', marginTop: '4px' }}>Quidax Internal Tool</div>
+      </div>
+
+      {/* Nav Items */}
+      <nav style={{ flex: 1, padding: '16px 12px' }}>
+        {navItems.map(item => {
+          const isActive = currentScreen === item.id || (currentScreen === 'processing' && item.id === 'home') || (currentScreen === 'preview' && item.id === 'home');
+          if (item.adminOnly && currentUser !== 'admin') return null;
+          return (
+            <button
+              key={item.id}
+              onClick={() => onNavigate(item.id)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '11px 14px',
+                borderRadius: '10px',
+                border: 'none',
+                background: isActive ? 'rgba(217,70,168,0.18)' : 'transparent',
+                color: isActive ? '#D946A8' : 'rgba(255,255,255,0.55)',
+                fontSize: '14px',
+                fontFamily: 'Calibri, sans-serif',
+                fontWeight: isActive ? '700' : '500',
+                cursor: 'pointer',
+                marginBottom: '4px',
+                textAlign: 'left',
+                transition: 'all 0.15s ease',
+                position: 'relative',
+                letterSpacing: '0.1px'
+              }}
+              onMouseEnter={e => {
+                if (!isActive) {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                  e.currentTarget.style.color = 'rgba(255,255,255,0.85)';
+                }
+              }}
+              onMouseLeave={e => {
+                if (!isActive) {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = 'rgba(255,255,255,0.55)';
+                }
+              }}
+            >
+              {isActive && (
+                <div style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: '3px',
+                  height: '22px',
+                  background: '#D946A8',
+                  borderRadius: '0 3px 3px 0'
+                }} />
+              )}
+              <span style={{ opacity: isActive ? 1 : 0.7 }}>{item.icon}</span>
+              {item.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* User area */}
+      <div style={{
+        padding: '16px 20px',
+        borderTop: '1px solid rgba(255,255,255,0.08)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px'
+      }}>
+        <div style={{
+          width: '32px',
+          height: '32px',
+          borderRadius: '50%',
+          background: 'linear-gradient(135deg, #7B2FBE, #D946A8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#fff',
+          fontSize: '13px',
+          fontFamily: '"Arial Black", sans-serif',
+          fontWeight: '900',
+          flexShrink: 0
+        }}>
+          {currentUser === 'admin' ? 'AD' : 'AO'}
+        </div>
+        <div>
+          <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: '13px', fontFamily: 'Calibri, sans-serif', fontWeight: '600' }}>
+            {currentUser === 'admin' ? 'Ada Okafor' : 'Ayo Osei'}
+          </div>
+          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: '11px', fontFamily: 'Calibri, sans-serif' }}>
+            {currentUser === 'admin' ? 'Design Lead' : 'Sales Rep'}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+Object.assign(window, { Sidebar });
+
+
+// ============================================================
+// HOME SCREEN
+// ============================================================
+
+// Home / Generate Screen
+const HomeScreen = ({ onGenerate, tweaks }) => {
+  const [inputText, setInputText] = React.useState('');
+  const [slideCount, setSlideCount] = React.useState('Auto');
+  const [templateStyle, setTemplateStyle] = React.useState('Professional');
+  const [dragOver, setDragOver] = React.useState(false);
+  const [uploadedFile, setUploadedFile] = React.useState(null);
+  const [charCount, setCharCount] = React.useState(0);
+
+  const slideOptions = ['5', '8', '10', '15', 'Auto'];
+  const templates = [
+    {
+      id: 'Professional',
+      label: 'Professional',
+      desc: 'Clean & structured',
+      accent: '#7B2FBE',
+      preview: (
+        <svg width="36" height="26" viewBox="0 0 36 26" fill="none">
+          <rect width="36" height="26" rx="3" fill="#F0EBF7"/>
+          <rect x="2" y="2" width="14" height="22" rx="2" fill="#2D0A4E"/>
+          <rect x="18" y="4" width="16" height="2" rx="1" fill="#7B2FBE"/>
+          <rect x="18" y="8" width="12" height="1.5" rx="0.75" fill="#ccc"/>
+          <rect x="18" y="11" width="14" height="1.5" rx="0.75" fill="#ccc"/>
+          <rect x="18" y="14" width="10" height="1.5" rx="0.75" fill="#ccc"/>
+        </svg>
+      )
+    },
+    {
+      id: 'Minimal',
+      label: 'Minimal',
+      desc: 'Lots of white space',
+      accent: '#555',
+      preview: (
+        <svg width="36" height="26" viewBox="0 0 36 26" fill="none">
+          <rect width="36" height="26" rx="3" fill="#FAFAFA"/>
+          <rect x="4" y="5" width="20" height="3" rx="1" fill="#222"/>
+          <rect x="4" y="11" width="28" height="1.5" rx="0.75" fill="#ddd"/>
+          <rect x="4" y="14" width="22" height="1.5" rx="0.75" fill="#ddd"/>
+          <rect x="4" y="17" width="26" height="1.5" rx="0.75" fill="#ddd"/>
+          <rect x="4" y="20" width="18" height="1.5" rx="0.75" fill="#ddd"/>
+        </svg>
+      )
+    },
+    {
+      id: 'Bold',
+      label: 'Bold',
+      desc: 'High impact visuals',
+      accent: '#D946A8',
+      preview: (
+        <svg width="36" height="26" viewBox="0 0 36 26" fill="none">
+          <rect width="36" height="26" rx="3" fill="#1A0530"/>
+          <rect x="0" y="0" width="36" height="10" rx="3" fill="url(#boldGrad)"/>
+          <defs>
+            <linearGradient id="boldGrad" x1="0" y1="0" x2="36" y2="0">
+              <stop stopColor="#7B2FBE"/>
+              <stop offset="1" stopColor="#D946A8"/>
+            </linearGradient>
+          </defs>
+          <rect x="4" y="3" width="18" height="3" rx="1" fill="white"/>
+          <rect x="4" y="13" width="28" height="1.5" rx="0.75" fill="rgba(255,255,255,0.3)"/>
+          <rect x="4" y="16" width="22" height="1.5" rx="0.75" fill="rgba(255,255,255,0.3)"/>
+          <rect x="4" y="19" width="26" height="1.5" rx="0.75" fill="rgba(255,255,255,0.3)"/>
+        </svg>
+      )
+    },
+    {
+      id: 'Corporate',
+      label: 'Corporate',
+      desc: 'Traditional & formal',
+      accent: '#F5A623',
+      preview: (
+        <svg width="36" height="26" viewBox="0 0 36 26" fill="none">
+          <rect width="36" height="26" rx="3" fill="#F5F5F5"/>
+          <rect x="0" y="0" width="36" height="6" rx="3" fill="#2D0A4E"/>
+          <rect x="28" y="0" width="8" height="6" fill="#F5A623"/>
+          <rect x="4" y="9" width="28" height="2" rx="1" fill="#2D0A4E"/>
+          <rect x="4" y="14" width="28" height="1.5" rx="0.75" fill="#ccc"/>
+          <rect x="4" y="17" width="22" height="1.5" rx="0.75" fill="#ccc"/>
+          <rect x="4" y="20" width="26" height="1.5" rx="0.75" fill="#ccc"/>
+        </svg>
+      )
+    }
+  ];
+
+  const handleTextChange = (e) => {
+    setInputText(e.target.value);
+    setCharCount(e.target.value.length);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) setUploadedFile(file);
+  };
+
+  const handleFileInput = (e) => {
+    const file = e.target.files[0];
+    if (file) setUploadedFile(file);
+  };
+
+  const canGenerate = inputText.trim().length > 10 || uploadedFile;
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: tweaks?.darkMode ? '#0F0318' : '#F4F1F9',
+      padding: '40px 48px',
+      fontFamily: 'Calibri, sans-serif',
+      overflowY: 'auto'
+    }}>
+      {/* Header */}
+      <div style={{ marginBottom: '36px' }}>
+        <h1 style={{
+          fontFamily: '"Arial Black", sans-serif',
+          fontSize: '26px',
+          fontWeight: '900',
+          color: tweaks?.darkMode ? '#FFFFFF' : '#1A0530',
+          margin: 0,
+          letterSpacing: '-0.5px'
+        }}>Generate a Deck</h1>
+        <p style={{
+          color: tweaks?.darkMode ? 'rgba(255,255,255,0.45)' : '#7A6B8A',
+          fontSize: '15px',
+          margin: '6px 0 0',
+          fontFamily: 'Calibri, sans-serif'
+        }}>Paste your notes or upload a document — we'll handle the rest.</p>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '28px', alignItems: 'start' }}>
+        {/* Left: Main input */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+          {/* Text input */}
+          <div style={{
+            background: tweaks?.darkMode ? '#1E0635' : '#FFFFFF',
+            borderRadius: '16px',
+            border: `1.5px solid ${tweaks?.darkMode ? 'rgba(123,47,190,0.3)' : 'rgba(123,47,190,0.15)'}`,
+            overflow: 'hidden',
+            boxShadow: tweaks?.darkMode ? 'none' : '0 2px 16px rgba(45,10,78,0.06)'
+          }}>
+            <div style={{
+              padding: '16px 20px 4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <span style={{
+                fontSize: '12px',
+                fontWeight: '700',
+                letterSpacing: '1.2px',
+                textTransform: 'uppercase',
+                color: tweaks?.darkMode ? 'rgba(255,255,255,0.4)' : '#9080A0',
+                fontFamily: 'Calibri, sans-serif'
+              }}>Your Content</span>
+              {charCount > 0 && (
+                <span style={{ fontSize: '11px', color: '#9080A0', fontFamily: 'Calibri, sans-serif' }}>
+                  {charCount.toLocaleString()} characters
+                </span>
+              )}
+            </div>
+            <textarea
+              value={inputText}
+              onChange={handleTextChange}
+              placeholder="Paste your notes, meeting summary, bullet points, or any raw text here…&#10;&#10;AutoDeck AI will structure this into a polished Quidax presentation."
+              style={{
+                width: '100%',
+                minHeight: '300px',
+                border: 'none',
+                outline: 'none',
+                resize: 'vertical',
+                padding: '12px 20px 20px',
+                fontSize: '15px',
+                fontFamily: 'Calibri, sans-serif',
+                lineHeight: '1.65',
+                color: tweaks?.darkMode ? 'rgba(255,255,255,0.85)' : '#1A0530',
+                background: 'transparent',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+
+          {/* File Upload */}
+          <div
+            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+            style={{
+              border: `2px dashed ${dragOver ? '#D946A8' : (tweaks?.darkMode ? 'rgba(123,47,190,0.35)' : 'rgba(123,47,190,0.25)')}`,
+              borderRadius: '12px',
+              padding: '22px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              background: dragOver
+                ? (tweaks?.darkMode ? 'rgba(217,70,168,0.08)' : 'rgba(217,70,168,0.04)')
+                : (tweaks?.darkMode ? 'rgba(123,47,190,0.07)' : 'rgba(123,47,190,0.03)'),
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+            onClick={() => document.getElementById('fileInput').click()}
+          >
+            <input
+              id="fileInput"
+              type="file"
+              accept=".pdf,.docx,.txt,.pptx"
+              style={{ display: 'none' }}
+              onChange={handleFileInput}
+            />
+            <div style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '10px',
+              background: uploadedFile ? 'rgba(217,70,168,0.15)' : (tweaks?.darkMode ? 'rgba(123,47,190,0.2)' : 'rgba(123,47,190,0.1)'),
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              color: uploadedFile ? '#D946A8' : '#7B2FBE'
+            }}>
+              {uploadedFile ? (
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M4 10l4 4 8-8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M10 13V7M7 10l3-3 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M5 16h10M3 13.5A4.5 4.5 0 017.5 9a5 5 0 019.5 1.5A3.5 3.5 0 0117 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              )}
+            </div>
+            <div>
+              {uploadedFile ? (
+                <>
+                  <div style={{ fontWeight: '600', color: '#D946A8', fontSize: '14px' }}>{uploadedFile.name}</div>
+                  <div style={{ fontSize: '12px', color: tweaks?.darkMode ? 'rgba(255,255,255,0.4)' : '#9080A0', marginTop: '2px' }}>
+                    Click to replace
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontWeight: '600', color: tweaks?.darkMode ? 'rgba(255,255,255,0.7)' : '#4A3560', fontSize: '14px' }}>
+                    Drag & drop a file, or <span style={{ color: '#7B2FBE' }}>browse</span>
+                  </div>
+                  <div style={{ fontSize: '12px', color: tweaks?.darkMode ? 'rgba(255,255,255,0.35)' : '#9080A0', marginTop: '2px' }}>
+                    PDF, DOCX, TXT, or PPTX — up to 20 MB
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Config panel */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', position: 'sticky', top: '40px' }}>
+
+          {/* Slide count */}
+          <div style={{
+            background: tweaks?.darkMode ? '#1E0635' : '#FFFFFF',
+            borderRadius: '16px',
+            border: `1.5px solid ${tweaks?.darkMode ? 'rgba(123,47,190,0.3)' : 'rgba(123,47,190,0.12)'}`,
+            padding: '20px',
+            boxShadow: tweaks?.darkMode ? 'none' : '0 2px 16px rgba(45,10,78,0.06)'
+          }}>
+            <div style={{
+              fontSize: '12px',
+              fontWeight: '700',
+              letterSpacing: '1.2px',
+              textTransform: 'uppercase',
+              color: tweaks?.darkMode ? 'rgba(255,255,255,0.4)' : '#9080A0',
+              marginBottom: '14px'
+            }}>Slide Count</div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {slideOptions.map(opt => (
+                <button
+                  key={opt}
+                  onClick={() => setSlideCount(opt)}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    border: `1.5px solid ${slideCount === opt ? '#7B2FBE' : (tweaks?.darkMode ? 'rgba(255,255,255,0.1)' : '#E8E0F0')}`,
+                    background: slideCount === opt ? '#7B2FBE' : 'transparent',
+                    color: slideCount === opt ? '#FFFFFF' : (tweaks?.darkMode ? 'rgba(255,255,255,0.6)' : '#4A3560'),
+                    fontSize: '14px',
+                    fontFamily: 'Calibri, sans-serif',
+                    fontWeight: slideCount === opt ? '700' : '500',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Template style */}
+          <div style={{
+            background: tweaks?.darkMode ? '#1E0635' : '#FFFFFF',
+            borderRadius: '16px',
+            border: `1.5px solid ${tweaks?.darkMode ? 'rgba(123,47,190,0.3)' : 'rgba(123,47,190,0.12)'}`,
+            padding: '20px',
+            boxShadow: tweaks?.darkMode ? 'none' : '0 2px 16px rgba(45,10,78,0.06)'
+          }}>
+            <div style={{
+              fontSize: '12px',
+              fontWeight: '700',
+              letterSpacing: '1.2px',
+              textTransform: 'uppercase',
+              color: tweaks?.darkMode ? 'rgba(255,255,255,0.4)' : '#9080A0',
+              marginBottom: '14px'
+            }}>Template Style</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              {templates.map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => setTemplateStyle(t.id)}
+                  style={{
+                    padding: '12px',
+                    borderRadius: '10px',
+                    border: `2px solid ${templateStyle === t.id ? t.accent : (tweaks?.darkMode ? 'rgba(255,255,255,0.08)' : '#EDE7F5')}`,
+                    background: templateStyle === t.id
+                      ? (tweaks?.darkMode ? `${t.accent}18` : `${t.accent}0F`)
+                      : (tweaks?.darkMode ? 'rgba(255,255,255,0.03)' : '#FAFAFA'),
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    transition: 'all 0.15s ease',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}
+                >
+                  {t.preview}
+                  <div>
+                    <div style={{
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      color: templateStyle === t.id ? t.accent : (tweaks?.darkMode ? 'rgba(255,255,255,0.8)' : '#2D0A4E'),
+                      fontFamily: 'Calibri, sans-serif'
+                    }}>{t.label}</div>
+                    <div style={{
+                      fontSize: '11px',
+                      color: tweaks?.darkMode ? 'rgba(255,255,255,0.35)' : '#9080A0',
+                      marginTop: '2px',
+                      fontFamily: 'Calibri, sans-serif'
+                    }}>{t.desc}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Generate button */}
+          <button
+            onClick={() => canGenerate && onGenerate({ inputText, slideCount, templateStyle, uploadedFile })}
+            disabled={!canGenerate}
+            style={{
+              width: '100%',
+              padding: '18px',
+              borderRadius: '14px',
+              border: 'none',
+              background: canGenerate
+                ? 'linear-gradient(135deg, #7B2FBE 0%, #D946A8 100%)'
+                : (tweaks?.darkMode ? 'rgba(255,255,255,0.07)' : '#EDE7F5'),
+              color: canGenerate ? '#FFFFFF' : (tweaks?.darkMode ? 'rgba(255,255,255,0.2)' : '#C0A8D8'),
+              fontSize: '16px',
+              fontFamily: '"Arial Black", sans-serif',
+              fontWeight: '900',
+              cursor: canGenerate ? 'pointer' : 'not-allowed',
+              letterSpacing: '0.3px',
+              transition: 'all 0.2s ease',
+              boxShadow: canGenerate ? '0 6px 28px rgba(217,70,168,0.35)' : 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '10px',
+              transform: 'translateY(0)',
+            }}
+            onMouseEnter={e => {
+              if (canGenerate) {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 10px 36px rgba(217,70,168,0.45)';
+              }
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = canGenerate ? '0 6px 28px rgba(217,70,168,0.35)' : 'none';
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <polygon points="9,1 17,9 9,17 1,9" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <polygon points="9,4 14,9 9,14 4,9" fill="currentColor" opacity="0.7"/>
+            </svg>
+            Generate Deck
+          </button>
+
+          {!canGenerate && (
+            <p style={{
+              textAlign: 'center',
+              fontSize: '12px',
+              color: tweaks?.darkMode ? 'rgba(255,255,255,0.3)' : '#B0A0C0',
+              margin: '-8px 0 0',
+              fontFamily: 'Calibri, sans-serif'
+            }}>
+              Paste some text or upload a file to get started
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+Object.assign(window, { HomeScreen });
+
+
+// ============================================================
+// PROCESSING SCREEN
+// ============================================================
+
+// Processing Screen
+const ProcessingScreen = ({ config, onComplete, tweaks }) => {
+  const [phase, setPhase] = React.useState(0);
+  const [progress, setProgress] = React.useState(0);
+  const [dots, setDots] = React.useState('');
+
+  const phases = [
+    { label: 'Parsing your content', duration: 3000 },
+    { label: 'Structuring slides', duration: 4000 },
+    { label: 'Applying brand formatting', duration: 5000 },
+    { label: 'Finalising your deck', duration: 3000 },
+  ];
+
+  React.useEffect(() => {
+    let totalElapsed = 0;
+    const totalDuration = phases.reduce((s, p) => s + p.duration, 0);
+    const interval = setInterval(() => {
+      totalElapsed += 80;
+      setProgress(Math.min((totalElapsed / totalDuration) * 100, 98));
+      const phaseStart = phases.slice(0, phase).reduce((s, p) => s + p.duration, 0);
+      const phaseEnd = phaseStart + phases[phase].duration;
+      if (totalElapsed >= phaseEnd && phase < phases.length - 1) {
+        setPhase(p => p + 1);
+      }
+      if (totalElapsed >= totalDuration) {
+        clearInterval(interval);
+        setProgress(100);
+        setTimeout(() => onComplete(), 500);
+      }
+    }, 80);
+    return () => clearInterval(interval);
+  }, []);
+
+  React.useEffect(() => {
+    const d = setInterval(() => {
+      setDots(prev => prev.length >= 3 ? '' : prev + '.');
+    }, 400);
+    return () => clearInterval(d);
+  }, []);
+
+  const bg = tweaks?.darkMode ? '#0F0318' : '#F4F1F9';
+  const cardBg = tweaks?.darkMode ? '#1E0635' : '#FFFFFF';
+  const textColor = tweaks?.darkMode ? '#FFFFFF' : '#1A0530';
+  const subColor = tweaks?.darkMode ? 'rgba(255,255,255,0.45)' : '#7A6B8A';
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: bg,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontFamily: 'Calibri, sans-serif',
+      padding: '40px'
+    }}>
+      <div style={{ width: '100%', maxWidth: '540px', textAlign: 'center' }}>
+
+        {/* Gem animation */}
+        <div style={{ marginBottom: '40px', display: 'flex', justifyContent: 'center' }}>
+          <div style={{
+            position: 'relative',
+            width: '96px',
+            height: '96px',
+            animation: 'gemSpin 3s linear infinite'
+          }}>
+            <style>{`
+              @keyframes gemSpin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+              }
+              @keyframes gemPulse {
+                0%, 100% { opacity: 0.6; transform: scale(1); }
+                50% { opacity: 1; transform: scale(1.08); }
+              }
+            `}</style>
+            <svg width="96" height="96" viewBox="0 0 96 96" fill="none">
+              <polygon points="48,6 90,30 90,66 48,90 6,66 6,30"
+                fill="none" stroke="url(#gemGrad)" strokeWidth="2"/>
+              <polygon points="48,6 90,30 48,48 6,30"
+                fill="url(#faceTop)" opacity="0.8"/>
+              <polygon points="48,48 90,30 90,66 48,90"
+                fill="url(#faceRight)" opacity="0.6"/>
+              <polygon points="48,48 48,90 6,66 6,30"
+                fill="url(#faceLeft)" opacity="0.5"/>
+              <defs>
+                <linearGradient id="gemGrad" x1="0" y1="0" x2="96" y2="96">
+                  <stop stopColor="#7B2FBE"/>
+                  <stop offset="1" stopColor="#D946A8"/>
+                </linearGradient>
+                <linearGradient id="faceTop" x1="6" y1="6" x2="90" y2="48">
+                  <stop stopColor="#9B4FDE"/>
+                  <stop offset="1" stopColor="#7B2FBE"/>
+                </linearGradient>
+                <linearGradient id="faceRight" x1="48" y1="30" x2="90" y2="90">
+                  <stop stopColor="#D946A8"/>
+                  <stop offset="1" stopColor="#7B2FBE"/>
+                </linearGradient>
+                <linearGradient id="faceLeft" x1="6" y1="30" x2="48" y2="90">
+                  <stop stopColor="#7B2FBE"/>
+                  <stop offset="1" stopColor="#4A1A8E"/>
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+        </div>
+
+        {/* Title */}
+        <h2 style={{
+          fontFamily: '"Arial Black", sans-serif',
+          fontSize: '24px',
+          fontWeight: '900',
+          color: textColor,
+          margin: '0 0 8px',
+          letterSpacing: '-0.3px'
+        }}>Building your deck{dots}</h2>
+        <p style={{ color: subColor, fontSize: '15px', margin: '0 0 40px' }}>
+          This usually takes 15–30 seconds
+        </p>
+
+        {/* Progress card */}
+        <div style={{
+          background: cardBg,
+          borderRadius: '20px',
+          padding: '32px',
+          border: `1.5px solid ${tweaks?.darkMode ? 'rgba(123,47,190,0.25)' : 'rgba(123,47,190,0.12)'}`,
+          boxShadow: tweaks?.darkMode ? 'none' : '0 4px 24px rgba(45,10,78,0.08)'
+        }}>
+          {/* Steps */}
+          <div style={{ marginBottom: '28px' }}>
+            {phases.map((p, i) => {
+              const done = i < phase;
+              const active = i === phase;
+              return (
+                <div key={i} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '10px 0',
+                  borderBottom: i < phases.length - 1 ? `1px solid ${tweaks?.darkMode ? 'rgba(255,255,255,0.05)' : '#F0EAF8'}` : 'none',
+                  opacity: done ? 0.5 : active ? 1 : 0.3,
+                  transition: 'opacity 0.4s ease'
+                }}>
+                  <div style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    flexShrink: 0,
+                    background: done
+                      ? 'rgba(217,70,168,0.15)'
+                      : active
+                        ? 'linear-gradient(135deg, #7B2FBE, #D946A8)'
+                        : (tweaks?.darkMode ? 'rgba(255,255,255,0.06)' : '#F0EAF8'),
+                    border: done ? '2px solid #D946A8' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    {done ? (
+                      <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                        <path d="M2 5.5l2.5 2.5 4.5-5" stroke="#D946A8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    ) : active ? (
+                      <div style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: '#fff',
+                        animation: 'gemPulse 1s ease-in-out infinite'
+                      }} />
+                    ) : null}
+                  </div>
+                  <span style={{
+                    fontSize: '14px',
+                    color: done ? '#D946A8' : (tweaks?.darkMode ? 'rgba(255,255,255,0.85)' : '#2D0A4E'),
+                    fontWeight: active ? '600' : '400',
+                    fontFamily: 'Calibri, sans-serif'
+                  }}>{p.label}</span>
+                  {active && <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#7B2FBE' }}>In progress</span>}
+                  {done && <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#D946A8' }}>Done</span>}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Progress bar */}
+          <div style={{
+            height: '6px',
+            borderRadius: '3px',
+            background: tweaks?.darkMode ? 'rgba(255,255,255,0.08)' : '#EDE7F5',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              height: '100%',
+              width: `${progress}%`,
+              borderRadius: '3px',
+              background: 'linear-gradient(90deg, #7B2FBE, #D946A8)',
+              transition: 'width 0.3s ease'
+            }} />
+          </div>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            marginTop: '8px'
+          }}>
+            <span style={{ fontSize: '12px', color: subColor }}>
+              {config?.slideCount === 'Auto' ? 'Auto-detecting slides' : `${config?.slideCount} slides`} · {config?.templateStyle} template
+            </span>
+            <span style={{ fontSize: '12px', color: '#7B2FBE', fontWeight: '600' }}>
+              {Math.round(progress)}%
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+Object.assign(window, { ProcessingScreen });
+
+
+// ============================================================
+// PREVIEW SCREEN
+// ============================================================
+
+// Preview & Download Screen
+const PreviewScreen = ({ config, onGenerateAgain, tweaks }) => {
+  const [downloading, setDownloading] = React.useState(false);
+  const [downloaded, setDownloaded] = React.useState(false);
+
+  const deckTitle = config?.inputText
+    ? config.inputText.trim().split(/\s+/).slice(0, 5).join(' ') + '…'
+    : 'Q2 Sales Strategy Overview';
+
+  const slideCount = config?.slideCount === 'Auto' ? 10 : parseInt(config?.slideCount) || 10;
+
+  // Generate mock slide previews
+  const slidePreviews = [
+    { title: 'Executive Summary', bullets: ['Strong Q2 performance across all verticals', 'New markets entered: Ghana, Senegal', 'Revenue up 34% YoY'], type: 'title' },
+    { title: 'Market Overview', bullets: ['Africa crypto market growing at 18% CAGR', 'Quidax positioned in top 3 exchanges', 'User base crossed 2M milestone'], type: 'content' },
+    { title: 'Key Metrics', bullets: ['Monthly active users: 1.2M', 'Transaction volume: $280M', 'NPS score: 72'], type: 'metrics' },
+    { title: 'Growth Initiatives', bullets: ['B2B partnerships with 12 new fintechs', 'Mobile app v4.0 launch', 'Merchant payment integration'], type: 'content' },
+    { title: 'Challenges & Mitigations', bullets: ['Regulatory complexity in new markets', 'Liquidity management during volatility', 'Talent acquisition in competitive market'], type: 'content' },
+    { title: 'Product Roadmap', bullets: ['Q3: Stablecoin savings product', 'Q4: Cross-border remittance beta', 'H1 2027: DeFi gateway'], type: 'roadmap' },
+    { title: 'Team & Resources', bullets: ['Headcount grew from 120 to 180', 'New VP Engineering hired', 'Design team doubled'], type: 'content' },
+    { title: 'Financial Projections', bullets: ['Q3 target: $95M transaction volume', '40% gross margin target', 'Cash runway: 28 months'], type: 'metrics' },
+    { title: 'Partnerships', bullets: ['MTN Mobile Money integration live', 'Flutterwave API partnership signed', 'Binance liquidity pool access'], type: 'content' },
+    { title: 'Next Steps & Asks', bullets: ['Board approval for Series B extension', 'Regulatory counsel in 3 new markets', 'Marketing budget increase for Q3'], type: 'cta' },
+  ].slice(0, slideCount);
+
+  const handleDownload = () => {
+    setDownloading(true);
+    setTimeout(() => {
+      setDownloading(false);
+      setDownloaded(true);
+    }, 2000);
+  };
+
+  const bg = tweaks?.darkMode ? '#0F0318' : '#F4F1F9';
+  const cardBg = tweaks?.darkMode ? '#1E0635' : '#FFFFFF';
+  const textColor = tweaks?.darkMode ? '#FFFFFF' : '#1A0530';
+  const subColor = tweaks?.darkMode ? 'rgba(255,255,255,0.45)' : '#7A6B8A';
+  const borderColor = tweaks?.darkMode ? 'rgba(123,47,190,0.25)' : 'rgba(123,47,190,0.12)';
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: bg,
+      padding: '40px 48px',
+      fontFamily: 'Calibri, sans-serif',
+      overflowY: 'auto'
+    }}>
+      {/* Header row */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        marginBottom: '32px',
+        gap: '24px'
+      }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+            <div style={{
+              padding: '4px 10px',
+              borderRadius: '20px',
+              background: 'rgba(80,200,120,0.15)',
+              border: '1px solid rgba(80,200,120,0.3)',
+              color: '#3DB870',
+              fontSize: '12px',
+              fontWeight: '700',
+              letterSpacing: '0.5px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px'
+            }}>
+              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#3DB870' }} />
+              Ready
+            </div>
+          </div>
+          <h1 style={{
+            fontFamily: '"Arial Black", sans-serif',
+            fontSize: '24px',
+            fontWeight: '900',
+            color: textColor,
+            margin: '0 0 4px',
+            letterSpacing: '-0.3px',
+            maxWidth: '560px',
+            wordBreak: 'break-word'
+          }}>{deckTitle}</h1>
+          <div style={{ display: 'flex', gap: '16px', color: subColor, fontSize: '13px' }}>
+            <span>{slidePreviews.length} slides</span>
+            <span>·</span>
+            <span>{config?.templateStyle || 'Professional'} template</span>
+            <span>·</span>
+            <span>Generated just now</span>
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div style={{ display: 'flex', gap: '12px', flexShrink: 0 }}>
+          <button
+            onClick={onGenerateAgain}
+            style={{
+              padding: '12px 20px',
+              borderRadius: '10px',
+              border: `1.5px solid ${tweaks?.darkMode ? 'rgba(255,255,255,0.15)' : '#DDD4EC'}`,
+              background: 'transparent',
+              color: tweaks?.darkMode ? 'rgba(255,255,255,0.7)' : '#4A3560',
+              fontSize: '14px',
+              fontFamily: 'Calibri, sans-serif',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '7px',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#7B2FBE'; e.currentTarget.style.color = '#7B2FBE'; }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = tweaks?.darkMode ? 'rgba(255,255,255,0.15)' : '#DDD4EC';
+              e.currentTarget.style.color = tweaks?.darkMode ? 'rgba(255,255,255,0.7)' : '#4A3560';
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M1 7A6 6 0 1112.5 4M1 1v3h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Generate Again
+          </button>
+
+          <button
+            onClick={handleDownload}
+            style={{
+              padding: '12px 24px',
+              borderRadius: '10px',
+              border: 'none',
+              background: downloaded
+                ? 'rgba(80,200,120,0.15)'
+                : downloading
+                  ? 'linear-gradient(135deg, #6020A0, #C030A0)'
+                  : 'linear-gradient(135deg, #7B2FBE 0%, #D946A8 100%)',
+              color: downloaded ? '#3DB870' : '#FFFFFF',
+              fontSize: '15px',
+              fontFamily: '"Arial Black", sans-serif',
+              fontWeight: '900',
+              cursor: downloading ? 'wait' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              transition: 'all 0.2s ease',
+              boxShadow: downloaded ? 'none' : '0 4px 20px rgba(217,70,168,0.3)',
+              border: downloaded ? '1.5px solid rgba(80,200,120,0.3)' : 'none',
+              letterSpacing: '0.2px'
+            }}
+          >
+            {downloading ? (
+              <>
+                <div style={{
+                  width: '14px',
+                  height: '14px',
+                  border: '2px solid rgba(255,255,255,0.3)',
+                  borderTopColor: '#fff',
+                  borderRadius: '50%',
+                  animation: 'spin 0.7s linear infinite'
+                }} />
+                Downloading…
+              </>
+            ) : downloaded ? (
+              <>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M2 7l3.5 3.5L12 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Downloaded
+              </>
+            ) : (
+              <>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M7 1v8M4 6l3 3 3-3M2 11h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Download .PPTX
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Slides preview */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {slidePreviews.map((slide, i) => (
+          <div key={i} style={{
+            background: cardBg,
+            borderRadius: '12px',
+            border: `1.5px solid ${borderColor}`,
+            padding: '18px 24px',
+            display: 'grid',
+            gridTemplateColumns: '36px 1fr',
+            gap: '16px',
+            alignItems: 'start',
+            boxShadow: tweaks?.darkMode ? 'none' : '0 1px 8px rgba(45,10,78,0.04)',
+            transition: 'border-color 0.15s ease'
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(123,47,190,0.3)'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = borderColor; }}
+          >
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '8px',
+              background: i === 0
+                ? 'linear-gradient(135deg, #7B2FBE, #D946A8)'
+                : (tweaks?.darkMode ? 'rgba(123,47,190,0.2)' : 'rgba(123,47,190,0.08)'),
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: i === 0 ? '#fff' : '#7B2FBE',
+              fontSize: '13px',
+              fontFamily: '"Arial Black", sans-serif',
+              fontWeight: '900',
+              flexShrink: 0
+            }}>
+              {String(i + 1).padStart(2, '0')}
+            </div>
+            <div>
+              <div style={{
+                fontFamily: '"Arial Black", sans-serif',
+                fontSize: '15px',
+                fontWeight: '900',
+                color: textColor,
+                marginBottom: '8px',
+                letterSpacing: '-0.2px'
+              }}>{slide.title}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {slide.bullets.map((b, j) => (
+                  <div key={j} style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '8px',
+                    fontSize: '13px',
+                    color: subColor,
+                    fontFamily: 'Calibri, sans-serif'
+                  }}>
+                    <div style={{
+                      width: '4px',
+                      height: '4px',
+                      borderRadius: '50%',
+                      background: '#D946A8',
+                      flexShrink: 0,
+                      marginTop: '6px'
+                    }} />
+                    {b}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+};
+
+Object.assign(window, { PreviewScreen });
+
+
+// ============================================================
+// HISTORY SCREEN
+// ============================================================
+
+// History Screen
+const HistoryScreen = ({ tweaks }) => {
+  const [search, setSearch] = React.useState('');
+  const [filter, setFilter] = React.useState('All');
+  const [deletingId, setDeletingId] = React.useState(null);
+
+  const [decks, setDecks] = React.useState([
+    { id: 1, title: 'Q2 Sales Strategy Overview', slides: 10, template: 'Professional', date: '2026-05-03', size: '2.4 MB' },
+    { id: 2, title: 'Product Roadmap H2 2026', slides: 8, template: 'Bold', date: '2026-05-02', size: '1.8 MB' },
+    { id: 3, title: 'HR Onboarding Deck — New Hires', slides: 15, template: 'Minimal', date: '2026-04-30', size: '3.1 MB' },
+    { id: 4, title: 'Engineering All Hands April', slides: 12, template: 'Corporate', date: '2026-04-28', size: '2.0 MB' },
+    { id: 5, title: 'Investor Update — Series B', slides: 10, template: 'Professional', date: '2026-04-22', size: '2.7 MB' },
+    { id: 6, title: 'Brand Guidelines 2026', slides: 20, template: 'Bold', date: '2026-04-18', size: '4.2 MB' },
+    { id: 7, title: 'Customer Success Stories Q1', slides: 8, template: 'Minimal', date: '2026-04-10', size: '1.5 MB' },
+    { id: 8, title: 'Operations Review March', slides: 10, template: 'Corporate', date: '2026-03-31', size: '2.2 MB' },
+  ]);
+
+  const templates = ['All', 'Professional', 'Minimal', 'Bold', 'Corporate'];
+
+  const filtered = decks.filter(d => {
+    const matchSearch = d.title.toLowerCase().includes(search.toLowerCase());
+    const matchFilter = filter === 'All' || d.template === filter;
+    return matchSearch && matchFilter;
+  });
+
+  const formatDate = (dateStr) => {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  const handleDelete = (id) => {
+    setDeletingId(id);
+    setTimeout(() => {
+      setDecks(prev => prev.filter(d => d.id !== id));
+      setDeletingId(null);
+    }, 400);
+  };
+
+  const templateColors = {
+    Professional: '#7B2FBE',
+    Minimal: '#555',
+    Bold: '#D946A8',
+    Corporate: '#F5A623'
+  };
+
+  const bg = tweaks?.darkMode ? '#0F0318' : '#F4F1F9';
+  const cardBg = tweaks?.darkMode ? '#1E0635' : '#FFFFFF';
+  const textColor = tweaks?.darkMode ? '#FFFFFF' : '#1A0530';
+  const subColor = tweaks?.darkMode ? 'rgba(255,255,255,0.45)' : '#7A6B8A';
+  const borderColor = tweaks?.darkMode ? 'rgba(123,47,190,0.25)' : 'rgba(123,47,190,0.12)';
+  const inputBg = tweaks?.darkMode ? '#2A0E4A' : '#FFFFFF';
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: bg,
+      padding: '40px 48px',
+      fontFamily: 'Calibri, sans-serif',
+      overflowY: 'auto'
+    }}>
+      {/* Header */}
+      <div style={{ marginBottom: '28px' }}>
+        <h1 style={{
+          fontFamily: '"Arial Black", sans-serif',
+          fontSize: '26px',
+          fontWeight: '900',
+          color: textColor,
+          margin: '0 0 6px',
+          letterSpacing: '-0.5px'
+        }}>History</h1>
+        <p style={{ color: subColor, fontSize: '15px', margin: 0 }}>
+          {decks.length} deck{decks.length !== 1 ? 's' : ''} generated
+        </p>
+      </div>
+
+      {/* Search + filters */}
+      <div style={{
+        display: 'flex',
+        gap: '12px',
+        marginBottom: '24px',
+        alignItems: 'center',
+        flexWrap: 'wrap'
+      }}>
+        {/* Search */}
+        <div style={{
+          position: 'relative',
+          flex: '1',
+          minWidth: '220px'
+        }}>
+          <div style={{
+            position: 'absolute',
+            left: '14px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            color: subColor,
+            pointerEvents: 'none'
+          }}>
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+              <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <input
+            type="text"
+            placeholder="Search decks…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '11px 16px 11px 38px',
+              borderRadius: '10px',
+              border: `1.5px solid ${borderColor}`,
+              background: inputBg,
+              color: textColor,
+              fontSize: '14px',
+              fontFamily: 'Calibri, sans-serif',
+              outline: 'none',
+              boxSizing: 'border-box',
+              transition: 'border-color 0.15s ease'
+            }}
+            onFocus={e => { e.target.style.borderColor = '#7B2FBE'; }}
+            onBlur={e => { e.target.style.borderColor = borderColor; }}
+          />
+        </div>
+
+        {/* Filter chips */}
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {templates.map(t => (
+            <button
+              key={t}
+              onClick={() => setFilter(t)}
+              style={{
+                padding: '9px 16px',
+                borderRadius: '8px',
+                border: `1.5px solid ${filter === t ? '#7B2FBE' : borderColor}`,
+                background: filter === t ? '#7B2FBE' : 'transparent',
+                color: filter === t ? '#fff' : subColor,
+                fontSize: '13px',
+                fontFamily: 'Calibri, sans-serif',
+                fontWeight: filter === t ? '700' : '500',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >{t}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Deck list */}
+      {filtered.length === 0 ? (
+        <div style={{
+          textAlign: 'center',
+          padding: '80px 0',
+          color: subColor
+        }}>
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none" style={{ marginBottom: '16px', opacity: 0.4 }}>
+            <circle cx="24" cy="24" r="20" stroke="currentColor" strokeWidth="2"/>
+            <path d="M24 16v8M24 30v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+          <div style={{ fontSize: '16px', fontWeight: '600' }}>No decks found</div>
+          <div style={{ fontSize: '14px', marginTop: '6px' }}>Try adjusting your search or filter</div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {filtered.map(deck => (
+            <div
+              key={deck.id}
+              style={{
+                background: cardBg,
+                borderRadius: '12px',
+                border: `1.5px solid ${borderColor}`,
+                padding: '18px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '20px',
+                opacity: deletingId === deck.id ? 0 : 1,
+                transition: 'opacity 0.3s ease, border-color 0.15s ease',
+                boxShadow: tweaks?.darkMode ? 'none' : '0 1px 8px rgba(45,10,78,0.04)'
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(123,47,190,0.3)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = borderColor; }}
+            >
+              {/* Icon */}
+              <div style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '10px',
+                background: tweaks?.darkMode ? 'rgba(123,47,190,0.2)' : 'rgba(123,47,190,0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                color: '#7B2FBE'
+              }}>
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <rect x="3" y="3" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+                  <path d="M7 8h6M7 11h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </div>
+
+              {/* Title + meta */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontFamily: '"Arial Black", sans-serif',
+                  fontSize: '14px',
+                  fontWeight: '900',
+                  color: textColor,
+                  marginBottom: '5px',
+                  letterSpacing: '-0.2px',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
+                }}>{deck.title}</div>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  fontSize: '12px',
+                  color: subColor,
+                  flexWrap: 'wrap'
+                }}>
+                  <span>{formatDate(deck.date)}</span>
+                  <span>·</span>
+                  <span>{deck.slides} slides</span>
+                  <span>·</span>
+                  <span style={{
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    background: `${templateColors[deck.template]}18`,
+                    color: templateColors[deck.template],
+                    fontWeight: '600',
+                    fontSize: '11px'
+                  }}>{deck.template}</span>
+                  <span>·</span>
+                  <span>{deck.size}</span>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                <button
+                  style={{
+                    padding: '9px 16px',
+                    borderRadius: '8px',
+                    border: `1.5px solid ${borderColor}`,
+                    background: 'transparent',
+                    color: '#7B2FBE',
+                    fontSize: '13px',
+                    fontFamily: 'Calibri, sans-serif',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(123,47,190,0.08)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                    <path d="M6.5 1v8M3.5 6l3 3 3-3M1 11h11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Download
+                </button>
+                <button
+                  onClick={() => handleDelete(deck.id)}
+                  style={{
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: `1.5px solid ${borderColor}`,
+                    background: 'transparent',
+                    color: subColor,
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.borderColor = '#E05A5A';
+                    e.currentTarget.style.color = '#E05A5A';
+                    e.currentTarget.style.background = 'rgba(224,90,90,0.06)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.borderColor = borderColor;
+                    e.currentTarget.style.color = subColor;
+                    e.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                    <path d="M2 3h9M5 3V2h3v1M4 3l.5 8h4L9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+Object.assign(window, { HistoryScreen });
+
+
+// ============================================================
+// ADMIN SCREEN
+// ============================================================
+
+// Admin Panel Screen
+const AdminScreen = ({ tweaks }) => {
+  const [activeTab, setActiveTab] = React.useState('brand');
+  const [colors, setColors] = React.useState({
+    primary: '#2D0A4E',
+    secondary: '#7B2FBE',
+    accent1: '#D946A8',
+    accent2: '#F5A623',
+    bgDark: '#1A0530',
+    bgLight: '#F5F5F5',
+  });
+  const [savedColors, setSavedColors] = React.useState(false);
+  const [activeTemplate, setActiveTemplate] = React.useState('Quidax Master v3.pptx');
+  const [logoUploaded, setLogoUploaded] = React.useState(false);
+  const [templateUploaded, setTemplateUploaded] = React.useState(false);
+  const [brandVoice, setBrandVoice] = React.useState('professional');
+
+  const bg = tweaks?.darkMode ? '#0F0318' : '#F4F1F9';
+  const cardBg = tweaks?.darkMode ? '#1E0635' : '#FFFFFF';
+  const textColor = tweaks?.darkMode ? '#FFFFFF' : '#1A0530';
+  const subColor = tweaks?.darkMode ? 'rgba(255,255,255,0.45)' : '#7A6B8A';
+  const borderColor = tweaks?.darkMode ? 'rgba(123,47,190,0.25)' : 'rgba(123,47,190,0.12)';
+
+  const tabs = [
+    { id: 'brand', label: 'Brand Colours' },
+    { id: 'typography', label: 'Typography' },
+    { id: 'templates', label: 'Templates' },
+    { id: 'voice', label: 'Brand Voice' },
+  ];
+
+  const colorRows = [
+    { key: 'primary', label: 'Primary — Deep Purple', role: 'Sidebar, headers, key UI' },
+    { key: 'secondary', label: 'Secondary — Vibrant Purple', role: 'Interactive elements, links' },
+    { key: 'accent1', label: 'Accent — Magenta Pink', role: 'CTAs, active states, highlights' },
+    { key: 'accent2', label: 'Accent — Gold', role: 'Warm highlights, Corporate template' },
+    { key: 'bgDark', label: 'Background — Dark', role: 'Dark mode canvas, slide backgrounds' },
+    { key: 'bgLight', label: 'Background — Light', role: 'Light mode canvas, card backgrounds' },
+  ];
+
+  const Card = ({ children, style = {} }) => (
+    <div style={{
+      background: cardBg,
+      borderRadius: '16px',
+      border: `1.5px solid ${borderColor}`,
+      padding: '28px',
+      boxShadow: tweaks?.darkMode ? 'none' : '0 2px 16px rgba(45,10,78,0.06)',
+      ...style
+    }}>{children}</div>
+  );
+
+  const SectionLabel = ({ children }) => (
+    <div style={{
+      fontSize: '12px',
+      fontWeight: '700',
+      letterSpacing: '1.2px',
+      textTransform: 'uppercase',
+      color: tweaks?.darkMode ? 'rgba(255,255,255,0.4)' : '#9080A0',
+      marginBottom: '16px',
+      fontFamily: 'Calibri, sans-serif'
+    }}>{children}</div>
+  );
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: bg,
+      padding: '40px 48px',
+      fontFamily: 'Calibri, sans-serif',
+      overflowY: 'auto'
+    }}>
+      {/* Header */}
+      <div style={{ marginBottom: '28px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+            <div style={{
+              padding: '3px 10px',
+              borderRadius: '20px',
+              background: 'rgba(245,166,35,0.15)',
+              border: '1px solid rgba(245,166,35,0.3)',
+              color: '#F5A623',
+              fontSize: '11px',
+              fontWeight: '700',
+              letterSpacing: '1px',
+              textTransform: 'uppercase'
+            }}>Design Team Only</div>
+          </div>
+          <h1 style={{
+            fontFamily: '"Arial Black", sans-serif',
+            fontSize: '26px',
+            fontWeight: '900',
+            color: textColor,
+            margin: '0 0 6px',
+            letterSpacing: '-0.5px'
+          }}>Brand Admin</h1>
+          <p style={{ color: subColor, fontSize: '15px', margin: 0 }}>
+            Manage Quidax brand configuration and slide templates
+          </p>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{
+        display: 'flex',
+        gap: '4px',
+        marginBottom: '28px',
+        background: tweaks?.darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(123,47,190,0.06)',
+        borderRadius: '12px',
+        padding: '4px',
+        width: 'fit-content'
+      }}>
+        {tabs.map(t => (
+          <button
+            key={t.id}
+            onClick={() => setActiveTab(t.id)}
+            style={{
+              padding: '10px 20px',
+              borderRadius: '9px',
+              border: 'none',
+              background: activeTab === t.id ? (tweaks?.darkMode ? '#2D0A4E' : '#FFFFFF') : 'transparent',
+              color: activeTab === t.id ? (tweaks?.darkMode ? '#D946A8' : '#7B2FBE') : subColor,
+              fontSize: '14px',
+              fontFamily: 'Calibri, sans-serif',
+              fontWeight: activeTab === t.id ? '700' : '500',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              boxShadow: activeTab === t.id ? '0 2px 8px rgba(0,0,0,0.08)' : 'none'
+            }}
+          >{t.label}</button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      {activeTab === 'brand' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <Card>
+            <SectionLabel>Colour Palette</SectionLabel>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {colorRows.map(row => (
+                <div key={row.key} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  padding: '14px 0',
+                  borderBottom: `1px solid ${tweaks?.darkMode ? 'rgba(255,255,255,0.05)' : '#F0EAF8'}`
+                }}>
+                  {/* Swatch + input */}
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
+                    <div style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '10px',
+                      background: colors[row.key],
+                      border: `2px solid ${tweaks?.darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                      cursor: 'pointer',
+                      overflow: 'hidden'
+                    }}>
+                      <input
+                        type="color"
+                        value={colors[row.key]}
+                        onChange={e => setColors(prev => ({ ...prev, [row.key]: e.target.value }))}
+                        style={{
+                          width: '200%',
+                          height: '200%',
+                          margin: '-50%',
+                          cursor: 'pointer',
+                          border: 'none',
+                          opacity: 0,
+                          position: 'absolute',
+                          top: 0,
+                          left: 0
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '14px', fontWeight: '600', color: textColor, marginBottom: '2px' }}>{row.label}</div>
+                    <div style={{ fontSize: '12px', color: subColor }}>{row.role}</div>
+                  </div>
+                  <div style={{
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    background: tweaks?.darkMode ? 'rgba(255,255,255,0.06)' : '#F5F0FB',
+                    border: `1px solid ${borderColor}`,
+                    fontFamily: 'monospace',
+                    fontSize: '13px',
+                    color: textColor,
+                    letterSpacing: '0.5px'
+                  }}>
+                    {colors[row.key].toUpperCase()}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              {savedColors && (
+                <span style={{ fontSize: '13px', color: '#3DB870', alignSelf: 'center' }}>✓ Saved</span>
+              )}
+              <button
+                onClick={() => { setSavedColors(true); setTimeout(() => setSavedColors(false), 2500); }}
+                style={{
+                  padding: '11px 22px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #7B2FBE, #D946A8)',
+                  color: '#fff',
+                  fontSize: '14px',
+                  fontFamily: 'Calibri, sans-serif',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 16px rgba(217,70,168,0.25)'
+                }}
+              >Save Colours</button>
+            </div>
+          </Card>
+
+          {/* Logo upload */}
+          <Card>
+            <SectionLabel>Logo</SectionLabel>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+              <div style={{
+                width: '120px',
+                height: '60px',
+                borderRadius: '10px',
+                background: '#2D0A4E',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                border: `1.5px solid ${borderColor}`
+              }}>
+                {logoUploaded ? (
+                  <span style={{ color: '#D946A8', fontSize: '12px', fontWeight: '700' }}>NEW LOGO</span>
+                ) : (
+                  <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                    <polygon points="14,2 26,8 26,20 14,26 2,20 2,8" fill="none" stroke="#D946A8" strokeWidth="1.5"/>
+                    <polygon points="14,2 26,8 14,14 2,8" fill="#7B2FBE" opacity="0.8"/>
+                    <polygon points="14,14 26,8 26,20 14,26" fill="#D946A8" opacity="0.5"/>
+                    <polygon points="14,14 14,26 2,20 2,8" fill="#7B2FBE" opacity="0.5"/>
+                  </svg>
+                )}
+              </div>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: '600', color: textColor, marginBottom: '4px' }}>
+                  {logoUploaded ? 'Logo updated' : 'Quidax Logo (current)'}
+                </div>
+                <div style={{ fontSize: '12px', color: subColor, marginBottom: '12px' }}>
+                  PNG or SVG · Transparent background · Min 400px wide
+                </div>
+                <button
+                  onClick={() => setLogoUploaded(true)}
+                  style={{
+                    padding: '9px 18px',
+                    borderRadius: '8px',
+                    border: `1.5px solid ${borderColor}`,
+                    background: 'transparent',
+                    color: '#7B2FBE',
+                    fontSize: '13px',
+                    fontFamily: 'Calibri, sans-serif',
+                    fontWeight: '600',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {logoUploaded ? 'Replace Logo' : 'Upload New Logo'}
+                </button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {activeTab === 'typography' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <Card>
+            <SectionLabel>Heading Font</SectionLabel>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+              <div style={{
+                flex: 1,
+                padding: '24px',
+                background: tweaks?.darkMode ? 'rgba(123,47,190,0.1)' : '#F5F0FB',
+                borderRadius: '12px',
+                border: `1.5px solid ${borderColor}`
+              }}>
+                <div style={{
+                  fontFamily: '"Arial Black", sans-serif',
+                  fontSize: '36px',
+                  fontWeight: '900',
+                  color: textColor,
+                  letterSpacing: '-1px',
+                  lineHeight: 1.1,
+                  marginBottom: '8px'
+                }}>Mabry Pro</div>
+                <div style={{
+                  fontFamily: '"Arial Black", sans-serif',
+                  fontSize: '18px',
+                  color: subColor,
+                  fontWeight: '400'
+                }}>The quick brown fox jumps</div>
+              </div>
+              <div style={{ width: '200px' }}>
+                <div style={{ fontSize: '13px', color: subColor, marginBottom: '8px' }}>Fallback stack</div>
+                <div style={{
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  background: tweaks?.darkMode ? 'rgba(255,255,255,0.05)' : '#F5F5F5',
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  color: textColor,
+                  lineHeight: 1.6
+                }}>
+                  "Mabry Pro",<br/>
+                  "Arial Black",<br/>
+                  sans-serif
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          <Card>
+            <SectionLabel>Body Font</SectionLabel>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+              <div style={{
+                flex: 1,
+                padding: '24px',
+                background: tweaks?.darkMode ? 'rgba(123,47,190,0.1)' : '#F5F0FB',
+                borderRadius: '12px',
+                border: `1.5px solid ${borderColor}`
+              }}>
+                <div style={{
+                  fontFamily: 'Calibri, "Segoe UI", sans-serif',
+                  fontSize: '28px',
+                  fontWeight: '400',
+                  color: textColor,
+                  marginBottom: '8px'
+                }}>Mabry Pro Regular</div>
+                <div style={{
+                  fontFamily: 'Calibri, "Segoe UI", sans-serif',
+                  fontSize: '15px',
+                  color: subColor,
+                  lineHeight: 1.65
+                }}>
+                  AutoDeck AI generates professional branded<br/>
+                  presentations in seconds. Clean, readable, bold.
+                </div>
+              </div>
+              <div style={{ width: '200px' }}>
+                <div style={{ fontSize: '13px', color: subColor, marginBottom: '8px' }}>Fallback stack</div>
+                <div style={{
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  background: tweaks?.darkMode ? 'rgba(255,255,255,0.05)' : '#F5F5F5',
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  color: textColor,
+                  lineHeight: 1.6
+                }}>
+                  "Mabry Pro",<br/>
+                  "Calibri",<br/>
+                  "Segoe UI",<br/>
+                  sans-serif
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {activeTab === 'templates' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <Card>
+            <SectionLabel>Active Master Template</SectionLabel>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '20px',
+              padding: '20px',
+              background: tweaks?.darkMode ? 'rgba(217,70,168,0.08)' : 'rgba(217,70,168,0.05)',
+              borderRadius: '12px',
+              border: '1.5px solid rgba(217,70,168,0.2)',
+              marginBottom: '20px'
+            }}>
+              <div style={{
+                width: '52px',
+                height: '52px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #7B2FBE, #D946A8)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                  <rect x="3" y="3" width="16" height="16" rx="2" stroke="white" strokeWidth="1.5"/>
+                  <path d="M3 8h16M8 8v12" stroke="white" strokeWidth="1.5"/>
+                </svg>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '15px', fontWeight: '700', color: textColor, marginBottom: '3px' }}>
+                  {activeTemplate}
+                </div>
+                <div style={{ fontSize: '12px', color: subColor }}>
+                  Uploaded 12 Apr 2026 · 4 layouts · All templates use this master
+                </div>
+              </div>
+              <div style={{
+                padding: '5px 12px',
+                borderRadius: '20px',
+                background: 'rgba(80,200,120,0.15)',
+                border: '1px solid rgba(80,200,120,0.3)',
+                color: '#3DB870',
+                fontSize: '12px',
+                fontWeight: '700'
+              }}>Active</div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => { setTemplateUploaded(true); setActiveTemplate('Quidax Master v4.pptx'); }}
+                style={{
+                  padding: '11px 20px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #7B2FBE, #D946A8)',
+                  color: '#fff',
+                  fontSize: '14px',
+                  fontFamily: 'Calibri, sans-serif',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '7px',
+                  boxShadow: '0 4px 16px rgba(217,70,168,0.25)'
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M7 11V3M4 6l3-3 3 3M2 11h10" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Upload New Template
+              </button>
+              <button
+                style={{
+                  padding: '11px 20px',
+                  borderRadius: '10px',
+                  border: `1.5px solid ${borderColor}`,
+                  background: 'transparent',
+                  color: subColor,
+                  fontSize: '14px',
+                  fontFamily: 'Calibri, sans-serif',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >Remove</button>
+            </div>
+            {templateUploaded && (
+              <div style={{
+                marginTop: '16px',
+                padding: '12px 16px',
+                borderRadius: '8px',
+                background: 'rgba(80,200,120,0.1)',
+                border: '1px solid rgba(80,200,120,0.25)',
+                color: '#3DB870',
+                fontSize: '13px',
+                fontFamily: 'Calibri, sans-serif'
+              }}>
+                ✓ New template uploaded and set as active. All new decks will use this master.
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {activeTab === 'voice' && (
+        <Card>
+          <SectionLabel>Brand Voice & AI Persona</SectionLabel>
+          <p style={{ color: subColor, fontSize: '14px', margin: '0 0 24px', lineHeight: 1.6 }}>
+            These settings shape how AutoDeck AI writes slide content — headlines, bullets, summaries.
+            Choose a tone that matches Quidax's communication style.
+          </p>
+          {[
+            { id: 'professional', label: 'Professional', desc: 'Clear, confident, business-appropriate. No jargon.' },
+            { id: 'bold', label: 'Bold & Direct', desc: 'Punchy, assertive, energetic. Short sentences. Big impact.' },
+            { id: 'approachable', label: 'Approachable', desc: 'Warm and conversational. Human-first language.' },
+            { id: 'data', label: 'Data-Led', desc: 'Numbers front and centre. Evidence-based. Precise.' },
+          ].map(v => (
+            <div
+              key={v.id}
+              onClick={() => setBrandVoice(v.id)}
+              style={{
+                padding: '18px',
+                borderRadius: '12px',
+                border: `2px solid ${brandVoice === v.id ? '#7B2FBE' : borderColor}`,
+                background: brandVoice === v.id ? (tweaks?.darkMode ? 'rgba(123,47,190,0.12)' : 'rgba(123,47,190,0.06)') : 'transparent',
+                marginBottom: '10px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '14px',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <div style={{
+                width: '20px',
+                height: '20px',
+                borderRadius: '50%',
+                border: `2px solid ${brandVoice === v.id ? '#7B2FBE' : borderColor}`,
+                background: brandVoice === v.id ? '#7B2FBE' : 'transparent',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                {brandVoice === v.id && (
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#fff' }} />
+                )}
+              </div>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: '700', color: textColor, marginBottom: '3px' }}>{v.label}</div>
+                <div style={{ fontSize: '13px', color: subColor }}>{v.desc}</div>
+              </div>
+            </div>
+          ))}
+          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              style={{
+                padding: '11px 22px',
+                borderRadius: '10px',
+                border: 'none',
+                background: 'linear-gradient(135deg, #7B2FBE, #D946A8)',
+                color: '#fff',
+                fontSize: '14px',
+                fontFamily: 'Calibri, sans-serif',
+                fontWeight: '700',
+                cursor: 'pointer',
+                boxShadow: '0 4px 16px rgba(217,70,168,0.25)'
+              }}
+            >Save Voice Settings</button>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+};
+
+Object.assign(window, { AdminScreen });
+
+
+// ============================================================
+// APP ROOT
+// ============================================================
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "darkMode": false,
+  "userRole": "employee",
+  "accentColor": "#D946A8"
+}/*EDITMODE-END*/;
+
+const App = () => {
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [screen, setScreen] = React.useState('home');
+  const [deckConfig, setDeckConfig] = React.useState(null);
+
+  const currentUser = tweaks?.userRole === 'admin' ? 'admin' : 'employee';
+
+  const handleGenerate = (config) => {
+    setDeckConfig(config);
+    setScreen('processing');
+  };
+
+  const handleProcessingComplete = () => {
+    setScreen('preview');
+  };
+
+  const handleGenerateAgain = () => {
+    setScreen('home');
+  };
+
+  const handleNavigate = (dest) => {
+    setScreen(dest);
+  };
+
+  return (
+    <div style={{
+      display: 'flex',
+      height: '100vh',
+      overflow: 'hidden',
+      background: tweaks?.darkMode ? '#0F0318' : '#F4F1F9'
+    }}>
+      {screen !== 'processing' && (
+        <Sidebar
+          currentScreen={screen}
+          onNavigate={handleNavigate}
+          currentUser={currentUser}
+        />
+      )}
+
+      <div style={{
+        flex: 1,
+        marginLeft: screen !== 'processing' ? '220px' : 0,
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        height: '100vh'
+      }}>
+        {screen === 'home' && (
+          <HomeScreen onGenerate={handleGenerate} tweaks={tweaks} />
+        )}
+        {screen === 'processing' && (
+          <ProcessingScreen
+            config={deckConfig}
+            onComplete={handleProcessingComplete}
+            tweaks={tweaks}
+          />
+        )}
+        {screen === 'preview' && (
+          <PreviewScreen
+            config={deckConfig}
+            onGenerateAgain={handleGenerateAgain}
+            tweaks={tweaks}
+          />
+        )}
+        {screen === 'history' && (
+          <HistoryScreen tweaks={tweaks} />
+        )}
+        {screen === 'admin' && currentUser === 'admin' && (
+          <AdminScreen tweaks={tweaks} />
+        )}
+        {screen === 'admin' && currentUser !== 'admin' && (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100vh',
+            color: tweaks?.darkMode ? 'rgba(255,255,255,0.4)' : '#9080A0',
+            gap: '12px'
+          }}>
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none" style={{ opacity: 0.4 }}>
+              <rect x="10" y="22" width="28" height="20" rx="3" stroke="currentColor" strokeWidth="2"/>
+              <path d="M16 22v-6a8 8 0 0116 0v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              <circle cx="24" cy="33" r="2" fill="currentColor"/>
+            </svg>
+            <div style={{ fontSize: '16px', fontWeight: '600' }}>Admin access only</div>
+            <div style={{ fontSize: '14px' }}>Switch to Admin role in Tweaks to view this panel</div>
+          </div>
+        )}
+      </div>
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection title="Appearance">
+          <TweakToggle
+            label="Dark Mode"
+            value={tweaks?.darkMode}
+            onChange={v => setTweak('darkMode', v)}
+          />
+        </TweakSection>
+        <TweakSection title="User Role">
+          <TweakRadio
+            label="View As"
+            value={tweaks?.userRole}
+            options={[
+              { label: 'Employee', value: 'employee' },
+              { label: 'Admin', value: 'admin' }
+            ]}
+            onChange={v => setTweak('userRole', v)}
+          />
+        </TweakSection>
+        <TweakSection title="Navigation">
+          <TweakSelect
+            label="Go to Screen"
+            value={screen}
+            options={[
+              { label: 'Home / Generate', value: 'home' },
+              { label: 'Processing', value: 'processing' },
+              { label: 'Preview & Download', value: 'preview' },
+              { label: 'History', value: 'history' },
+              { label: 'Admin Panel', value: 'admin' },
+            ]}
+            onChange={v => {
+              if (v === 'processing') {
+                setDeckConfig({ inputText: 'Sample content for demo preview', slideCount: '10', templateStyle: 'Professional' });
+              }
+              if (v === 'preview' && !deckConfig) {
+                setDeckConfig({ inputText: 'Q2 Sales Strategy and market expansion plan for Quidax', slideCount: '10', templateStyle: 'Professional' });
+              }
+              setScreen(v);
+            }}
+          />
+        </TweakSection>
+      </TweaksPanel>
+    </div>
+  );
+};
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+  </script>
+</body>
+</html>
