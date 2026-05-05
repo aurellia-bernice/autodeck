@@ -1,4 +1,3 @@
-
 // History Screen
 const HistoryScreen = ({ tweaks }) => {
   const [search, setSearch] = React.useState('');

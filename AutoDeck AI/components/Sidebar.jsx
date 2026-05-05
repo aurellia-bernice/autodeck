@@ -1,4 +1,3 @@
-
 // Sidebar Navigation Component
 const Sidebar = ({ currentScreen, onNavigate, currentUser }) => {
   const navItems = [

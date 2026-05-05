@@ -1,8 +1,9 @@
-
 // Preview & Download Screen
 const PreviewScreen = ({ config, onGenerateAgain, tweaks }) => {
   const [downloading, setDownloading] = React.useState(false);
   const [downloaded, setDownloaded] = React.useState(false);
+  const [editingIndex, setEditingIndex] = React.useState(null);
+  const [editDraft, setEditDraft] = React.useState({ title: '', bullets: [] });
 
   const deckTitle = config?.inputText
     ? config.inputText.trim().split(/\s+/).slice(0, 5).join(' ') + '…'
@@ -11,7 +12,7 @@ const PreviewScreen = ({ config, onGenerateAgain, tweaks }) => {
   const slideCount = config?.slideCount === 'Auto' ? 10 : parseInt(config?.slideCount) || 10;
 
   // Generate mock slide previews
-  const slidePreviews = [
+  const [slides, setSlides] = React.useState([
     { title: 'Executive Summary', bullets: ['Strong Q2 performance across all verticals', 'New markets entered: Ghana, Senegal', 'Revenue up 34% YoY'], type: 'title' },
     { title: 'Market Overview', bullets: ['Africa crypto market growing at 18% CAGR', 'Quidax positioned in top 3 exchanges', 'User base crossed 2M milestone'], type: 'content' },
     { title: 'Key Metrics', bullets: ['Monthly active users: 1.2M', 'Transaction volume: $280M', 'NPS score: 72'], type: 'metrics' },
@@ -22,7 +23,7 @@ const PreviewScreen = ({ config, onGenerateAgain, tweaks }) => {
     { title: 'Financial Projections', bullets: ['Q3 target: $95M transaction volume', '40% gross margin target', 'Cash runway: 28 months'], type: 'metrics' },
     { title: 'Partnerships', bullets: ['MTN Mobile Money integration live', 'Flutterwave API partnership signed', 'Binance liquidity pool access'], type: 'content' },
     { title: 'Next Steps & Asks', bullets: ['Board approval for Series B extension', 'Regulatory counsel in 3 new markets', 'Marketing budget increase for Q3'], type: 'cta' },
-  ].slice(0, slideCount);
+  ].slice(0, slideCount));
 
   const handleDownload = () => {
     setDownloading(true);
@@ -31,6 +32,11 @@ const PreviewScreen = ({ config, onGenerateAgain, tweaks }) => {
       setDownloaded(true);
     }, 2000);
   };
+
+  const handleDelete = (index) => { setSlides(prev => prev.filter((_, i) => i !== index)); if (editingIndex === index) setEditingIndex(null); };
+  const handleEditStart = (index) => { setEditingIndex(index); setEditDraft({ title: slides[index].title, bullets: [...slides[index].bullets] }); };
+  const handleEditSave = () => { setSlides(prev => prev.map((s, i) => i === editingIndex ? { ...s, title: editDraft.title, bullets: editDraft.bullets } : s)); setEditingIndex(null); };
+  const handleAddSlide = () => { setSlides(prev => [...prev, { title: 'New Slide', bullets: ['Add your content here'], type: 'content' }]); };
 
   const bg = tweaks?.darkMode ? '#0F0318' : '#F4F1F9';
   const cardBg = tweaks?.darkMode ? '#1E0635' : '#FFFFFF';
@@ -84,7 +90,7 @@ const PreviewScreen = ({ config, onGenerateAgain, tweaks }) => {
             wordBreak: 'break-word'
           }}>{deckTitle}</h1>
           <div style={{ display: 'flex', gap: '16px', color: subColor, fontSize: '13px' }}>
-            <span>{slidePreviews.length} slides</span>
+            <span>{slides.length} slides</span>
             <span>·</span>
             <span>{config?.templateStyle || 'Professional'} template</span>
             <span>·</span>
@@ -181,12 +187,13 @@ const PreviewScreen = ({ config, onGenerateAgain, tweaks }) => {
 
       {/* Slides preview */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {slidePreviews.map((slide, i) => (
+        {slides.map((slide, i) => (
           <div key={i} style={{
             background: cardBg,
             borderRadius: '12px',
             border: `1.5px solid ${borderColor}`,
-            padding: '18px 24px',
+            padding: '18px 80px 18px 24px',
+            position: 'relative',
             display: 'grid',
             gridTemplateColumns: '36px 1fr',
             gap: '16px',
@@ -197,6 +204,42 @@ const PreviewScreen = ({ config, onGenerateAgain, tweaks }) => {
           onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(123,47,190,0.3)'; }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = borderColor; }}
           >
+            {/* Edit/Delete icon buttons */}
+            <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '6px' }}>
+              <button
+                onClick={() => handleEditStart(i)}
+                title="Edit slide"
+                style={{
+                  width: '28px', height: '28px', borderRadius: '6px', border: `1px solid ${borderColor}`,
+                  background: tweaks?.darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(123,47,190,0.06)',
+                  color: '#7B2FBE', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(123,47,190,0.15)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = tweaks?.darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(123,47,190,0.06)'; }}
+              >
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  <path d="M9.5 1.5l2 2L4 11H2v-2L9.5 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+              <button
+                onClick={() => handleDelete(i)}
+                title="Delete slide"
+                style={{
+                  width: '28px', height: '28px', borderRadius: '6px', border: `1px solid ${borderColor}`,
+                  background: tweaks?.darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(224,90,90,0.06)',
+                  color: subColor, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(224,90,90,0.12)'; e.currentTarget.style.color = '#E05A5A'; e.currentTarget.style.borderColor = '#E05A5A'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = tweaks?.darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(224,90,90,0.06)'; e.currentTarget.style.color = subColor; e.currentTarget.style.borderColor = borderColor; }}
+              >
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  <path d="M2 3h9M5 3V2h3v1M4 3l.5 8h4L9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            </div>
+
             <div style={{
               width: '36px',
               height: '36px',
@@ -215,40 +258,103 @@ const PreviewScreen = ({ config, onGenerateAgain, tweaks }) => {
             }}>
               {String(i + 1).padStart(2, '0')}
             </div>
-            <div>
-              <div style={{
-                fontFamily: '"Arial Black", sans-serif',
-                fontSize: '15px',
-                fontWeight: '900',
-                color: textColor,
-                marginBottom: '8px',
-                letterSpacing: '-0.2px'
-              }}>{slide.title}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {slide.bullets.map((b, j) => (
-                  <div key={j} style={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: '8px',
-                    fontSize: '13px',
-                    color: subColor,
-                    fontFamily: 'Calibri, sans-serif'
-                  }}>
-                    <div style={{
-                      width: '4px',
-                      height: '4px',
-                      borderRadius: '50%',
-                      background: '#D946A8',
-                      flexShrink: 0,
-                      marginTop: '6px'
-                    }} />
-                    {b}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {editingIndex === i ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <input
+                    value={editDraft.title}
+                    onChange={e => setEditDraft(d => ({ ...d, title: e.target.value }))}
+                    style={{
+                      fontFamily: '"Arial Black", sans-serif', fontSize: '14px', fontWeight: '900',
+                      color: textColor, background: tweaks?.darkMode ? 'rgba(255,255,255,0.06)' : '#F5F0FB',
+                      border: `1.5px solid #7B2FBE`, borderRadius: '6px', padding: '6px 10px', outline: 'none', width: '100%', boxSizing: 'border-box'
+                    }}
+                  />
+                  {editDraft.bullets.map((b, j) => (
+                    <input
+                      key={j}
+                      value={b}
+                      onChange={e => setEditDraft(d => ({ ...d, bullets: d.bullets.map((x, k) => k === j ? e.target.value : x) }))}
+                      style={{
+                        fontSize: '13px', color: textColor,
+                        background: tweaks?.darkMode ? 'rgba(255,255,255,0.04)' : '#FAFAFA',
+                        border: `1px solid ${borderColor}`, borderRadius: '6px', padding: '5px 10px', outline: 'none', width: '100%', boxSizing: 'border-box',
+                        fontFamily: 'Calibri, sans-serif'
+                      }}
+                    />
+                  ))}
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                    <button onClick={handleEditSave} style={{ padding: '6px 16px', borderRadius: '7px', border: 'none', background: 'linear-gradient(135deg, #7B2FBE, #D946A8)', color: '#fff', fontSize: '13px', fontFamily: 'Calibri, sans-serif', fontWeight: '700', cursor: 'pointer' }}>Save</button>
+                    <button onClick={() => setEditingIndex(null)} style={{ padding: '6px 14px', borderRadius: '7px', border: `1px solid ${borderColor}`, background: 'transparent', color: subColor, fontSize: '13px', fontFamily: 'Calibri, sans-serif', cursor: 'pointer' }}>Cancel</button>
                   </div>
-                ))}
-              </div>
+                </div>
+              ) : (
+                <>
+                  <div style={{
+                    fontFamily: '"Arial Black", sans-serif',
+                    fontSize: '15px',
+                    fontWeight: '900',
+                    color: textColor,
+                    marginBottom: '8px',
+                    letterSpacing: '-0.2px'
+                  }}>{slide.title}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {slide.bullets.map((b, j) => (
+                      <div key={j} style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '8px',
+                        fontSize: '13px',
+                        color: subColor,
+                        fontFamily: 'Calibri, sans-serif'
+                      }}>
+                        <div style={{
+                          width: '4px',
+                          height: '4px',
+                          borderRadius: '50%',
+                          background: '#D946A8',
+                          flexShrink: 0,
+                          marginTop: '6px'
+                        }} />
+                        {b}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         ))}
+
+        {/* Add Slide button */}
+        <button
+          onClick={handleAddSlide}
+          style={{
+            width: '100%',
+            padding: '16px',
+            borderRadius: '12px',
+            border: `2px dashed ${tweaks?.darkMode ? 'rgba(123,47,190,0.35)' : 'rgba(123,47,190,0.25)'}`,
+            background: 'transparent',
+            color: '#7B2FBE',
+            fontSize: '14px',
+            fontFamily: 'Calibri, sans-serif',
+            fontWeight: '600',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            transition: 'all 0.15s ease',
+            marginTop: '2px'
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = tweaks?.darkMode ? 'rgba(123,47,190,0.1)' : 'rgba(123,47,190,0.05)'; e.currentTarget.style.borderColor = '#7B2FBE'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = tweaks?.darkMode ? 'rgba(123,47,190,0.35)' : 'rgba(123,47,190,0.25)'; }}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+          </svg>
+          Add Slide
+        </button>
       </div>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>

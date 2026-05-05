@@ -1,4 +1,3 @@
-
 // Admin Panel Screen
 const AdminScreen = ({ tweaks }) => {
   const [activeTab, setActiveTab] = React.useState('brand');

@@ -1,4 +1,3 @@
-
 // Processing Screen
 const ProcessingScreen = ({ config, onComplete, tweaks }) => {
   const [phase, setPhase] = React.useState(0);

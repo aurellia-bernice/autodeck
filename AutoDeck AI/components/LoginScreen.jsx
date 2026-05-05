@@ -1,9 +1,3 @@
-
-// Login Screen — AutoDeck AI
-// Two-panel layout: brand left, sign-in form right.
-// Props:
-//   onLogin(userData) — called after successful sign-in or SSO click
-
 const COLORS_LOGIN = {
   deepPurple: "#1A0530",
   richPurple: "#2D0A4E",
@@ -144,6 +138,7 @@ const LoginScreen = ({ onLogin }) => {
         <div style={{ position: "absolute", bottom: "-20%", left: "-15%", width: "600px", height: "600px", borderRadius: "50%", background: `radial-gradient(circle, ${C.vibrantPurple}18 0%, transparent 70%)`, pointerEvents: "none" }} />
 
         <div style={{ position: "relative", zIndex: 1, maxWidth: "420px", opacity: mounted ? 1 : 0, transform: mounted ? "translateY(0)" : "translateY(30px)", transition: "all 0.8s cubic-bezier(0.16,1,0.3,1)" }}>
+          {/* Logo */}
           <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "56px" }}>
             <div style={{ width: "44px", height: "44px", borderRadius: "12px", background: "rgba(255,255,255,0.08)", backdropFilter: "blur(12px)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(255,255,255,0.08)" }}>
               <LoginGemIcon size={26} />
@@ -188,6 +183,7 @@ const LoginScreen = ({ onLogin }) => {
           <p style={{ fontSize: "15px", color: "#7A7090", margin: "0 0 36px 0", lineHeight: 1.5 }}>Use your Quidax work email to continue</p>
 
           <form onSubmit={handleSubmit}>
+            {/* Email */}
             <div style={{ marginBottom: "20px" }}>
               <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: C.richPurple, marginBottom: "8px", letterSpacing: "0.01em" }}>Work email</label>
               <input
@@ -201,6 +197,7 @@ const LoginScreen = ({ onLogin }) => {
               />
             </div>
 
+            {/* Password */}
             <div style={{ marginBottom: "12px" }}>
               <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: C.richPurple, marginBottom: "8px", letterSpacing: "0.01em" }}>Password</label>
               <div style={{ position: "relative" }}>
@@ -219,6 +216,7 @@ const LoginScreen = ({ onLogin }) => {
               </div>
             </div>
 
+            {/* Forgot */}
             <div style={{ textAlign: "right", marginBottom: error ? "16px" : "32px" }}>
               <a href="#" onClick={e => e.preventDefault()} style={{ fontSize: "13px", color: C.vibrantPurple, textDecoration: "none", fontWeight: 500 }}
                 onMouseEnter={e => e.target.style.textDecoration = "underline"}
@@ -227,12 +225,14 @@ const LoginScreen = ({ onLogin }) => {
               </a>
             </div>
 
+            {/* Error */}
             {error && (
               <div style={{ marginBottom: "20px", padding: "12px 16px", borderRadius: "10px", background: "rgba(217,70,168,0.08)", border: "1px solid rgba(217,70,168,0.2)", fontSize: "13px", color: "#B0186E", fontWeight: 500 }}>
                 {error}
               </div>
             )}
 
+            {/* Submit */}
             <button
               type="submit"
               disabled={isLoading}
@@ -252,12 +252,14 @@ const LoginScreen = ({ onLogin }) => {
             </button>
           </form>
 
+          {/* Divider */}
           <div style={{ display: "flex", alignItems: "center", gap: "16px", margin: "28px 0" }}>
             <div style={{ flex: 1, height: "1px", background: C.inputBorder }} />
             <span style={{ fontSize: "12px", color: "#9B8FB0", fontWeight: 500, letterSpacing: "0.04em", textTransform: "uppercase" }}>or</span>
             <div style={{ flex: 1, height: "1px", background: C.inputBorder }} />
           </div>
 
+          {/* SSO */}
           <button
             onClick={() => { if (onLogin) onLogin({ email: "sso-user@quidax.com", sso: true }); }}
             style={{ width: "100%", padding: "14px", borderRadius: "12px", border: `1.5px solid ${C.inputBorder}`, background: "#FFFFFF", color: C.richPurple, fontSize: "14px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", transition: "all 0.2s ease", letterSpacing: "0.01em" }}
@@ -287,3 +289,5 @@ const LoginScreen = ({ onLogin }) => {
     </div>
   );
 };
+
+Object.assign(window, { LoginScreen });

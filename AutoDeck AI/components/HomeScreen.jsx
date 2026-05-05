@@ -1,4 +1,3 @@
-
 // Home / Generate Screen
 const HomeScreen = ({ onGenerate, tweaks }) => {
   const [inputText, setInputText] = React.useState('');
