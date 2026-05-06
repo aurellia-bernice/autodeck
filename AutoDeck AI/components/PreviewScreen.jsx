@@ -1,7 +1,5 @@
 // Preview & Download Screen
-const PreviewScreen = ({ config, onGenerateAgain, tweaks }) => {
-  const [downloading, setDownloading] = React.useState(false);
-  const [downloaded, setDownloaded] = React.useState(false);
+const PreviewScreen = ({ config, onGenerateAgain, onViewSlideshow, tweaks }) => {
   const [editingIndex, setEditingIndex] = React.useState(null);
   const [editDraft, setEditDraft] = React.useState({ title: '', bullets: [] });
 
@@ -24,14 +22,6 @@ const PreviewScreen = ({ config, onGenerateAgain, tweaks }) => {
     { title: 'Partnerships', bullets: ['MTN Mobile Money integration live', 'Flutterwave API partnership signed', 'Binance liquidity pool access'], type: 'content' },
     { title: 'Next Steps & Asks', bullets: ['Board approval for Series B extension', 'Regulatory counsel in 3 new markets', 'Marketing budget increase for Q3'], type: 'cta' },
   ].slice(0, slideCount));
-
-  const handleDownload = () => {
-    setDownloading(true);
-    setTimeout(() => {
-      setDownloading(false);
-      setDownloaded(true);
-    }, 2000);
-  };
 
   const handleDelete = (index) => { setSlides(prev => prev.filter((_, i) => i !== index)); if (editingIndex === index) setEditingIndex(null); };
   const handleEditStart = (index) => { setEditingIndex(index); setEditDraft({ title: slides[index].title, bullets: [...slides[index].bullets] }); };
@@ -100,6 +90,36 @@ const PreviewScreen = ({ config, onGenerateAgain, tweaks }) => {
 
         {/* Action buttons */}
         <div style={{ display: 'flex', gap: '12px', flexShrink: 0 }}>
+
+          {/* View as Slideshow */}
+          <button
+            onClick={() => onViewSlideshow && onViewSlideshow(slides)}
+            style={{
+              padding: '12px 20px',
+              borderRadius: '10px',
+              border: '1.5px solid rgba(123,47,190,0.35)',
+              background: 'rgba(123,47,190,0.08)',
+              color: '#7B2FBE',
+              fontSize: '14px',
+              fontFamily: 'Calibri, sans-serif',
+              fontWeight: '700',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '7px',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(123,47,190,0.14)'; e.currentTarget.style.borderColor = '#7B2FBE'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(123,47,190,0.08)'; e.currentTarget.style.borderColor = 'rgba(123,47,190,0.35)'; }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="2" width="12" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.4"/>
+              <path d="M5 12.5h4M7 10.5v2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+              <path d="M5.5 5.5L8.5 7 5.5 8.5V5.5z" fill="currentColor"/>
+            </svg>
+            View as Slideshow
+          </button>
+
           <button
             onClick={onGenerateAgain}
             style={{
@@ -129,59 +149,6 @@ const PreviewScreen = ({ config, onGenerateAgain, tweaks }) => {
             Generate Again
           </button>
 
-          <button
-            onClick={handleDownload}
-            style={{
-              padding: '12px 24px',
-              borderRadius: '10px',
-              border: 'none',
-              background: downloaded
-                ? 'rgba(80,200,120,0.15)'
-                : downloading
-                  ? 'linear-gradient(135deg, #6020A0, #C030A0)'
-                  : 'linear-gradient(135deg, #7B2FBE 0%, #D946A8 100%)',
-              color: downloaded ? '#3DB870' : '#FFFFFF',
-              fontSize: '15px',
-              fontFamily: '"Arial Black", sans-serif',
-              fontWeight: '900',
-              cursor: downloading ? 'wait' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              transition: 'all 0.2s ease',
-              boxShadow: downloaded ? 'none' : '0 4px 20px rgba(217,70,168,0.3)',
-              border: downloaded ? '1.5px solid rgba(80,200,120,0.3)' : 'none',
-              letterSpacing: '0.2px'
-            }}
-          >
-            {downloading ? (
-              <>
-                <div style={{
-                  width: '14px',
-                  height: '14px',
-                  border: '2px solid rgba(255,255,255,0.3)',
-                  borderTopColor: '#fff',
-                  borderRadius: '50%',
-                  animation: 'spin 0.7s linear infinite'
-                }} />
-                Downloading…
-              </>
-            ) : downloaded ? (
-              <>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                  <path d="M2 7l3.5 3.5L12 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                Downloaded
-              </>
-            ) : (
-              <>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                  <path d="M7 1v8M4 6l3 3 3-3M2 11h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                Download .PPTX
-              </>
-            )}
-          </button>
         </div>
       </div>
 

@@ -12,6 +12,7 @@ const App = () => {
   const [screen, setScreen] = React.useState('login');
   const [deckConfig, setDeckConfig] = React.useState(null);
   const [loggedIn, setLoggedIn] = React.useState(false);
+  const [slideshowSlides, setSlideshowSlides] = React.useState(null);
 
   const currentUser = tweaks?.userRole === 'admin' ? 'admin' : 'employee';
 
@@ -47,7 +48,7 @@ const App = () => {
       {screen === 'login' && (
         <LoginScreen onLogin={handleLogin} />
       )}
-      {screen !== 'login' && screen !== 'processing' && (
+      {screen !== 'login' && screen !== 'processing' && screen !== 'slideshow' && (
         <Sidebar
           currentScreen={screen}
           onNavigate={handleNavigate}
@@ -57,7 +58,7 @@ const App = () => {
 
       {screen !== 'login' && <div style={{
         flex: 1,
-        marginLeft: screen !== 'processing' ? '220px' : 0,
+        marginLeft: (screen !== 'processing' && screen !== 'slideshow') ? '220px' : 0,
         overflowY: 'auto',
         overflowX: 'hidden',
         height: '100vh'
@@ -76,7 +77,16 @@ const App = () => {
           <PreviewScreen
             config={deckConfig}
             onGenerateAgain={handleGenerateAgain}
+            onViewSlideshow={(slides) => { setSlideshowSlides(slides); setScreen('slideshow'); }}
             tweaks={tweaks}
+          />
+        )}
+        {screen === 'slideshow' && (
+          <SlideGenerator
+            slides={slideshowSlides || []}
+            config={deckConfig}
+            tweaks={tweaks}
+            onBack={() => setScreen('preview')}
           />
         )}
         {screen === 'history' && (
@@ -134,6 +144,7 @@ const App = () => {
               { label: 'Home / Generate', value: 'home' },
               { label: 'Processing', value: 'processing' },
               { label: 'Preview & Download', value: 'preview' },
+              { label: 'Slideshow', value: 'slideshow' },
               { label: 'History', value: 'history' },
               { label: 'Admin Panel', value: 'admin' },
             ]}
