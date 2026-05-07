@@ -1,7 +1,7 @@
 // ============================================================
 // Sidebar — quiet purple rail, single lime dot for active item
 // ============================================================
-const Sidebar = ({ currentScreen, onNavigate, currentUser, userRole, onLogout, tweaks }) => {
+const Sidebar = ({ currentScreen, onNavigate, currentUser, userRole, onLogout, onChangePassword, darkMode, onToggleDark, tweaks }) => {
   const T = qxTheme(true); // sidebar is always dark — anchors the layout
   const items = [
     { id: 'home',    label: 'Generate', icon: (
@@ -105,6 +105,42 @@ const Sidebar = ({ currentScreen, onNavigate, currentUser, userRole, onLogout, t
               {userRole || 'employee'}
             </div>
           </div>
+          {onToggleDark && (
+            <button onClick={onToggleDark} title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'} style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: 4,
+              color: darkMode ? QX.lime : 'rgba(246,241,251,0.40)', display: 'flex', borderRadius: 6,
+              transition: `color 140ms ${qxEase}`,
+            }}
+              onMouseEnter={e => e.currentTarget.style.color = darkMode ? QX.lime : '#F6F1FB'}
+              onMouseLeave={e => e.currentTarget.style.color = darkMode ? QX.lime : 'rgba(246,241,251,0.40)'}>
+              {darkMode ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="5"/>
+                  <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                  <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                </svg>
+              )}
+            </button>
+          )}
+          {onChangePassword && (
+            <button onClick={onChangePassword} title="Change password" style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: 4,
+              color: 'rgba(246,241,251,0.40)', display: 'flex', borderRadius: 6,
+            }}
+              onMouseEnter={e => e.currentTarget.style.color = '#F6F1FB'}
+              onMouseLeave={e => e.currentTarget.style.color = 'rgba(246,241,251,0.40)'}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="6.5" width="10" height="6.5" rx="1"/>
+                <path d="M4.5 6.5V4.5a2.5 2.5 0 015 0v2"/>
+              </svg>
+            </button>
+          )}
           {onLogout && (
             <button onClick={onLogout} title="Sign out" style={{
               background: 'none', border: 'none', cursor: 'pointer', padding: 4,
