@@ -6,7 +6,14 @@
       "Bash(npm test *)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(firebase deploy *)"
+      "Bash(firebase deploy *)",
+      "Bash(python3 -c ' *)",
+      "Bash(pkill -f \"python3 -m http.server\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8080)",
+      "Bash(find \"/Users/aurellia_amore/Downloads\" \"/Users/aurellia_amore/Desktop\" -name \"*.jsx\" 2>/dev/null | head -10)",
+      "Read(//Users/aurellia_amore/Downloads/**)",
+      "Bash(find \"/Users/aurellia_amore\" -name \"s.jsx\" 2>/dev/null)",
+      "Read(//Users/aurellia_amore/**)"
     ]
   }
 }
