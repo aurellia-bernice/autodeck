@@ -1,7 +1,7 @@
 // ============================================================
 // Sidebar — quiet purple rail, single lime dot for active item
 // ============================================================
-const Sidebar = ({ currentScreen, onNavigate, currentUser, userRole, onLogout, onChangePassword, darkMode, onToggleDark, tweaks }) => {
+const Sidebar = ({ currentScreen, onNavigate, currentUser, userRole, onLogout, onChangePassword, onSettings, darkMode, onToggleDark, tweaks }) => {
   const T = qxTheme(true); // sidebar is always dark — anchors the layout
   const items = [
     { id: 'home',    label: 'Generate', icon: (
@@ -12,6 +12,11 @@ const Sidebar = ({ currentScreen, onNavigate, currentUser, userRole, onLogout, o
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
         <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4"/>
         <path d="M8 4.5V8L10.5 9.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+      </svg>) },
+    { id: 'settings', label: 'Settings', icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.4"/>
+        <path d="M8 1.5v1M8 13.5v1M1.5 8h1M13.5 8h1M3.4 3.4l.7.7M11.9 11.9l.7.7M3.4 12.6l.7-.7M11.9 4.1l.7-.7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
       </svg>) },
     { id: 'admin',   label: 'Admin',    adminOnly: true, icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -89,7 +94,9 @@ const Sidebar = ({ currentScreen, onNavigate, currentUser, userRole, onLogout, o
 
       {/* User */}
       <div style={{ padding: 12, borderTop: '1px solid rgba(184,145,220,0.08)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, borderRadius: 8 }}>
+        <div onClick={onSettings} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, borderRadius: 8, cursor: onSettings ? 'pointer' : 'default', transition: `background 140ms ${qxEase}` }}
+          onMouseEnter={e => { if (onSettings) e.currentTarget.style.background = 'rgba(184,145,220,0.08)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
           <div style={{
             width: 28, height: 28, borderRadius: '50%',
             background: 'linear-gradient(135deg, #5F2A91, #B891DC)',
@@ -106,7 +113,7 @@ const Sidebar = ({ currentScreen, onNavigate, currentUser, userRole, onLogout, o
             </div>
           </div>
           {onToggleDark && (
-            <button onClick={onToggleDark} title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'} style={{
+            <button onClick={e => { e.stopPropagation(); onToggleDark(); }} title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'} style={{
               background: 'none', border: 'none', cursor: 'pointer', padding: 4,
               color: darkMode ? QX.lime : 'rgba(246,241,251,0.40)', display: 'flex', borderRadius: 6,
               transition: `color 140ms ${qxEase}`,
@@ -129,7 +136,7 @@ const Sidebar = ({ currentScreen, onNavigate, currentUser, userRole, onLogout, o
             </button>
           )}
           {onChangePassword && (
-            <button onClick={onChangePassword} title="Change password" style={{
+            <button onClick={e => { e.stopPropagation(); onChangePassword(); }} title="Change password" style={{
               background: 'none', border: 'none', cursor: 'pointer', padding: 4,
               color: 'rgba(246,241,251,0.40)', display: 'flex', borderRadius: 6,
             }}
@@ -142,7 +149,7 @@ const Sidebar = ({ currentScreen, onNavigate, currentUser, userRole, onLogout, o
             </button>
           )}
           {onLogout && (
-            <button onClick={onLogout} title="Sign out" style={{
+            <button onClick={e => { e.stopPropagation(); onLogout(); }} title="Sign out" style={{
               background: 'none', border: 'none', cursor: 'pointer', padding: 4,
               color: 'rgba(246,241,251,0.40)', display: 'flex', borderRadius: 6,
             }}

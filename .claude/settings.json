@@ -5,7 +5,8 @@
       "Bash(wait)",
       "Bash(npm test *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(firebase deploy *)"
     ]
   }
 }
