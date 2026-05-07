@@ -1,5 +1,5 @@
 // Sidebar Navigation Component
-const Sidebar = ({ currentScreen, onNavigate, currentUser }) => {
+const Sidebar = ({ currentScreen, onNavigate, currentUser, userRole, onLogout }) => {
   const navItems = [
     {
       id: 'home',
@@ -73,7 +73,7 @@ const Sidebar = ({ currentScreen, onNavigate, currentUser }) => {
       <nav style={{ flex: 1, padding: '16px 12px' }}>
         {navItems.map(item => {
           const isActive = currentScreen === item.id || (currentScreen === 'processing' && item.id === 'home') || (currentScreen === 'preview' && item.id === 'home');
-          if (item.adminOnly && currentUser !== 'admin') return null;
+          if (item.adminOnly && userRole !== 'admin') return null;
           return (
             <button
               key={item.id}
@@ -132,7 +132,7 @@ const Sidebar = ({ currentScreen, onNavigate, currentUser }) => {
 
       {/* User area */}
       <div style={{
-        padding: '16px 20px',
+        padding: '12px 16px',
         borderTop: '1px solid rgba(255,255,255,0.08)',
         display: 'flex',
         alignItems: 'center',
@@ -152,16 +152,33 @@ const Sidebar = ({ currentScreen, onNavigate, currentUser }) => {
           fontWeight: '900',
           flexShrink: 0
         }}>
-          {currentUser === 'admin' ? 'AD' : 'AO'}
+          {currentUser
+            ? (currentUser.displayName || currentUser.email || '').charAt(0).toUpperCase() || '?'
+            : '?'}
         </div>
-        <div>
-          <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: '13px', fontFamily: 'Calibri, sans-serif', fontWeight: '600' }}>
-            {currentUser === 'admin' ? 'Ada Okafor' : 'Ayo Osei'}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: '13px', fontFamily: 'Calibri, sans-serif', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {currentUser ? (currentUser.displayName || currentUser.email || 'User') : 'User'}
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: '11px', fontFamily: 'Calibri, sans-serif' }}>
-            {currentUser === 'admin' ? 'Design Lead' : 'Sales Rep'}
+          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: '11px', fontFamily: 'Calibri, sans-serif', textTransform: 'capitalize' }}>
+            {userRole}
           </div>
         </div>
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            title="Sign out"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', flexShrink: 0, borderRadius: '6px', transition: 'color 0.15s' }}
+            onMouseEnter={e => e.currentTarget.style.color = '#D946A8'}
+            onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.35)'}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+          </button>
+        )}
       </div>
     </div>
   );

@@ -11,15 +11,53 @@ const App = () => {
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [screen, setScreen] = React.useState('login');
   const [deckConfig, setDeckConfig] = React.useState(null);
-  const [loggedIn, setLoggedIn] = React.useState(false);
+  const [currentUser, setCurrentUser] = React.useState(null);
+  const [authReady, setAuthReady] = React.useState(false);
+  const [authError, setAuthError] = React.useState("");
   const [slideshowSlides, setSlideshowSlides] = React.useState(null);
 
-  const currentUser = tweaks?.userRole === 'admin' ? 'admin' : 'employee';
+  const userRole = tweaks?.userRole === 'admin' ? 'admin' : 'employee';
+
+  React.useEffect(() => {
+    const unsubscribe = window.firebaseAuth.onAuthStateChanged(async (user) => {
+      setAuthReady(true);
+      if (user) {
+        if (!user.email.toLowerCase().endsWith('@quidax.com')) {
+          await window.firebaseAuth.signOut();
+          setAuthError("Only @quidax.com accounts are allowed.");
+          return;
+        }
+        setCurrentUser({ email: user.email, uid: user.uid, displayName: user.displayName });
+        setAuthError("");
+        setScreen(prev => prev === 'login' ? 'home' : prev);
+      } else {
+        setCurrentUser(null);
+        setScreen('login');
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleLogin = (userData) => {
-    setLoggedIn(true);
+    setCurrentUser(userData);
     setScreen('home');
   };
+
+  const handleLogout = async () => {
+    await window.firebaseAuth.signOut();
+  };
+
+  if (!authReady) {
+    return (
+      <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', background: '#1A0530' }}>
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" style={{ animation: 'lgSpin 1s linear infinite' }}>
+          <circle cx="12" cy="12" r="10" stroke="#7B2FBE" strokeWidth="2.5" opacity="0.3" />
+          <path d="M12 2a10 10 0 0 1 10 10" stroke="#D946A8" strokeWidth="2.5" strokeLinecap="round" />
+        </svg>
+        <style>{`@keyframes lgSpin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
 
   const handleGenerate = (config) => {
     setDeckConfig(config);
@@ -46,13 +84,15 @@ const App = () => {
       background: tweaks?.darkMode ? '#0F0318' : '#F4F1F9'
     }}>
       {screen === 'login' && (
-        <LoginScreen onLogin={handleLogin} />
+        <LoginScreen onLogin={handleLogin} authError={authError} onClearAuthError={() => setAuthError("")} />
       )}
       {screen !== 'login' && screen !== 'processing' && screen !== 'slideshow' && (
         <Sidebar
           currentScreen={screen}
           onNavigate={handleNavigate}
           currentUser={currentUser}
+          userRole={userRole}
+          onLogout={handleLogout}
         />
       )}
 
@@ -92,10 +132,10 @@ const App = () => {
         {screen === 'history' && (
           <HistoryScreen tweaks={tweaks} />
         )}
-        {screen === 'admin' && currentUser === 'admin' && (
+        {screen === 'admin' && userRole === 'admin' && (
           <AdminScreen tweaks={tweaks} />
         )}
-        {screen === 'admin' && currentUser !== 'admin' && (
+        {screen === 'admin' && userRole !== 'admin' && (
           <div style={{
             display: 'flex',
             flexDirection: 'column',
