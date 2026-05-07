@@ -84,15 +84,14 @@ test.describe('ChangePasswordScreen', () => {
 
   // ── Navigation ────────────────────────────────────────────────────────────
 
-  test('Cancel button navigates back to home', async ({ page }) => {
+  test('Cancel button navigates back to account settings', async ({ page }) => {
     await page.getByRole('button', { name: 'Cancel' }).click();
-    // Home screen renders the generate heading
-    await expect(page.getByText('What are')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('heading', { name: 'Account settings' })).toBeVisible({ timeout: 5000 });
   });
 
-  test('back link navigates back to home', async ({ page }) => {
+  test('back link navigates back to account settings', async ({ page }) => {
     await page.getByRole('button', { name: 'Back to dashboard' }).click();
-    await expect(page.getByText('What are')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('heading', { name: 'Account settings' })).toBeVisible({ timeout: 5000 });
   });
 
   // ── Password visibility toggles ───────────────────────────────────────────
