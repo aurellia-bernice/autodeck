@@ -93,6 +93,9 @@ const App = () => {
           currentUser={currentUser}
           userRole={userRole}
           onLogout={handleLogout}
+          onChangePassword={() => setScreen('changePassword')}
+          darkMode={tweaks?.darkMode}
+          onToggleDark={() => setTweak('darkMode', !tweaks?.darkMode)}
         />
       )}
 
@@ -131,6 +134,9 @@ const App = () => {
         )}
         {screen === 'history' && (
           <HistoryScreen tweaks={tweaks} />
+        )}
+        {screen === 'changePassword' && (
+          <ChangePasswordScreen tweaks={tweaks} onBack={() => setScreen('home')} />
         )}
         {screen === 'admin' && userRole === 'admin' && (
           <AdminScreen tweaks={tweaks} />
@@ -187,6 +193,7 @@ const App = () => {
               { label: 'Slideshow', value: 'slideshow' },
               { label: 'History', value: 'history' },
               { label: 'Admin Panel', value: 'admin' },
+              { label: 'Change Password', value: 'changePassword' },
             ]}
             onChange={v => {
               if (v === 'processing') {
