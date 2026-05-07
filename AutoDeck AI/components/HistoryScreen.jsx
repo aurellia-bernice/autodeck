@@ -1,295 +1,322 @@
-// History Screen
+// ============================================================
+// HistoryScreen — like a library, not a table.
+// Featured deck up top, masonry of past decks below, quick stats strip.
+// ============================================================
 const HistoryScreen = ({ tweaks }) => {
+  const T = qxTheme(tweaks?.darkMode);
+  const dark = tweaks?.darkMode;
   const [search, setSearch] = React.useState('');
   const [filter, setFilter] = React.useState('All');
-  const [deletingId, setDeletingId] = React.useState(null);
+  const [view, setView] = React.useState('shelf'); // shelf | list
+
+  const seedColors = {
+    Professional: ['#2D0F4E', '#5F2A91', '#B891DC'],
+    Bold:         ['#431407', '#9A3412', '#FED7AA'],
+    Minimal:      ['#F6F1FB', '#D9C2EE', '#5F2A91'],
+    Corporate:    ['#0F0A24', '#312E81', '#A5B4FC'],
+  };
 
   const [decks, setDecks] = React.useState([
-    { id: 1, title: 'Q2 Sales Strategy Overview', slides: 10, template: 'Professional', date: '2026-05-03', size: '2.4 MB' },
-    { id: 2, title: 'Product Roadmap H2 2026', slides: 8, template: 'Bold', date: '2026-05-02', size: '1.8 MB' },
-    { id: 3, title: 'HR Onboarding Deck — New Hires', slides: 15, template: 'Minimal', date: '2026-04-30', size: '3.1 MB' },
-    { id: 4, title: 'Engineering All Hands April', slides: 12, template: 'Corporate', date: '2026-04-28', size: '2.0 MB' },
-    { id: 5, title: 'Investor Update — Series B', slides: 10, template: 'Professional', date: '2026-04-22', size: '2.7 MB' },
-    { id: 6, title: 'Brand Guidelines 2026', slides: 20, template: 'Bold', date: '2026-04-18', size: '4.2 MB' },
-    { id: 7, title: 'Customer Success Stories Q1', slides: 8, template: 'Minimal', date: '2026-04-10', size: '1.5 MB' },
-    { id: 8, title: 'Operations Review March', slides: 10, template: 'Corporate', date: '2026-03-31', size: '2.2 MB' },
+    { id: 1, title: 'Q2 Sales Strategy Overview',  slides: 10, template: 'Professional', date: '2026-05-03', size: '2.4 MB', author: 'Adaeze O.', favourite: true },
+    { id: 2, title: 'Product Roadmap H2 2026',      slides: 8,  template: 'Bold',         date: '2026-05-02', size: '1.8 MB', author: 'Tunde A.',  favourite: false },
+    { id: 3, title: 'HR Onboarding — New Hires',    slides: 15, template: 'Minimal',      date: '2026-04-30', size: '3.1 MB', author: 'Chiamaka I.', favourite: true },
+    { id: 4, title: 'Engineering All Hands April',  slides: 12, template: 'Corporate',    date: '2026-04-28', size: '2.0 MB', author: 'Femi K.',   favourite: false },
+    { id: 5, title: 'Investor Update — Series B',   slides: 10, template: 'Professional', date: '2026-04-22', size: '2.7 MB', author: 'Adaeze O.', favourite: true },
+    { id: 6, title: 'Brand Guidelines 2026',        slides: 20, template: 'Bold',         date: '2026-04-18', size: '4.2 MB', author: 'Design',    favourite: false },
+    { id: 7, title: 'Customer Success Stories Q1',  slides: 8,  template: 'Minimal',      date: '2026-04-10', size: '1.5 MB', author: 'Sade B.',   favourite: false },
+    { id: 8, title: 'Operations Review March',      slides: 10, template: 'Corporate',    date: '2026-03-31', size: '2.2 MB', author: 'Tunde A.',  favourite: false },
   ]);
 
   const templates = ['All', 'Professional', 'Minimal', 'Bold', 'Corporate'];
+  const filtered = decks.filter(d => d.title.toLowerCase().includes(search.toLowerCase()) && (filter === 'All' || d.template === filter));
+  const featured = filtered[0];
+  const rest = filtered.slice(1);
+  const fmt = (s) => new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const handleDelete = (id) => setDecks(p => p.filter(d => d.id !== id));
+  const toggleFav = (id) => setDecks(p => p.map(d => d.id === id ? { ...d, favourite: !d.favourite } : d));
 
-  const filtered = decks.filter(d => {
-    const matchSearch = d.title.toLowerCase().includes(search.toLowerCase());
-    const matchFilter = filter === 'All' || d.template === filter;
-    return matchSearch && matchFilter;
-  });
+  const totalSlides = decks.reduce((s, d) => s + d.slides, 0);
+  const favCount = decks.filter(d => d.favourite).length;
 
-  const formatDate = (dateStr) => {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  // ── DeckCover visual ────────────────────────────────────
+  const DeckCover = ({ deck, size = 'sm' }) => {
+    const c = seedColors[deck.template] || seedColors.Professional;
+    const isLight = deck.template === 'Minimal';
+    return (
+      <div style={{
+        position: 'relative', aspectRatio: '3 / 4',
+        borderRadius: qxRadius.md, overflow: 'hidden',
+        background: `linear-gradient(135deg, ${c[0]} 0%, ${c[1]} 60%, ${c[2]} 140%)`,
+        boxShadow: dark ? '0 12px 30px rgba(0,0,0,0.55)' : '0 12px 30px rgba(45,15,78,0.18)',
+        color: isLight ? '#1A0530' : '#F6F1FB',
+        padding: size === 'lg' ? 28 : 16,
+        display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+        transition: `transform 240ms ${qxEase}, box-shadow 240ms ${qxEase}`,
+        cursor: 'pointer',
+      }}
+        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; }}
+        onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}>
+        <div aria-hidden style={{ position: 'absolute', top: -40, right: -40, width: 140, height: 140, borderRadius: '50%', border: `1px solid ${isLight ? c[2] + '40' : c[2] + '40'}` }} />
+        <div aria-hidden style={{ position: 'absolute', bottom: -60, left: -60, width: 160, height: 160, borderRadius: '50%', background: `${c[2]}22`, filter: 'blur(20px)' }} />
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontFamily: qxType.mono, fontSize: size === 'lg' ? 10 : 8, letterSpacing: '0.22em', textTransform: 'uppercase', opacity: 0.55 }}>
+            QUIDAX
+          </div>
+          {deck.favourite && (
+            <svg width={size === 'lg' ? 14 : 10} height={size === 'lg' ? 14 : 10} viewBox="0 0 14 14" fill="currentColor" style={{ opacity: 0.85 }}>
+              <path d="M7 1l1.8 4 4.2.4-3.2 2.8 1 4.2L7 10.2 3.2 12.4l1-4.2L1 5.4 5.2 5z"/>
+            </svg>
+          )}
+        </div>
+        <div style={{ position: 'relative' }}>
+          <div style={{
+            fontFamily: qxType.display,
+            fontSize: size === 'lg' ? 22 : 13,
+            fontWeight: 500, letterSpacing: '-0.015em',
+            lineHeight: 1.1, marginBottom: size === 'lg' ? 12 : 6,
+            display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+          }}>{deck.title}</div>
+          <div style={{
+            fontFamily: qxType.mono,
+            fontSize: size === 'lg' ? 9.5 : 7.5,
+            letterSpacing: '0.15em', textTransform: 'uppercase',
+            opacity: 0.65,
+          }}>
+            {deck.slides} SLIDES · {deck.template.toUpperCase()}
+          </div>
+        </div>
+      </div>
+    );
   };
-
-  const handleDelete = (id) => {
-    setDeletingId(id);
-    setTimeout(() => {
-      setDecks(prev => prev.filter(d => d.id !== id));
-      setDeletingId(null);
-    }, 400);
-  };
-
-  const templateColors = {
-    Professional: '#7B2FBE',
-    Minimal: '#555',
-    Bold: '#D946A8',
-    Corporate: '#F5A623'
-  };
-
-  const bg = tweaks?.darkMode ? '#0F0318' : '#F4F1F9';
-  const cardBg = tweaks?.darkMode ? '#1E0635' : '#FFFFFF';
-  const textColor = tweaks?.darkMode ? '#FFFFFF' : '#1A0530';
-  const subColor = tweaks?.darkMode ? 'rgba(255,255,255,0.45)' : '#7A6B8A';
-  const borderColor = tweaks?.darkMode ? 'rgba(123,47,190,0.25)' : 'rgba(123,47,190,0.12)';
-  const inputBg = tweaks?.darkMode ? '#2A0E4A' : '#FFFFFF';
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: bg,
-      padding: '40px 48px',
-      fontFamily: 'Calibri, sans-serif',
-      overflowY: 'auto'
-    }}>
+    <div style={{ minHeight: '100vh', background: T.bg, fontFamily: qxType.body, color: T.ink, padding: '40px 48px 80px' }}>
       {/* Header */}
-      <div style={{ marginBottom: '28px' }}>
-        <h1 style={{
-          fontFamily: '"Arial Black", sans-serif',
-          fontSize: '26px',
-          fontWeight: '900',
-          color: textColor,
-          margin: '0 0 6px',
-          letterSpacing: '-0.5px'
-        }}>History</h1>
-        <p style={{ color: subColor, fontSize: '15px', margin: 0 }}>
-          {decks.length} deck{decks.length !== 1 ? 's' : ''} generated
-        </p>
-      </div>
-
-      {/* Search + filters */}
-      <div style={{
-        display: 'flex',
-        gap: '12px',
-        marginBottom: '24px',
-        alignItems: 'center',
-        flexWrap: 'wrap'
-      }}>
-        {/* Search */}
-        <div style={{
-          position: 'relative',
-          flex: '1',
-          minWidth: '220px'
-        }}>
-          <div style={{
-            position: 'absolute',
-            left: '14px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            color: subColor,
-            pointerEvents: 'none'
-          }}>
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-              <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.5"/>
-              <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-            </svg>
+      <div style={{ ...qxMotion.fadeUp(0), marginBottom: 32, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontFamily: qxType.mono, fontSize: 11, letterSpacing: '0.30em', textTransform: 'uppercase', color: T.inkMute, marginBottom: 12 }}>
+            Library
           </div>
-          <input
-            type="text"
-            placeholder="Search decks…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '11px 16px 11px 38px',
-              borderRadius: '10px',
-              border: `1.5px solid ${borderColor}`,
-              background: inputBg,
-              color: textColor,
-              fontSize: '14px',
-              fontFamily: 'Calibri, sans-serif',
-              outline: 'none',
-              boxSizing: 'border-box',
-              transition: 'border-color 0.15s ease'
-            }}
-            onFocus={e => { e.target.style.borderColor = '#7B2FBE'; }}
-            onBlur={e => { e.target.style.borderColor = borderColor; }}
-          />
+          <h1 style={{ fontFamily: qxType.display, fontSize: 'clamp(40px, 5vw, 56px)', fontWeight: 500, color: T.ink, margin: '0 0 6px', letterSpacing: '-0.030em', lineHeight: 1 }}>
+            Everything <span style={{ color: T.primary, fontStyle: 'italic', fontWeight: 400 }}>you've made</span>.
+          </h1>
         </div>
 
-        {/* Filter chips */}
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          {templates.map(t => (
-            <button
-              key={t}
-              onClick={() => setFilter(t)}
-              style={{
-                padding: '9px 16px',
-                borderRadius: '8px',
-                border: `1.5px solid ${filter === t ? '#7B2FBE' : borderColor}`,
-                background: filter === t ? '#7B2FBE' : 'transparent',
-                color: filter === t ? '#fff' : subColor,
-                fontSize: '13px',
-                fontFamily: 'Calibri, sans-serif',
-                fontWeight: filter === t ? '700' : '500',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >{t}</button>
+        {/* Stats strip */}
+        <div style={{ display: 'flex', gap: 32 }}>
+          {[
+            ['Decks', decks.length],
+            ['Slides', totalSlides],
+            ['Favourites', favCount],
+          ].map(([k, v]) => (
+            <div key={k}>
+              <div style={{ fontFamily: qxType.mono, fontSize: 9.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.inkMute, marginBottom: 6 }}>{k}</div>
+              <div style={{ fontFamily: qxType.display, fontSize: 28, fontWeight: 500, color: T.ink, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+                {String(v).padStart(2, '0')}
+              </div>
+            </div>
           ))}
         </div>
       </div>
 
-      {/* Deck list */}
-      {filtered.length === 0 ? (
-        <div style={{
-          textAlign: 'center',
-          padding: '80px 0',
-          color: subColor
-        }}>
-          <svg width="48" height="48" viewBox="0 0 48 48" fill="none" style={{ marginBottom: '16px', opacity: 0.4 }}>
-            <circle cx="24" cy="24" r="20" stroke="currentColor" strokeWidth="2"/>
-            <path d="M24 16v8M24 30v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+      {/* Toolbar */}
+      <div style={{ ...qxMotion.fadeUp(80), display: 'flex', gap: 12, alignItems: 'center', marginBottom: 36, flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 240 }}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: T.inkMute }}>
+            <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.4"/>
+            <path d="M9.5 9.5L13 13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
           </svg>
-          <div style={{ fontSize: '16px', fontWeight: '600' }}>No decks found</div>
-          <div style={{ fontSize: '14px', marginTop: '6px' }}>Try adjusting your search or filter</div>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search the library…"
+            style={{
+              width: '100%', padding: '12px 16px 12px 40px',
+              borderRadius: qxRadius.full, border: `1px solid ${T.border}`,
+              background: T.surface, color: T.ink,
+              fontFamily: qxType.body, fontSize: 14, outline: 'none',
+              transition: `border-color 140ms ${qxEase}`,
+            }}
+            onFocus={e => e.target.style.borderColor = T.primary}
+            onBlur={e => e.target.style.borderColor = T.border} />
         </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {filtered.map(deck => (
-            <div
-              key={deck.id}
-              style={{
-                background: cardBg,
-                borderRadius: '12px',
-                border: `1.5px solid ${borderColor}`,
-                padding: '18px 24px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '20px',
-                opacity: deletingId === deck.id ? 0 : 1,
-                transition: 'opacity 0.3s ease, border-color 0.15s ease',
-                boxShadow: tweaks?.darkMode ? 'none' : '0 1px 8px rgba(45,10,78,0.04)'
-              }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(123,47,190,0.3)'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = borderColor; }}
-            >
-              {/* Icon */}
-              <div style={{
-                width: '44px',
-                height: '44px',
-                borderRadius: '10px',
-                background: tweaks?.darkMode ? 'rgba(123,47,190,0.2)' : 'rgba(123,47,190,0.08)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                color: '#7B2FBE'
-              }}>
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                  <rect x="3" y="3" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/>
-                  <path d="M7 8h6M7 11h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-              </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {templates.map(t => (
+            <button key={t} onClick={() => setFilter(t)} style={{
+              padding: '8px 14px', borderRadius: qxRadius.full,
+              border: `1px solid ${filter === t ? T.primary : T.border}`,
+              background: filter === t ? T.ghostBg : 'transparent',
+              color: filter === t ? T.primary : T.inkDim,
+              fontFamily: qxType.body, fontSize: 12.5, fontWeight: filter === t ? 600 : 500,
+              cursor: 'pointer', transition: `all 140ms ${qxEase}`,
+            }}>{t}</button>
+          ))}
+        </div>
+        <div style={{ display: 'inline-flex', background: T.ghostBg, borderRadius: qxRadius.full, padding: 3, border: `1px solid ${T.border}` }}>
+          {[
+            { k: 'shelf', label: 'Shelf' },
+            { k: 'list',  label: 'List' },
+          ].map(o => (
+            <button key={o.k} onClick={() => setView(o.k)} style={{
+              padding: '6px 14px', borderRadius: qxRadius.full, border: 'none',
+              background: view === o.k ? T.bgElev : 'transparent',
+              color: view === o.k ? T.ink : T.inkDim,
+              fontFamily: qxType.body, fontSize: 12.5, fontWeight: view === o.k ? 600 : 500,
+              cursor: 'pointer',
+            }}>{o.label}</button>
+          ))}
+        </div>
+      </div>
 
-              {/* Title + meta */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontFamily: '"Arial Black", sans-serif',
-                  fontSize: '14px',
-                  fontWeight: '900',
-                  color: textColor,
-                  marginBottom: '5px',
-                  letterSpacing: '-0.2px',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap'
-                }}>{deck.title}</div>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  fontSize: '12px',
-                  color: subColor,
-                  flexWrap: 'wrap'
-                }}>
-                  <span>{formatDate(deck.date)}</span>
-                  <span>·</span>
-                  <span>{deck.slides} slides</span>
-                  <span>·</span>
-                  <span style={{
-                    padding: '2px 8px',
-                    borderRadius: '4px',
-                    background: `${templateColors[deck.template]}18`,
-                    color: templateColors[deck.template],
-                    fontWeight: '600',
-                    fontSize: '11px'
-                  }}>{deck.template}</span>
-                  <span>·</span>
-                  <span>{deck.size}</span>
+      {filtered.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '80px 0', color: T.inkMute, fontSize: 14 }}>
+          Nothing in the library matches.
+        </div>
+      )}
+
+      {/* Featured + Shelf view */}
+      {view === 'shelf' && featured && (
+        <>
+          {/* Featured */}
+          <div style={{ ...qxMotion.fadeUp(140), marginBottom: 56 }}>
+            <div style={{ fontFamily: qxType.mono, fontSize: 10.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.inkMute, marginBottom: 16 }}>
+              Most recent
+            </div>
+            <div style={{
+              display: 'grid', gridTemplateColumns: '320px 1fr', gap: 40,
+              alignItems: 'center',
+            }}>
+              <DeckCover deck={featured} size="lg" />
+              <div>
+                <div style={{ fontFamily: qxType.mono, fontSize: 10.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.primary, marginBottom: 14 }}>
+                  {featured.template} · {fmt(featured.date)}
+                </div>
+                <h2 style={{ fontFamily: qxType.display, fontSize: 'clamp(32px, 4vw, 48px)', fontWeight: 500, color: T.ink, margin: '0 0 12px', letterSpacing: '-0.025em', lineHeight: 1.05 }}>
+                  {featured.title}
+                </h2>
+                <p style={{ fontSize: 16, color: T.inkDim, margin: '0 0 24px', lineHeight: 1.55, maxWidth: 540 }}>
+                  {featured.slides}-slide {featured.template.toLowerCase()} deck by {featured.author}. Last edited {fmt(featured.date)}.
+                </p>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button style={{
+                    padding: '12px 22px', borderRadius: qxRadius.full,
+                    border: 'none', background: QX.lime, color: '#1A0530',
+                    fontFamily: qxType.body, fontSize: 14, fontWeight: 600,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+                    boxShadow: '0 8px 30px rgba(212,255,63,0.42)',
+                    transition: `all 180ms ${qxEase}`,
+                  }}
+                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}>
+                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><polygon points="3,2 12,7 3,12" fill="currentColor"/></svg>
+                    Open
+                  </button>
+                  <button style={{
+                    padding: '12px 18px', borderRadius: qxRadius.full,
+                    border: `1px solid ${T.border}`, background: 'transparent', color: T.inkDim,
+                    fontFamily: qxType.body, fontSize: 13.5, fontWeight: 500,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+                  }}>
+                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M7 1v9M3 6l4 4 4-4M1 12h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    Download
+                  </button>
+                  <button onClick={() => toggleFav(featured.id)} style={{
+                    width: 42, height: 42, borderRadius: '50%',
+                    border: `1px solid ${T.border}`, background: 'transparent',
+                    color: featured.favourite ? '#F5A623' : T.inkMute,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill={featured.favourite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.4">
+                      <path d="M7 1l1.8 4 4.2.4-3.2 2.8 1 4.2L7 10.2 3.2 12.4l1-4.2L1 5.4 5.2 5z"/>
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Mini meta strip */}
+                <div style={{ display: 'flex', gap: 32, marginTop: 32, paddingTop: 24, borderTop: `1px solid ${T.border}` }}>
+                  {[
+                    ['Slides', String(featured.slides).padStart(2, '0')],
+                    ['Size', featured.size],
+                    ['Author', featured.author],
+                  ].map(([k, v]) => (
+                    <div key={k}>
+                      <div style={{ fontFamily: qxType.mono, fontSize: 9.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.inkMute, marginBottom: 4 }}>{k}</div>
+                      <div style={{ fontSize: 14, color: T.ink, fontWeight: 500 }}>{v}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
+            </div>
+          </div>
 
-              {/* Actions */}
-              <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                <button
-                  style={{
-                    padding: '9px 16px',
-                    borderRadius: '8px',
-                    border: `1.5px solid ${borderColor}`,
-                    background: 'transparent',
-                    color: '#7B2FBE',
-                    fontSize: '13px',
-                    fontFamily: 'Calibri, sans-serif',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(123,47,190,0.08)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                >
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <path d="M6.5 1v8M3.5 6l3 3 3-3M1 11h11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          {/* Shelf — masonry of past decks */}
+          {rest.length > 0 && (
+            <div>
+              <div style={{ fontFamily: qxType.mono, fontSize: 10.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.inkMute, marginBottom: 16 }}>
+                The shelf · {rest.length} deck{rest.length === 1 ? '' : 's'}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 24 }}>
+                {rest.map((d, i) => (
+                  <div key={d.id} style={{ ...qxMotion.fadeUp(160 + i * 40) }}>
+                    <DeckCover deck={d} />
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ fontFamily: qxType.display, fontSize: 14, fontWeight: 500, color: T.ink, letterSpacing: '-0.01em', marginBottom: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.25 }}>
+                        {d.title}
+                      </div>
+                      <div style={{ fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.10em', textTransform: 'uppercase', color: T.inkMute }}>
+                        {fmt(d.date)} · {d.author}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* List view */}
+      {view === 'list' && (
+        <div style={{ display: 'flex', flexDirection: 'column', borderTop: `1px solid ${T.border}` }}>
+          {filtered.map((d, i) => (
+            <div key={d.id} style={{
+              display: 'grid', gridTemplateColumns: '60px 1fr 100px 120px 140px auto',
+              alignItems: 'center', gap: 16,
+              padding: '18px 8px', borderBottom: `1px solid ${T.border}`,
+              cursor: 'pointer', transition: `background 140ms ${qxEase}`,
+              ...qxMotion.fadeUp(40 + i * 20),
+            }}
+              onMouseEnter={e => e.currentTarget.style.background = T.ghostBg}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              <div style={{ fontFamily: qxType.display, fontSize: 28, fontWeight: 500, color: T.inkFaint, letterSpacing: '-0.03em', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                {String(i + 1).padStart(2, '0')}
+              </div>
+              <div>
+                <div style={{ fontFamily: qxType.display, fontSize: 17, fontWeight: 500, color: T.ink, letterSpacing: '-0.015em', marginBottom: 4 }}>
+                  {d.title}
+                </div>
+                <div style={{ fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.10em', textTransform: 'uppercase', color: T.inkMute }}>
+                  By {d.author}
+                </div>
+              </div>
+              <div style={{ fontFamily: qxType.mono, fontSize: 11, color: T.inkDim, letterSpacing: '0.06em' }}>{d.template}</div>
+              <div style={{ fontFamily: qxType.mono, fontSize: 11, color: T.inkDim, letterSpacing: '0.06em' }}>{d.slides} slides</div>
+              <div style={{ fontFamily: qxType.mono, fontSize: 11, color: T.inkDim, letterSpacing: '0.06em' }}>{fmt(d.date)}</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={(e) => { e.stopPropagation(); toggleFav(d.id); }} style={{
+                  width: 32, height: 32, borderRadius: '50%',
+                  border: `1px solid ${T.border}`, background: 'transparent',
+                  color: d.favourite ? '#F5A623' : T.inkMute,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <svg width="12" height="12" viewBox="0 0 14 14" fill={d.favourite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.4">
+                    <path d="M7 1l1.8 4 4.2.4-3.2 2.8 1 4.2L7 10.2 3.2 12.4l1-4.2L1 5.4 5.2 5z"/>
                   </svg>
-                  Download
                 </button>
-                <button
-                  onClick={() => handleDelete(deck.id)}
-                  style={{
-                    padding: '9px 12px',
-                    borderRadius: '8px',
-                    border: `1.5px solid ${borderColor}`,
-                    background: 'transparent',
-                    color: subColor,
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.borderColor = '#E05A5A';
-                    e.currentTarget.style.color = '#E05A5A';
-                    e.currentTarget.style.background = 'rgba(224,90,90,0.06)';
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.borderColor = borderColor;
-                    e.currentTarget.style.color = subColor;
-                    e.currentTarget.style.background = 'transparent';
-                  }}
-                >
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <path d="M2 3h9M5 3V2h3v1M4 3l.5 8h4L9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
+                <button onClick={(e) => { e.stopPropagation(); handleDelete(d.id); }} style={{
+                  width: 32, height: 32, borderRadius: '50%',
+                  border: `1px solid ${T.border}`, background: 'transparent',
+                  color: T.inkMute, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2 3h10M5 3V2h4v1M4 3l.5 9h5L10 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </button>
               </div>
             </div>
@@ -299,5 +326,4 @@ const HistoryScreen = ({ tweaks }) => {
     </div>
   );
 };
-
 Object.assign(window, { HistoryScreen });

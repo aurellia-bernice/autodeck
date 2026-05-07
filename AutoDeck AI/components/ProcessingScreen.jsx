@@ -1,218 +1,252 @@
-// Processing Screen
+// ============================================================
+// ProcessingScreen — make it feel earned. Live wire-up: the deck
+// builds itself. Slide-thumb skeletons stream in one by one.
+// ============================================================
 const ProcessingScreen = ({ config, onComplete, tweaks }) => {
+  const T = qxTheme(tweaks?.darkMode);
+  const dark = tweaks?.darkMode;
   const [phase, setPhase] = React.useState(0);
   const [progress, setProgress] = React.useState(0);
-  const [dots, setDots] = React.useState('');
+  const [streamedSlides, setStreamedSlides] = React.useState(0);
+  const [logLines, setLogLines] = React.useState([]);
+
+  const targetSlides = config?.slideCount === 'Auto' || !config?.slideCount ? 10 : (parseInt(config.slideCount) || 10);
 
   const phases = [
-    { label: 'Parsing your content', duration: 3000 },
-    { label: 'Structuring slides', duration: 4000 },
-    { label: 'Applying brand formatting', duration: 5000 },
-    { label: 'Finalising your deck', duration: 3000 },
+    { label: 'Parsing your content',      verb: 'Reading',     duration: 2400 },
+    { label: 'Structuring slides',        verb: 'Outlining',   duration: 3600 },
+    { label: 'Applying brand formatting', verb: 'Painting',    duration: 4200 },
+    { label: 'Finalising your deck',      verb: 'Polishing',   duration: 2400 },
   ];
 
+  const logSeed = [
+    'Detected document type: meeting notes',
+    'Identifying key sections and themes',
+    'Found 7 candidate sections',
+    'Building narrative arc',
+    'Generating slide titles',
+    'Drafting bullet points',
+    'Applying Quidax brand tokens',
+    'Layout pass: title, body, accent',
+    'Optimising whitespace and rhythm',
+    'Cross-checking compliance phrases',
+    'Final QA pass — almost done',
+  ];
+
+  const safePhase = Math.min(phase, phases.length - 1);
+  const currentPhase = phases[safePhase];
+
   React.useEffect(() => {
-    let totalElapsed = 0;
-    const totalDuration = phases.reduce((s, p) => s + p.duration, 0);
-    const interval = setInterval(() => {
-      totalElapsed += 80;
-      setProgress(Math.min((totalElapsed / totalDuration) * 100, 98));
-      const phaseStart = phases.slice(0, phase).reduce((s, p) => s + p.duration, 0);
-      const phaseEnd = phaseStart + phases[phase].duration;
-      if (totalElapsed >= phaseEnd && phase < phases.length - 1) {
-        setPhase(p => p + 1);
+    let elapsed = 0;
+    const total = phases.reduce((s, p) => s + p.duration, 0);
+    const id = setInterval(() => {
+      elapsed += 80;
+      const pct = Math.min((elapsed / total) * 100, 99);
+      setProgress(pct);
+
+      // stream slide thumbs as deck builds
+      const targetStreamed = Math.floor((pct / 99) * targetSlides);
+      setStreamedSlides(targetStreamed);
+
+      // bump phase based on cumulative duration; never exceed last index
+      let cum = 0;
+      let nextPhase = phases.length - 1;
+      for (let i = 0; i < phases.length; i++) {
+        cum += phases[i].duration;
+        if (elapsed < cum) { nextPhase = i; break; }
       }
-      if (totalElapsed >= totalDuration) {
-        clearInterval(interval);
+      setPhase(nextPhase);
+
+      if (elapsed >= total) {
+        clearInterval(id);
         setProgress(100);
-        setTimeout(() => onComplete(), 500);
+        setStreamedSlides(targetSlides);
+        setTimeout(() => onComplete && onComplete(), 600);
       }
     }, 80);
-    return () => clearInterval(interval);
+    return () => clearInterval(id);
   }, []);
 
+  // Stream log lines
   React.useEffect(() => {
-    const d = setInterval(() => {
-      setDots(prev => prev.length >= 3 ? '' : prev + '.');
-    }, 400);
-    return () => clearInterval(d);
-  }, []);
-
-  const bg = tweaks?.darkMode ? '#0F0318' : '#F4F1F9';
-  const cardBg = tweaks?.darkMode ? '#1E0635' : '#FFFFFF';
-  const textColor = tweaks?.darkMode ? '#FFFFFF' : '#1A0530';
-  const subColor = tweaks?.darkMode ? 'rgba(255,255,255,0.45)' : '#7A6B8A';
+    if (logLines.length >= logSeed.length) return;
+    const t = setTimeout(() => {
+      setLogLines(prev => [...prev, logSeed[prev.length]]);
+    }, 1100 + Math.random() * 400);
+    return () => clearTimeout(t);
+  }, [logLines]);
 
   return (
     <div style={{
-      minHeight: '100vh',
-      background: bg,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontFamily: 'Calibri, sans-serif',
-      padding: '40px'
+      minHeight: '100vh', background: T.bg,
+      fontFamily: qxType.body, color: T.ink,
+      position: 'relative', overflow: 'hidden',
     }}>
-      <div style={{ width: '100%', maxWidth: '540px', textAlign: 'center' }}>
+      <div aria-hidden style={{ position: 'absolute', top: '-20%', left: '50%', transform: 'translateX(-50%)', width: 800, height: 800, borderRadius: '50%',
+        background: `radial-gradient(circle, ${T.blob1} 0%, transparent 60%)`, filter: 'blur(40px)' }} />
 
-        {/* Gem animation */}
-        <div style={{ marginBottom: '40px', display: 'flex', justifyContent: 'center' }}>
-          <div style={{
-            position: 'relative',
-            width: '96px',
-            height: '96px',
-            animation: 'gemSpin 3s linear infinite'
-          }}>
-            <style>{`
-              @keyframes gemSpin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-              }
-              @keyframes gemPulse {
-                0%, 100% { opacity: 0.6; transform: scale(1); }
-                50% { opacity: 1; transform: scale(1.08); }
-              }
-            `}</style>
-            <svg width="96" height="96" viewBox="0 0 96 96" fill="none">
-              <polygon points="48,6 90,30 90,66 48,90 6,66 6,30"
-                fill="none" stroke="url(#gemGrad)" strokeWidth="2"/>
-              <polygon points="48,6 90,30 48,48 6,30"
-                fill="url(#faceTop)" opacity="0.8"/>
-              <polygon points="48,48 90,30 90,66 48,90"
-                fill="url(#faceRight)" opacity="0.6"/>
-              <polygon points="48,48 48,90 6,66 6,30"
-                fill="url(#faceLeft)" opacity="0.5"/>
-              <defs>
-                <linearGradient id="gemGrad" x1="0" y1="0" x2="96" y2="96">
-                  <stop stopColor="#7B2FBE"/>
-                  <stop offset="1" stopColor="#D946A8"/>
-                </linearGradient>
-                <linearGradient id="faceTop" x1="6" y1="6" x2="90" y2="48">
-                  <stop stopColor="#9B4FDE"/>
-                  <stop offset="1" stopColor="#7B2FBE"/>
-                </linearGradient>
-                <linearGradient id="faceRight" x1="48" y1="30" x2="90" y2="90">
-                  <stop stopColor="#D946A8"/>
-                  <stop offset="1" stopColor="#7B2FBE"/>
-                </linearGradient>
-                <linearGradient id="faceLeft" x1="6" y1="30" x2="48" y2="90">
-                  <stop stopColor="#7B2FBE"/>
-                  <stop offset="1" stopColor="#4A1A8E"/>
-                </linearGradient>
-              </defs>
-            </svg>
+      <div style={{ position: 'relative', maxWidth: 980, margin: '0 auto', padding: '64px 40px 80px' }}>
+        {/* Top eyebrow */}
+        <div style={{ ...qxMotion.fadeUp(0), display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 36 }}>
+          <div style={{ fontFamily: qxType.mono, fontSize: 11, letterSpacing: '0.30em', textTransform: 'uppercase', color: T.inkMute, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: QX.lime, boxShadow: `0 0 12px ${QX.lime}`, animation: 'qxBreathe 1.6s ease-in-out infinite' }} />
+            Live · {currentPhase.verb}
+          </div>
+          <div style={{ fontFamily: qxType.mono, fontSize: 11, letterSpacing: '0.18em', color: T.inkMute, fontVariantNumeric: 'tabular-nums' }}>
+            {Math.round(progress).toString().padStart(2, '0')}%
           </div>
         </div>
 
-        {/* Title */}
-        <h2 style={{
-          fontFamily: '"Arial Black", sans-serif',
-          fontSize: '24px',
-          fontWeight: '900',
-          color: textColor,
-          margin: '0 0 8px',
-          letterSpacing: '-0.3px'
-        }}>Building your deck{dots}</h2>
-        <p style={{ color: subColor, fontSize: '15px', margin: '0 0 40px' }}>
-          This usually takes 15–30 seconds
+        {/* Big headline that morphs */}
+        <h1 style={{
+          ...qxMotion.fadeUp(80),
+          fontFamily: qxType.display,
+          fontSize: 'clamp(48px, 6.5vw, 84px)',
+          fontWeight: 500, lineHeight: 0.96,
+          letterSpacing: '-0.035em',
+          margin: '0 0 16px', color: T.ink,
+        }}>
+          {currentPhase.verb}<br/>
+          <span style={{ color: T.primary, fontStyle: 'italic', fontWeight: 400 }}>your deck</span>
+          <span style={{ color: QX.lime, textShadow: `0 0 24px ${QX.lime}` }}>…</span>
+        </h1>
+        <p style={{ ...qxMotion.fadeUp(140), fontSize: 17, color: T.inkDim, margin: '0 0 48px', maxWidth: 540 }}>
+          {currentPhase.label}. Usually 15–30 seconds.
         </p>
 
-        {/* Progress card */}
-        <div style={{
-          background: cardBg,
-          borderRadius: '20px',
-          padding: '32px',
-          border: `1.5px solid ${tweaks?.darkMode ? 'rgba(123,47,190,0.25)' : 'rgba(123,47,190,0.12)'}`,
-          boxShadow: tweaks?.darkMode ? 'none' : '0 4px 24px rgba(45,10,78,0.08)'
-        }}>
-          {/* Steps */}
-          <div style={{ marginBottom: '28px' }}>
-            {phases.map((p, i) => {
-              const done = i < phase;
-              const active = i === phase;
+        {/* Slide thumbs streaming in */}
+        <div style={{ ...qxMotion.fadeUp(200), marginBottom: 40 }}>
+          <div style={{ fontFamily: qxType.mono, fontSize: 10.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.inkMute, marginBottom: 14 }}>
+            Building {streamedSlides} of {targetSlides} slides
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
+            {Array.from({ length: targetSlides }).map((_, i) => {
+              const built = i < streamedSlides;
               return (
                 <div key={i} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '10px 0',
-                  borderBottom: i < phases.length - 1 ? `1px solid ${tweaks?.darkMode ? 'rgba(255,255,255,0.05)' : '#F0EAF8'}` : 'none',
-                  opacity: done ? 0.5 : active ? 1 : 0.3,
-                  transition: 'opacity 0.4s ease'
+                  aspectRatio: '16 / 9',
+                  borderRadius: qxRadius.sm,
+                  border: `1px solid ${T.border}`,
+                  background: built
+                    ? `linear-gradient(135deg, ${dark ? '#2D0F4E' : '#5F2A91'} 0%, ${dark ? '#5F2A91' : '#B891DC'} 60%, ${dark ? '#B891DC' : '#D9C2EE'} 140%)`
+                    : T.surface,
+                  position: 'relative', overflow: 'hidden',
+                  transition: `all 480ms ${qxEase}`,
+                  transform: built ? 'translateY(0)' : 'translateY(4px)',
+                  opacity: built ? 1 : 0.6,
                 }}>
-                  <div style={{
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    flexShrink: 0,
-                    background: done
-                      ? 'rgba(217,70,168,0.15)'
-                      : active
-                        ? 'linear-gradient(135deg, #7B2FBE, #D946A8)'
-                        : (tweaks?.darkMode ? 'rgba(255,255,255,0.06)' : '#F0EAF8'),
-                    border: done ? '2px solid #D946A8' : 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    {done ? (
-                      <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-                        <path d="M2 5.5l2.5 2.5 4.5-5" stroke="#D946A8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    ) : active ? (
-                      <div style={{
-                        width: '8px',
-                        height: '8px',
-                        borderRadius: '50%',
-                        background: '#fff',
-                        animation: 'gemPulse 1s ease-in-out infinite'
-                      }} />
-                    ) : null}
-                  </div>
-                  <span style={{
-                    fontSize: '14px',
-                    color: done ? '#D946A8' : (tweaks?.darkMode ? 'rgba(255,255,255,0.85)' : '#2D0A4E'),
-                    fontWeight: active ? '600' : '400',
-                    fontFamily: 'Calibri, sans-serif'
-                  }}>{p.label}</span>
-                  {active && <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#7B2FBE' }}>In progress</span>}
-                  {done && <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#D946A8' }}>Done</span>}
+                  {!built && i === streamedSlides && (
+                    <div style={{
+                      position: 'absolute', inset: 0,
+                      background: `linear-gradient(90deg, transparent, ${T.ghostHi}, transparent)`,
+                      backgroundSize: '200% 100%',
+                      animation: 'qxShimmer 1.6s ease-in-out infinite',
+                    }} />
+                  )}
+                  {built && (
+                    <>
+                      {/* Mock slide content */}
+                      <div style={{ position: 'absolute', top: 8, left: 8, fontFamily: qxType.mono, fontSize: 7, color: 'rgba(246,241,251,0.55)', letterSpacing: '0.18em' }}>
+                        {String(i + 1).padStart(2, '0')}
+                      </div>
+                      <div style={{ position: 'absolute', bottom: 12, left: 10, right: 10 }}>
+                        <div style={{ width: '80%', height: 4, borderRadius: 2, background: 'rgba(246,241,251,0.78)', marginBottom: 4 }} />
+                        <div style={{ width: '50%', height: 3, borderRadius: 2, background: 'rgba(246,241,251,0.4)' }} />
+                      </div>
+                      <div style={{ position: 'absolute', top: -8, right: -8, width: 28, height: 28, borderRadius: '50%', border: '1px solid rgba(246,241,251,0.18)' }} />
+                    </>
+                  )}
                 </div>
               );
             })}
           </div>
+        </div>
 
-          {/* Progress bar */}
+        {/* Phases + progress + log — three columns */}
+        <div style={{ ...qxMotion.fadeUp(260), display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          {/* Phases */}
           <div style={{
-            height: '6px',
-            borderRadius: '3px',
-            background: tweaks?.darkMode ? 'rgba(255,255,255,0.08)' : '#EDE7F5',
-            overflow: 'hidden'
+            background: T.surface, borderRadius: qxRadius.lg,
+            border: `1px solid ${T.border}`, padding: 24,
+            boxShadow: qxShadow(dark).md,
           }}>
-            <div style={{
-              height: '100%',
-              width: `${progress}%`,
-              borderRadius: '3px',
-              background: 'linear-gradient(90deg, #7B2FBE, #D946A8)',
-              transition: 'width 0.3s ease'
-            }} />
+            <div style={{ fontFamily: qxType.mono, fontSize: 10.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.inkMute, marginBottom: 16 }}>
+              Steps
+            </div>
+            {phases.map((p, i) => {
+              const done = i < phase, active = i === phase;
+              return (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 14,
+                  padding: '11px 0',
+                  borderBottom: i < phases.length - 1 ? `1px solid ${T.border}` : 'none',
+                  opacity: done ? 0.5 : (active ? 1 : 0.30),
+                  transition: `opacity 280ms ${qxEase}`,
+                }}>
+                  <div style={{
+                    width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: active ? QX.lime : T.ghostBg,
+                    border: done ? `1px solid ${T.borderHi}` : 'none',
+                  }}>
+                    {done && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2 2 4-4" stroke={T.primary} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    {active && <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#1A0530', animation: 'qxBreathe 1.1s ease-in-out infinite' }} />}
+                  </div>
+                  <span style={{ fontSize: 13.5, color: active ? T.ink : T.inkDim, fontWeight: active ? 500 : 400, flex: 1 }}>{p.label}</span>
+                </div>
+              );
+            })}
+            <div style={{ marginTop: 18 }}>
+              <div style={{ height: 4, borderRadius: 2, background: T.ghostBg, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${progress}%`, background: T.primary, transition: `width 280ms ${qxEase}` }} />
+              </div>
+            </div>
           </div>
+
+          {/* Live log — terminal feel */}
           <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            marginTop: '8px'
+            background: dark ? '#0A0114' : '#1A0530', borderRadius: qxRadius.lg,
+            border: `1px solid ${dark ? T.border : 'transparent'}`,
+            padding: 24, color: '#F6F1FB',
+            boxShadow: qxShadow(dark).md,
+            position: 'relative', overflow: 'hidden',
           }}>
-            <span style={{ fontSize: '12px', color: subColor }}>
-              {config?.slideCount === 'Auto' ? 'Auto-detecting slides' : `${config?.slideCount} slides`} · {config?.templateStyle} template
-            </span>
-            <span style={{ fontSize: '12px', color: '#7B2FBE', fontWeight: '600' }}>
-              {Math.round(progress)}%
-            </span>
+            <div style={{ position: 'absolute', top: 14, right: 18, display: 'flex', gap: 6 }}>
+              {['#E03E6B', '#F5A623', '#34C77B'].map(c => <span key={c} style={{ width: 8, height: 8, borderRadius: '50%', background: c, opacity: 0.55 }} />)}
+            </div>
+            <div style={{ fontFamily: qxType.mono, fontSize: 10.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.4)', marginBottom: 16 }}>
+              Live trace
+            </div>
+            <div style={{ fontFamily: qxType.mono, fontSize: 12, lineHeight: 1.7, height: 220, overflow: 'hidden', display: 'flex', flexDirection: 'column-reverse' }}>
+              <div>
+                {logLines.map((l, i) => (
+                  <div key={i} style={{
+                    display: 'flex', gap: 12,
+                    color: i === logLines.length - 1 ? '#F6F1FB' : 'rgba(246,241,251,0.5)',
+                    ...qxMotion.slideRight(0),
+                  }}>
+                    <span style={{ color: i === logLines.length - 1 ? QX.lime : 'rgba(246,241,251,0.3)' }}>›</span>
+                    <span>{l}</span>
+                  </div>
+                ))}
+                {progress < 99 && (
+                  <div style={{ display: 'flex', gap: 12, color: '#F6F1FB' }}>
+                    <span style={{ color: QX.lime }}>›</span>
+                    <span style={{ animation: 'qxBreathe 1.1s ease-in-out infinite' }}>_</span>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
+        </div>
+
+        {/* Footer config strip */}
+        <div style={{ ...qxMotion.fadeUp(320), marginTop: 32, fontFamily: qxType.mono, fontSize: 10.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: T.inkMute, display: 'flex', justifyContent: 'space-between' }}>
+          <span>{config?.templateStyle || 'Professional'} · {targetSlides} slides</span>
+          <span>You can leave this page — we'll wait for you</span>
         </div>
       </div>
     </div>
   );
 };
-
 Object.assign(window, { ProcessingScreen });

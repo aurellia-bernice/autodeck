@@ -1,9 +1,16 @@
 
 // SlideGenerator — Gamma-style visual slideshow builder
+const DEMO_SLIDES = [
+  { title: 'Q2 Sales Strategy', bullets: ['Strong Q2 performance across all verticals', 'New markets entered: Ghana, Senegal', 'Revenue up 34% YoY'] },
+  { title: 'Market Overview',   bullets: ['Africa crypto market growing at 18% CAGR', 'Quidax positioned in top 3 exchanges', 'User base crossed 2M milestone'] },
+  { title: 'Key Metrics',       bullets: ['Monthly active users: 1.2M', 'Transaction volume: $280M', 'NPS score: 72'] },
+];
+
 const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
+  const safeInitial = (Array.isArray(initialSlides) && initialSlides.length > 0) ? initialSlides : DEMO_SLIDES;
 
   // ─── state ───────────────────────────────────────────────
-  const [localSlides,       setLocalSlides]       = React.useState(() => initialSlides.map(s => ({...s})));
+  const [localSlides,       setLocalSlides]       = React.useState(() => safeInitial.map(s => ({...s})));
   const [currentIndex,      setCurrentIndex]      = React.useState(0);
   const [globalTheme,       setGlobalTheme]       = React.useState('purple');
   const [slideThemeOverrides,  setSlideThemeOverrides]  = React.useState({});
@@ -30,9 +37,9 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
 
   // ─── constants ───────────────────────────────────────────
   const THEMES = {
-    purple:   { name:'Quidax',   swatch:'#7B2FBE', gradient:'linear-gradient(135deg,#4A148C 0%,#7B2FBE 55%,#D946A8 100%)', title:'#fff', text:'rgba(255,255,255,0.88)', accent:'#F9A8D4', d1:'rgba(255,255,255,0.07)', d2:'rgba(217,70,168,0.25)' },
+    purple:   { name:'Quidax',   swatch:'#5F2A91', gradient:'linear-gradient(135deg,#0F031F 0%,#2D0F4E 50%,#5F2A91 100%)', title:'#F6F1FB', text:'rgba(246,241,251,0.80)', accent:QX.lime, d1:'rgba(184,145,220,0.10)', d2:'rgba(212,255,63,0.18)' },
     midnight: { name:'Midnight', swatch:'#312E81', gradient:'linear-gradient(135deg,#0F0A24 0%,#1E1B4B 55%,#312E81 100%)', title:'#fff', text:'rgba(255,255,255,0.82)', accent:'#A5B4FC', d1:'rgba(99,102,241,0.12)',  d2:'rgba(165,180,252,0.1)'  },
-    soft:     { name:'Soft',     swatch:'#C4B5FD', gradient:'linear-gradient(135deg,#F5F3FF 0%,#EDE9FE 55%,#FCE7F3 100%)', title:'#1A0530', text:'#4A3560',           accent:'#7B2FBE', d1:'rgba(123,47,190,0.07)',  d2:'rgba(217,70,168,0.08)'  },
+    soft:     { name:'Soft',     swatch:'#C4B5FD', gradient:'linear-gradient(135deg,#F5F3FF 0%,#EDE9FE 55%,#FCE7F3 100%)', title:'#1A0530', text:'#4A3560',           accent:'#5F2A91', d1:'rgba(95,42,145,0.07)',   d2:'rgba(184,145,220,0.10)' },
     ocean:    { name:'Ocean',    swatch:'#0369A1', gradient:'linear-gradient(135deg,#0C2B4E 0%,#0369A1 55%,#0891B2 100%)', title:'#fff', text:'rgba(255,255,255,0.88)', accent:'#7DD3FC', d1:'rgba(255,255,255,0.06)', d2:'rgba(14,165,233,0.22)'  },
     forest:   { name:'Forest',   swatch:'#065F46', gradient:'linear-gradient(135deg,#022C22 0%,#065F46 55%,#047857 100%)', title:'#fff', text:'rgba(255,255,255,0.85)', accent:'#6EE7B7', d1:'rgba(255,255,255,0.05)', d2:'rgba(52,211,153,0.18)'  },
     sunset:   { name:'Sunset',   swatch:'#C2410C', gradient:'linear-gradient(135deg,#431407 0%,#9A3412 50%,#EA580C 100%)', title:'#fff', text:'rgba(255,255,255,0.88)', accent:'#FED7AA', d1:'rgba(255,255,255,0.07)', d2:'rgba(251,146,60,0.22)'  },
@@ -242,12 +249,12 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
     const Brand = () => (
       <div style={{ position:'absolute', top:'20px', left:'26px', display:'flex', alignItems:'center', gap:'6px', zIndex:2 }}>
         <div style={{ width:'16px', height:'16px', borderRadius:'4px', background:ac, opacity:.85 }} />
-        <span style={{ color:tc, fontSize:'9px', fontFamily:'"Arial Black",sans-serif', letterSpacing:'2px', opacity:.6 }}>QUIDAX</span>
+        <span style={{ color:tc, fontSize:'9px', fontFamily:qxType.display, letterSpacing:'2px', opacity:.6 }}>QUIDAX</span>
       </div>
     );
 
     const SlideNum = () => (
-      <div style={{ position:'absolute', top:'20px', right:'26px', color:tc, opacity:.38, fontSize:'10px', fontFamily:'Calibri,sans-serif', letterSpacing:'1px', zIndex:2 }}>
+      <div style={{ position:'absolute', top:'20px', right:'26px', color:tc, opacity:.38, fontSize:'10px', fontFamily:qxType.body, letterSpacing:'1px', zIndex:2 }}>
         {String(index+1).padStart(2,'0')}
       </div>
     );
@@ -268,7 +275,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
         {!hasImg && <SlideDecor t={t} />}
         <Brand/><SlideNum/>
         <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'48px', textAlign:'center', zIndex:2 }}>
-          <h2 style={{ fontFamily:'"Arial Black",sans-serif', fontSize:'clamp(18px,3.6vw,34px)', color:tc, marginBottom:'10px', letterSpacing:'-0.5px', lineHeight:1.1 }}>{slide.title}</h2>
+          <h2 style={{ fontFamily:qxType.display, fontSize:'clamp(18px,3.6vw,34px)', color:tc, marginBottom:'10px', letterSpacing:'-0.5px', lineHeight:1.1 }}>{slide.title}</h2>
           <div style={{ width:'38px', height:'3px', background:ac, borderRadius:'2px', marginBottom:'14px' }} />
           {slide.bullets.slice(0,3).map((b,j) => <div key={j} style={{ color:txc, fontSize:'clamp(11px,1.7vw,14px)', marginBottom:'6px', lineHeight:1.5 }}>{b}</div>)}
         </div>
@@ -283,7 +290,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
         <Brand/><SlideNum/>
         <div style={{ position:'absolute', top:'44px', left:0, right:0, bottom:'36px', display:'grid', gridTemplateColumns:'1fr 1fr', zIndex:2 }}>
           <div style={{ padding:'16px 20px 16px 26px', display:'flex', flexDirection:'column', justifyContent:'center', borderRight:`1px solid ${hasImg?'rgba(255,255,255,0.18)':t.d2}` }}>
-            <h2 style={{ fontFamily:'"Arial Black",sans-serif', fontSize:'clamp(13px,2.6vw,24px)', color:tc, lineHeight:1.1, marginBottom:'10px', textAlign:ta }}>{slide.title}</h2>
+            <h2 style={{ fontFamily:qxType.display, fontSize:'clamp(13px,2.6vw,24px)', color:tc, lineHeight:1.1, marginBottom:'10px', textAlign:ta }}>{slide.title}</h2>
             <div style={{ width:'30px', height:'3px', background:ac, borderRadius:'2px', marginLeft: align==='right'?'auto': align==='center'?'auto':'0', marginRight: align==='right'?'0':align==='center'?'auto':'0' }} />
           </div>
           <div style={{ padding:'16px 26px 16px 20px', display:'flex', flexDirection:'column', justifyContent:'center', gap:'9px' }}>
@@ -305,7 +312,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
         {!hasImg && <SlideDecor t={t} />}
         <Brand/><SlideNum/>
         <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', justifyContent:'center', padding:'40px 44px 56px', alignItems:ai, zIndex:2 }}>
-          <h2 style={{ fontFamily:'"Arial Black",sans-serif', fontSize:'clamp(22px,5vw,50px)', color:tc, letterSpacing:'-1px', lineHeight:1.05, marginBottom:'14px', textAlign:ta }}>{slide.title}</h2>
+          <h2 style={{ fontFamily:qxType.display, fontSize:'clamp(22px,5vw,50px)', color:tc, letterSpacing:'-1px', lineHeight:1.05, marginBottom:'14px', textAlign:ta }}>{slide.title}</h2>
           <div style={{ width:'52px', height:'4px', background:ac, borderRadius:'2px', marginBottom:'14px' }} />
           {slide.bullets[0] && <div style={{ color:txc, fontSize:'clamp(11px,1.6vw,15px)', opacity:.9, textAlign:ta }}>{slide.bullets[0]}</div>}
         </div>
@@ -320,7 +327,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
         <Brand/><SlideNum/>
         <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'44px', textAlign:'center', zIndex:2 }}>
           <div style={{ fontSize:'clamp(40px,7vw,72px)', color:ac, fontFamily:'Georgia,serif', lineHeight:.7, marginBottom:'10px', opacity:.7 }}>"</div>
-          <div style={{ color:tc, fontSize:'clamp(13px,2.4vw,20px)', fontFamily:'Calibri,sans-serif', fontStyle:'italic', lineHeight:1.55, maxWidth:'82%' }}>{slide.bullets[0] || slide.title}</div>
+          <div style={{ color:tc, fontSize:'clamp(13px,2.4vw,20px)', fontFamily:qxType.body, fontStyle:'italic', lineHeight:1.55, maxWidth:'82%' }}>{slide.bullets[0] || slide.title}</div>
           <div style={{ marginTop:'18px', color:txc, fontSize:'clamp(9px,1.3vw,12px)', letterSpacing:'1.5px', textTransform:'uppercase', opacity:.7 }}>{slide.title}</div>
         </div>
         <Footer/>
@@ -334,7 +341,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
         <Brand/><SlideNum/>
         <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent: align==='center'?'center':align==='right'?'flex-end':'flex-start', zIndex:2 }}>
           <div style={{ textAlign:ta, padding:'0 48px' }}>
-            <h2 style={{ fontFamily:'"Arial Black",sans-serif', fontSize:'clamp(20px,4.2vw,42px)', color:tc, letterSpacing:'-0.6px' }}>{slide.title}</h2>
+            <h2 style={{ fontFamily:qxType.display, fontSize:'clamp(20px,4.2vw,42px)', color:tc, letterSpacing:'-0.6px' }}>{slide.title}</h2>
             <div style={{ width:'48px', height:'3px', background:ac, borderRadius:'2px', margin:`16px ${align==='center'?'auto':align==='right'?'0 auto':'0'} 0` }} />
           </div>
         </div>
@@ -349,13 +356,13 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
         {!hasImg && <SlideDecor t={t} />}
         <Brand/><SlideNum/>
         <div style={{ position:'absolute', top:'54px', left:'26px', right:'26px', bottom:'38px', display:'flex', flexDirection:'column', justifyContent:'center', alignItems:ai, zIndex:2 }}>
-          <h2 style={{ fontFamily:'"Arial Black",sans-serif', fontSize:'clamp(15px,3vw,28px)', color:tc, margin:'0 0 8px', letterSpacing:'-0.4px', lineHeight:1.1, textAlign:ta, width:'100%' }}>{slide.title}</h2>
+          <h2 style={{ fontFamily:qxType.display, fontSize:'clamp(15px,3vw,28px)', color:tc, margin:'0 0 8px', letterSpacing:'-0.4px', lineHeight:1.1, textAlign:ta, width:'100%' }}>{slide.title}</h2>
           <div style={{ width:'40px', height:'3px', background:ac, borderRadius:'2px', marginBottom:'15px', marginLeft: align==='right'?'auto':align==='center'?'auto':'0', marginRight: align==='right'?'0':align==='center'?'auto':'0' }} />
           <div style={{ display:'flex', flexDirection:'column', gap:'9px', width:'100%' }}>
             {slide.bullets.map((b,j) => (
               <div key={j} style={{ display:'flex', alignItems:'flex-start', gap:'9px', justifyContent:ai }}>
                 <div style={{ width:'5px', height:'5px', borderRadius:'50%', background:ac, flexShrink:0, marginTop:'5px' }} />
-                <span style={{ color:txc, fontSize:'clamp(10px,1.7vw,14px)', fontFamily:'Calibri,sans-serif', lineHeight:1.5, textAlign:ta }}>{b}</span>
+                <span style={{ color:txc, fontSize:'clamp(10px,1.7vw,14px)', fontFamily:qxType.body, lineHeight:1.5, textAlign:ta }}>{b}</span>
               </div>
             ))}
           </div>
@@ -377,11 +384,11 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
 
   // ─── JSX ─────────────────────────────────────────────────
   return (
-    <div style={{ height:'100vh', background:'#100220', display:'flex', flexDirection:'column', fontFamily:'Calibri,sans-serif', userSelect:'none', overflow:'hidden' }}
+    <div style={{ height:'100vh', background:'#0F031F', display:'flex', flexDirection:'column', fontFamily:qxType.body, userSelect:'none', overflow:'hidden' }}
       onClick={() => { setShowMenu(false); setShowSlideTheme(false); }}>
 
       {/* ══════════ TOP TOOLBAR ══════════ */}
-      <div style={{ padding:'10px 18px', borderBottom:'1px solid rgba(255,255,255,0.07)', display:'flex', alignItems:'center', gap:'10px', background:'rgba(0,0,0,0.3)', flexShrink:0 }}
+      <div style={{ padding:'12px 20px', borderBottom:'1px solid rgba(184,145,220,0.10)', display:'flex', alignItems:'center', gap:'12px', background:'rgba(0,0,0,0.25)', flexShrink:0 }}
         onClick={e => e.stopPropagation()}>
 
         {/* Back */}
@@ -482,7 +489,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
               <button
                 onClick={e=>{e.stopPropagation(); setEditPanelOpen(true); setEditTab('layout');}}
                 style={{ padding:'7px 16px', borderRadius:'20px', border:'1.5px solid rgba(255,255,255,0.25)', background:'rgba(10,1,32,0.78)', backdropFilter:'blur(8px)', color:'#fff', fontSize:'12px', cursor:'pointer', display:'flex', alignItems:'center', gap:'6px', letterSpacing:'.2px', transition:'all 0.15s' }}
-                onMouseEnter={e=>{e.currentTarget.style.background='rgba(123,47,190,0.55)';e.currentTarget.style.borderColor='rgba(168,85,247,0.6)';}}
+                onMouseEnter={e=>{e.currentTarget.style.background='rgba(95,42,145,0.55)';e.currentTarget.style.borderColor='rgba(184,145,220,0.6)';}}
                 onMouseLeave={e=>{e.currentTarget.style.background='rgba(10,1,32,0.78)';e.currentTarget.style.borderColor='rgba(255,255,255,0.25)';}}>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M8.5 1.5a1.5 1.5 0 012.12 2.12L3.5 10.75 1 11.5l.75-3L8.5 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 Customise
@@ -490,9 +497,9 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
               {/* Edit with Agent */}
               <button
                 onClick={e=>{e.stopPropagation(); openAgent(currentIndex);}}
-                style={{ padding:'7px 16px', borderRadius:'20px', border:'1.5px solid rgba(217,70,168,0.5)', background:'rgba(10,1,32,0.78)', backdropFilter:'blur(8px)', color:'#F9A8D4', fontSize:'12px', cursor:'pointer', display:'flex', alignItems:'center', gap:'6px', letterSpacing:'.2px', transition:'all 0.15s' }}
-                onMouseEnter={e=>{e.currentTarget.style.background='rgba(217,70,168,0.28)';e.currentTarget.style.borderColor='rgba(217,70,168,0.8)';e.currentTarget.style.color='#fff';}}
-                onMouseLeave={e=>{e.currentTarget.style.background='rgba(10,1,32,0.78)';e.currentTarget.style.borderColor='rgba(217,70,168,0.5)';e.currentTarget.style.color='#F9A8D4';}}>
+                style={{ padding:'7px 16px', borderRadius:'20px', border:'1.5px solid rgba(184,145,220,0.4)', background:'rgba(10,1,32,0.78)', backdropFilter:'blur(8px)', color:'#F9A8D4', fontSize:'12px', cursor:'pointer', display:'flex', alignItems:'center', gap:'6px', letterSpacing:'.2px', transition:'all 0.15s' }}
+                onMouseEnter={e=>{e.currentTarget.style.background='rgba(184,145,220,0.18)';e.currentTarget.style.borderColor='rgba(184,145,220,0.7)';e.currentTarget.style.color='#fff';}}
+                onMouseLeave={e=>{e.currentTarget.style.background='rgba(10,1,32,0.78)';e.currentTarget.style.borderColor='rgba(184,145,220,0.4)';e.currentTarget.style.color='#F9A8D4';}}>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1l1 2.8L9.8 4.8 7 5.8 6 8.5 5 5.8 2.2 4.8 5 3.8 6 1z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/><path d="M10 8l.5 1.2 1.2.5-1.2.5L10 11.4l-.5-1.2L8.3 9.7l1.2-.5L10 8z" stroke="currentColor" strokeWidth="1" strokeLinejoin="round"/></svg>
                 Edit with Agent
               </button>
@@ -517,7 +524,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
 
             {/* Panel header */}
             <div style={{ padding:'14px 16px 0', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-              <span style={{ color:'#fff', fontSize:'13px', fontWeight:'700', fontFamily:'"Arial Black",sans-serif', letterSpacing:'.3px' }}>Customise</span>
+              <span style={{ color:'#fff', fontSize:'13px', fontWeight:'700', fontFamily:qxType.display, letterSpacing:'.3px' }}>Customise</span>
               <button onClick={()=>setEditPanelOpen(false)} style={{ width:'26px', height:'26px', borderRadius:'6px', border:'none', background:'rgba(255,255,255,0.07)', color:'rgba(255,255,255,0.5)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
               </button>
@@ -527,9 +534,9 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
             <div style={{ display:'flex', padding:'10px 16px 0', gap:'2px' }}>
               {['layout','image','style'].map(tab => (
                 <button key={tab} onClick={()=>setEditTab(tab)} style={{
-                  flex:1, padding:'7px 0', borderRadius:'7px', border:'none', cursor:'pointer', fontSize:'12px', fontFamily:'Calibri,sans-serif',
-                  background: editTab===tab ? 'rgba(123,47,190,0.22)' : 'transparent',
-                  color: editTab===tab ? '#C084FC' : 'rgba(255,255,255,0.45)',
+                  flex:1, padding:'7px 0', borderRadius:'7px', border:'none', cursor:'pointer', fontSize:'12px', fontFamily:qxType.body,
+                  background: editTab===tab ? 'rgba(95,42,145,0.22)' : 'transparent',
+                  color: editTab===tab ? '#B891DC' : 'rgba(255,255,255,0.45)',
                   fontWeight: editTab===tab ? '700' : '400',
                   transition:'all 0.15s', textTransform:'capitalize',
                 }}>{tab}</button>
@@ -552,9 +559,9 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
                         { val:'right',  icon:<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="1.5" rx=".75" fill="currentColor"/><rect x="5" y="5.5" width="8" height="1.5" rx=".75" fill="currentColor" opacity=".6"/><rect x="3" y="9" width="10" height="1.5" rx=".75" fill="currentColor" opacity=".6"/></svg> },
                       ].map(a => (
                         <button key={a.val} onClick={()=>applyAlign(a.val)} style={{
-                          flex:1, height:'36px', borderRadius:'8px', border: align===a.val ? '2px solid #A855F7' : '2px solid rgba(255,255,255,0.1)',
-                          background: align===a.val ? 'rgba(168,85,247,0.14)' : 'rgba(255,255,255,0.03)',
-                          color: align===a.val ? '#C084FC' : 'rgba(255,255,255,0.5)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s',
+                          flex:1, height:'36px', borderRadius:'8px', border: align===a.val ? '2px solid #B891DC' : '2px solid rgba(255,255,255,0.1)',
+                          background: align===a.val ? 'rgba(184,145,220,0.12)' : 'rgba(255,255,255,0.03)',
+                          color: align===a.val ? '#B891DC' : 'rgba(255,255,255,0.5)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s',
                         }}>{a.icon}</button>
                       ))}
                     </div>
@@ -570,8 +577,8 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
                         const active = layout===l.key;
                         return (
                           <button key={l.key} onClick={()=>applyLayout(l.key)} style={{
-                            borderRadius:'10px', border: active ? '2px solid #A855F7' : '2px solid rgba(255,255,255,0.1)',
-                            background: active ? 'rgba(168,85,247,0.12)' : 'rgba(255,255,255,0.03)',
+                            borderRadius:'10px', border: active ? '2px solid #B891DC' : '2px solid rgba(255,255,255,0.1)',
+                            background: active ? 'rgba(184,145,220,0.10)' : 'rgba(255,255,255,0.03)',
                             cursor:'pointer', padding:'10px 8px 8px', display:'flex', flexDirection:'column', alignItems:'center', gap:'7px',
                             transition:'all 0.15s',
                           }}
@@ -582,7 +589,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
                               {l.icon}
                             </div>
                             <div style={{ textAlign:'center' }}>
-                              <div style={{ color: active?'#C084FC':'rgba(255,255,255,0.75)', fontSize:'11px', fontWeight:'600' }}>{l.name}</div>
+                              <div style={{ color: active?'#B891DC':'rgba(255,255,255,0.75)', fontSize:'11px', fontWeight:'600' }}>{l.name}</div>
                               <div style={{ color:'rgba(255,255,255,0.3)', fontSize:'9.5px', marginTop:'1px' }}>{l.desc}</div>
                             </div>
                           </button>
@@ -604,16 +611,16 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
                     style={{ width:'100%', padding:'8px 12px', borderRadius:'8px', border:'1.5px solid rgba(255,255,255,0.12)', background:'rgba(255,255,255,0.05)', color:'#fff', fontSize:'12px', outline:'none', boxSizing:'border-box' }}
                   />
                   {slideImages[currentIndex] && (
-                    <button onClick={removeImage} style={{ padding:'6px', borderRadius:'7px', border:'1px solid rgba(217,70,168,0.3)', background:'rgba(217,70,168,0.07)', color:'#D946A8', fontSize:'11px', cursor:'pointer' }}>
+                    <button onClick={removeImage} style={{ padding:'6px', borderRadius:'7px', border:'1px solid rgba(184,145,220,0.2)', background:'rgba(184,145,220,0.07)', color:'#B891DC', fontSize:'11px', cursor:'pointer' }}>
                       ✕ Remove current image
                     </button>
                   )}
                   {imgResults.length > 0 && (
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                       {imgResults.map(img => (
-                        <button key={img.id} onClick={()=>applyImage(img.src)} style={{ padding:0, border: slideImages[currentIndex]===img.src ? '2px solid #A855F7' : '2px solid rgba(255,255,255,0.08)', borderRadius:'7px', overflow:'hidden', cursor:'pointer', aspectRatio:'16/9', background:'#0a0118' }}
+                        <button key={img.id} onClick={()=>applyImage(img.src)} style={{ padding:0, border: slideImages[currentIndex]===img.src ? '2px solid #B891DC' : '2px solid rgba(255,255,255,0.08)', borderRadius:'7px', overflow:'hidden', cursor:'pointer', aspectRatio:'16/9', background:'#0a0118' }}
                           onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.3)';}}
-                          onMouseLeave={e=>{e.currentTarget.style.borderColor=slideImages[currentIndex]===img.src?'#A855F7':'rgba(255,255,255,0.08)';}}>
+                          onMouseLeave={e=>{e.currentTarget.style.borderColor=slideImages[currentIndex]===img.src?'#B891DC':'rgba(255,255,255,0.08)';}}>
                           <img src={img.thumb} alt="" style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} onError={e=>{e.currentTarget.style.display='none';}} />
                         </button>
                       ))}
@@ -675,9 +682,9 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
             <div style={{ padding:'12px 16px', borderTop:'1px solid rgba(255,255,255,0.07)', flexShrink:0 }}>
               <button
                 onClick={()=>{ setEditPanelOpen(false); openAgent(currentIndex); }}
-                style={{ width:'100%', padding:'10px 14px', borderRadius:'10px', border:'1.5px solid rgba(217,70,168,0.4)', background:'linear-gradient(135deg,rgba(123,47,190,0.18),rgba(217,70,168,0.18))', color:'#F9A8D4', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:'7px', fontFamily:'Calibri,sans-serif', fontWeight:'600', transition:'all 0.15s' }}
-                onMouseEnter={e=>{e.currentTarget.style.background='linear-gradient(135deg,rgba(123,47,190,0.4),rgba(217,70,168,0.35))';e.currentTarget.style.borderColor='rgba(217,70,168,0.75)';e.currentTarget.style.color='#fff';}}
-                onMouseLeave={e=>{e.currentTarget.style.background='linear-gradient(135deg,rgba(123,47,190,0.18),rgba(217,70,168,0.18))';e.currentTarget.style.borderColor='rgba(217,70,168,0.4)';e.currentTarget.style.color='#F9A8D4';}}>
+                style={{ width:'100%', padding:'10px 14px', borderRadius:'10px', border:'1.5px solid rgba(184,145,220,0.3)', background:'linear-gradient(135deg,rgba(95,42,145,0.18),rgba(184,145,220,0.18))', color:'#F6F1FB', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:'7px', fontFamily:qxType.body, fontWeight:'600', transition:'all 0.15s' }}
+                onMouseEnter={e=>{e.currentTarget.style.background='linear-gradient(135deg,rgba(95,42,145,0.4),rgba(184,145,220,0.30))';e.currentTarget.style.borderColor='rgba(184,145,220,0.65)';e.currentTarget.style.color='#fff';}}
+                onMouseLeave={e=>{e.currentTarget.style.background='linear-gradient(135deg,rgba(95,42,145,0.18),rgba(184,145,220,0.18))';e.currentTarget.style.borderColor='rgba(184,145,220,0.3)';e.currentTarget.style.color='#F6F1FB';}}>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1l1.2 3.3L11.5 5.5 8.2 6.7 7 10l-1.2-3.3L2.5 5.5l3.3-1.2L7 1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><path d="M11.5 9l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4L9.5 11l1.4-.6.6-1.4z" stroke="currentColor" strokeWidth="1" strokeLinejoin="round"/></svg>
                 Edit with Agent
               </button>
@@ -696,17 +703,17 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
             <button key={i} onClick={()=>setCurrentIndex(i)} style={{
               flexShrink:0, width:'94px', height:'53px', borderRadius:'6px', padding:0, cursor:'pointer',
               position:'relative', overflow:'hidden',
-              border: active ? '2px solid #A855F7' : '2px solid rgba(255,255,255,0.07)',
+              border: active ? '2px solid #B891DC' : '2px solid rgba(255,255,255,0.07)',
               background: bgImg ? `url(${bgImg}) center/cover no-repeat` : t.gradient,
-              boxShadow: active ? '0 0 0 1px rgba(168,85,247,0.3)' : 'none',
+              boxShadow: active ? '0 0 0 1px rgba(184,145,220,0.25)' : 'none',
               transition:'border-color 0.15s',
             }}
               onMouseEnter={e=>{if(!active)e.currentTarget.style.borderColor='rgba(255,255,255,0.2)';}}
               onMouseLeave={e=>{if(!active)e.currentTarget.style.borderColor='rgba(255,255,255,0.07)';}}>
               {bgImg && <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.35)' }} />}
               {!bgImg && <div style={{ position:'absolute', top:'-13px', right:'-13px', width:'44px', height:'44px', borderRadius:'50%', background:t.d1, pointerEvents:'none' }} />}
-              {active && <div style={{ position:'absolute', top:0, left:0, right:0, height:'2px', background:'#A855F7' }} />}
-              <div style={{ position:'absolute', bottom:'4px', left:'5px', right:'18px', color:'#fff', fontSize:'6px', fontFamily:'"Arial Black",sans-serif', opacity:.85, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis', zIndex:1 }}>{s.title}</div>
+              {active && <div style={{ position:'absolute', top:0, left:0, right:0, height:'2px', background:'#B891DC' }} />}
+              <div style={{ position:'absolute', bottom:'4px', left:'5px', right:'18px', color:'#fff', fontSize:'6px', fontFamily:qxType.display, opacity:.85, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis', zIndex:1 }}>{s.title}</div>
               <div style={{ position:'absolute', top:'4px', right:'4px', color:'#fff', opacity:.4, fontSize:'6px', zIndex:1 }}>{String(i+1).padStart(2,'0')}</div>
             </button>
           );
@@ -715,8 +722,8 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
 
       {/* ══════════ TOAST ══════════ */}
       {toast && (
-        <div style={{ position:'fixed', bottom:'28px', left:'50%', transform:'translateX(-50%)', background: toast.type==='success'?'rgba(52,211,153,0.15)':toast.type==='loading'?'rgba(123,47,190,0.2)':'rgba(30,6,53,0.9)', border:`1px solid ${toast.type==='success'?'rgba(52,211,153,0.35)':toast.type==='loading'?'rgba(123,47,190,0.4)':'rgba(255,255,255,0.12)'}`, color: toast.type==='success'?'#6EE7B7':'#e0d0ff', padding:'10px 20px', borderRadius:'24px', fontSize:'13px', zIndex:500, whiteSpace:'nowrap', backdropFilter:'blur(10px)', boxShadow:'0 4px 24px rgba(0,0,0,0.5)', display:'flex', alignItems:'center', gap:'8px' }}>
-          {toast.type==='loading' && <div style={{ width:'12px', height:'12px', border:'2px solid rgba(255,255,255,0.2)', borderTopColor:'#A855F7', borderRadius:'50%', animation:'sgSpin 0.7s linear infinite', flexShrink:0 }} />}
+        <div style={{ position:'fixed', bottom:'28px', left:'50%', transform:'translateX(-50%)', background: toast.type==='success'?'rgba(52,211,153,0.15)':toast.type==='loading'?'rgba(95,42,145,0.2)':'rgba(30,6,53,0.9)', border:`1px solid ${toast.type==='success'?'rgba(52,211,153,0.35)':toast.type==='loading'?'rgba(95,42,145,0.4)':'rgba(255,255,255,0.12)'}`, color: toast.type==='success'?'#6EE7B7':'#e0d0ff', padding:'10px 20px', borderRadius:'24px', fontSize:'13px', zIndex:500, whiteSpace:'nowrap', backdropFilter:'blur(10px)', boxShadow:'0 4px 24px rgba(0,0,0,0.5)', display:'flex', alignItems:'center', gap:'8px' }}>
+          {toast.type==='loading' && <div style={{ width:'12px', height:'12px', border:'2px solid rgba(255,255,255,0.2)', borderTopColor:'#B891DC', borderRadius:'50%', animation:'sgSpin 0.7s linear infinite', flexShrink:0 }} />}
           {toast.msg}
         </div>
       )}
@@ -725,12 +732,12 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
       {agentOpen && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', backdropFilter:'blur(4px)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center' }}
           onClick={()=>setAgentOpen(false)}>
-          <div style={{ width:'460px', maxHeight:'560px', background:'#120228', border:'1px solid rgba(217,70,168,0.25)', borderRadius:'18px', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 24px 80px rgba(0,0,0,0.8)' }}
+          <div style={{ width:'460px', maxHeight:'560px', background:'#120228', border:'1px solid rgba(184,145,220,0.20)', borderRadius:'18px', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 24px 80px rgba(0,0,0,0.8)' }}
             onClick={e=>e.stopPropagation()}>
 
             {/* Modal header */}
             <div style={{ padding:'16px 20px', borderBottom:'1px solid rgba(255,255,255,0.07)', display:'flex', alignItems:'center', gap:'10px' }}>
-              <div style={{ width:'30px', height:'30px', borderRadius:'8px', background:'linear-gradient(135deg,#7B2FBE,#D946A8)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              <div style={{ width:'30px', height:'30px', borderRadius:'8px', background:'linear-gradient(135deg,#5F2A91,#B891DC)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1l1.2 3.3L11.5 5.5 8.2 6.7 7 10l-1.2-3.3L2.5 5.5l3.3-1.2L7 1z" stroke="white" strokeWidth="1.2" strokeLinejoin="round"/><path d="M11.5 9l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4L9.5 11l1.4-.6.6-1.4z" stroke="white" strokeWidth="1" strokeLinejoin="round"/></svg>
               </div>
               <div style={{ flex:1 }}>
@@ -748,7 +755,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
                 <div key={i} style={{ display:'flex', justifyContent: m.role==='user' ? 'flex-end' : 'flex-start' }}>
                   <div style={{
                     maxWidth:'80%', padding:'9px 13px', borderRadius: m.role==='user' ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
-                    background: m.role==='user' ? 'linear-gradient(135deg,#7B2FBE,#D946A8)' : 'rgba(255,255,255,0.07)',
+                    background: m.role==='user' ? 'linear-gradient(135deg,#5F2A91,#B891DC)' : 'rgba(255,255,255,0.07)',
                     color: m.role==='user' ? '#fff' : 'rgba(255,255,255,0.85)',
                     fontSize:'13px', lineHeight:1.5,
                   }}>{m.text}</div>
@@ -774,11 +781,11 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
                 onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleAgentSend();} }}
                 placeholder="Describe what to change on this slide…"
                 rows={2}
-                style={{ flex:1, padding:'9px 12px', borderRadius:'10px', border:'1.5px solid rgba(255,255,255,0.12)', background:'rgba(255,255,255,0.05)', color:'#fff', fontSize:'13px', outline:'none', resize:'none', fontFamily:'Calibri,sans-serif', lineHeight:1.45 }}
+                style={{ flex:1, padding:'9px 12px', borderRadius:'10px', border:'1.5px solid rgba(255,255,255,0.12)', background:'rgba(255,255,255,0.05)', color:'#fff', fontSize:'13px', outline:'none', resize:'none', fontFamily:qxType.body, lineHeight:1.45 }}
               />
               <button onClick={handleAgentSend} disabled={!agentInput.trim()||agentThinking} style={{
                 width:'38px', height:'38px', borderRadius:'10px', border:'none', flexShrink:0,
-                background: agentInput.trim()&&!agentThinking ? 'linear-gradient(135deg,#7B2FBE,#D946A8)' : 'rgba(255,255,255,0.08)',
+                background: agentInput.trim()&&!agentThinking ? 'linear-gradient(135deg,#5F2A91,#B891DC)' : 'rgba(255,255,255,0.08)',
                 color: agentInput.trim()&&!agentThinking ? '#fff' : 'rgba(255,255,255,0.3)',
                 cursor: agentInput.trim()&&!agentThinking ? 'pointer' : 'default', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s',
               }}>

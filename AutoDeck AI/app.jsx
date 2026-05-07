@@ -81,7 +81,7 @@ const App = () => {
       display: 'flex',
       height: '100vh',
       overflow: 'hidden',
-      background: tweaks?.darkMode ? '#0F0318' : '#F4F1F9'
+      background: tweaks?.darkMode ? '#0F031F' : '#FAF8FC'
     }}>
       {screen === 'login' && (
         <LoginScreen onLogin={handleLogin} authError={authError} onClearAuthError={() => setAuthError("")} />
@@ -98,13 +98,13 @@ const App = () => {
 
       {screen !== 'login' && <div style={{
         flex: 1,
-        marginLeft: (screen !== 'processing' && screen !== 'slideshow') ? '220px' : 0,
+        marginLeft: (screen !== 'processing' && screen !== 'slideshow') ? '224px' : 0,
         overflowY: 'auto',
         overflowX: 'hidden',
         height: '100vh'
       }}>
         {screen === 'home' && (
-          <HomeScreen onGenerate={handleGenerate} tweaks={tweaks} />
+          <HomeScreenA onGenerate={handleGenerate} tweaks={tweaks} />
         )}
         {screen === 'processing' && (
           <ProcessingScreen

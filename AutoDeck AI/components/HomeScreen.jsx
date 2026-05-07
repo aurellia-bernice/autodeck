@@ -1,5 +1,13 @@
-// Home / Generate Screen
-const HomeScreen = ({ onGenerate, tweaks }) => {
+// HomeScreen — Variation A (committed). Re-exports HomeScreenA.
+const HomeScreen = (props) => <HomeScreenA {...props} />;
+Object.assign(window, { HomeScreen });
+
+// ============================================================
+// BELOW: legacy full implementation kept for reference only.
+// Not used — HomeScreenA.jsx is the active implementation.
+// ============================================================
+/*
+const HomeScreen_LEGACY = ({ onGenerate, tweaks }) => {
   const [inputText, setInputText] = React.useState('');
   const [slideCount, setSlideCount] = React.useState('Auto');
   const [templateStyle, setTemplateStyle] = React.useState('Professional');
@@ -410,5 +418,4 @@ const HomeScreen = ({ onGenerate, tweaks }) => {
     </div>
   );
 };
-
-Object.assign(window, { HomeScreen });
+*/

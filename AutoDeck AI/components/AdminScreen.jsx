@@ -1,543 +1,215 @@
-// Admin Panel Screen
-const AdminScreen = ({ tweaks }) => {
-  const [activeTab, setActiveTab] = React.useState('brand');
-  const [colors, setColors] = React.useState({
-    primary: '#2D0A4E',
-    secondary: '#7B2FBE',
-    accent1: '#D946A8',
-    accent2: '#F5A623',
-    bgDark: '#1A0530',
-    bgLight: '#F5F5F5',
-  });
-  const [savedColors, setSavedColors] = React.useState(false);
-  const [activeTemplate, setActiveTemplate] = React.useState('Quidax Master v3.pptx');
-  const [logoUploaded, setLogoUploaded] = React.useState(false);
-  const [templateUploaded, setTemplateUploaded] = React.useState(false);
-  const [brandVoice, setBrandVoice] = React.useState('professional');
+// ============================================================
+// ============================================================
+// AdminScreen — brand admin tabs (colors, type, templates, voice)
+// ============================================================
+const primaryLimeButton = () => ({
+  padding: '10px 20px', borderRadius: qxRadius.full,
+  border: 'none', background: QX.lime, color: QX.limeInk,
+  fontFamily: qxType.body, fontSize: 13.5, fontWeight: 600,
+  cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8,
+  boxShadow: '0 6px 20px rgba(212,255,63,0.35)',
+  transition: `all 160ms ${qxEase}`,
+});
+const ghostButton = (T) => ({
+  padding: '10px 18px', borderRadius: qxRadius.full,
+  border: `1px solid ${T.border}`, background: 'transparent',
+  color: T.inkDim, fontFamily: qxType.body, fontSize: 13, fontWeight: 500,
+  cursor: 'pointer',
+});
 
-  const bg = tweaks?.darkMode ? '#0F0318' : '#F4F1F9';
-  const cardBg = tweaks?.darkMode ? '#1E0635' : '#FFFFFF';
-  const textColor = tweaks?.darkMode ? '#FFFFFF' : '#1A0530';
-  const subColor = tweaks?.darkMode ? 'rgba(255,255,255,0.45)' : '#7A6B8A';
-  const borderColor = tweaks?.darkMode ? 'rgba(123,47,190,0.25)' : 'rgba(123,47,190,0.12)';
+const AdminScreen = ({ tweaks }) => {
+  const T = qxTheme(tweaks?.darkMode);
+  const [tab, setTab] = React.useState('brand');
+  const [colors, setColors] = React.useState({
+    primary: '#5F2A91', secondary: '#7A3FB0', accent: '#B891DC',
+    lime: '#D4FF3F', bgDark: '#0F031F', bgLight: '#FAF8FC',
+  });
+  const [voice, setVoice] = React.useState('professional');
+  const [saved, setSaved] = React.useState(false);
 
   const tabs = [
-    { id: 'brand', label: 'Brand Colours' },
-    { id: 'typography', label: 'Typography' },
-    { id: 'templates', label: 'Templates' },
-    { id: 'voice', label: 'Brand Voice' },
+    { id: 'brand', label: 'Brand colours' },
+    { id: 'type',  label: 'Typography' },
+    { id: 'tpl',   label: 'Templates' },
+    { id: 'voice', label: 'Voice' },
   ];
 
   const colorRows = [
-    { key: 'primary', label: 'Primary — Deep Purple', role: 'Sidebar, headers, key UI' },
-    { key: 'secondary', label: 'Secondary — Vibrant Purple', role: 'Interactive elements, links' },
-    { key: 'accent1', label: 'Accent — Magenta Pink', role: 'CTAs, active states, highlights' },
-    { key: 'accent2', label: 'Accent — Gold', role: 'Warm highlights, Corporate template' },
-    { key: 'bgDark', label: 'Background — Dark', role: 'Dark mode canvas, slide backgrounds' },
-    { key: 'bgLight', label: 'Background — Light', role: 'Light mode canvas, card backgrounds' },
+    { key: 'primary',   label: 'Primary purple',  role: 'Headers, links, key UI' },
+    { key: 'secondary', label: 'Secondary purple', role: 'Hover states, secondary copy' },
+    { key: 'accent',    label: 'Soft purple',      role: 'On-dark text, subtle highlights' },
+    { key: 'lime',      label: 'Lime accent',      role: 'Single primary CTA per screen' },
+    { key: 'bgDark',    label: 'Dark canvas',      role: 'Sidebar, dark slides' },
+    { key: 'bgLight',   label: 'Light canvas',     role: 'App background' },
   ];
 
-  const Card = ({ children, style = {} }) => (
-    <div style={{
-      background: cardBg,
-      borderRadius: '16px',
-      border: `1.5px solid ${borderColor}`,
-      padding: '28px',
-      boxShadow: tweaks?.darkMode ? 'none' : '0 2px 16px rgba(45,10,78,0.06)',
-      ...style
-    }}>{children}</div>
+  const Card = ({ children }) => (
+    <div style={{ background: T.surface, borderRadius: qxRadius.lg, border: `1px solid ${T.border}`, padding: 28, boxShadow: qxShadow(tweaks?.darkMode).md }}>
+      {children}
+    </div>
   );
-
-  const SectionLabel = ({ children }) => (
-    <div style={{
-      fontSize: '12px',
-      fontWeight: '700',
-      letterSpacing: '1.2px',
-      textTransform: 'uppercase',
-      color: tweaks?.darkMode ? 'rgba(255,255,255,0.4)' : '#9080A0',
-      marginBottom: '16px',
-      fontFamily: 'Calibri, sans-serif'
-    }}>{children}</div>
+  const Eyebrow = ({ children }) => (
+    <div style={{ fontFamily: qxType.mono, fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.inkMute, marginBottom: 18 }}>
+      {children}
+    </div>
   );
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: bg,
-      padding: '40px 48px',
-      fontFamily: 'Calibri, sans-serif',
-      overflowY: 'auto'
-    }}>
-      {/* Header */}
-      <div style={{ marginBottom: '28px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-            <div style={{
-              padding: '3px 10px',
-              borderRadius: '20px',
-              background: 'rgba(245,166,35,0.15)',
-              border: '1px solid rgba(245,166,35,0.3)',
-              color: '#F5A623',
-              fontSize: '11px',
-              fontWeight: '700',
-              letterSpacing: '1px',
-              textTransform: 'uppercase'
-            }}>Design Team Only</div>
-          </div>
-          <h1 style={{
-            fontFamily: '"Arial Black", sans-serif',
-            fontSize: '26px',
-            fontWeight: '900',
-            color: textColor,
-            margin: '0 0 6px',
-            letterSpacing: '-0.5px'
-          }}>Brand Admin</h1>
-          <p style={{ color: subColor, fontSize: '15px', margin: 0 }}>
-            Manage Quidax brand configuration and slide templates
-          </p>
+    <div style={{ minHeight: '100vh', background: T.bg, fontFamily: qxType.body, color: T.ink, padding: '40px 48px' }}>
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <span style={{ padding: '4px 10px', borderRadius: qxRadius.full, background: 'rgba(245,166,35,0.10)', border: '1px solid rgba(245,166,35,0.25)', color: '#B27000', fontFamily: qxType.mono, fontSize: 10, fontWeight: 500, letterSpacing: '0.18em', textTransform: 'uppercase' }}>
+            Design team only
+          </span>
         </div>
+        <h1 style={{ fontFamily: qxType.display, fontSize: 40, fontWeight: 500, color: T.ink, margin: '0 0 6px', letterSpacing: '-0.025em' }}>
+          Brand admin
+        </h1>
+        <p style={{ fontSize: 15, color: T.inkDim, margin: 0 }}>
+          Manage Quidax brand configuration and slide templates.
+        </p>
       </div>
 
-      {/* Tabs */}
-      <div style={{
-        display: 'flex',
-        gap: '4px',
-        marginBottom: '28px',
-        background: tweaks?.darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(123,47,190,0.06)',
-        borderRadius: '12px',
-        padding: '4px',
-        width: 'fit-content'
-      }}>
+      <div style={{ display: 'inline-flex', background: T.ghostBg, borderRadius: qxRadius.full, padding: 3, marginBottom: 24, border: `1px solid ${T.border}` }}>
         {tabs.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setActiveTab(t.id)}
-            style={{
-              padding: '10px 20px',
-              borderRadius: '9px',
-              border: 'none',
-              background: activeTab === t.id ? (tweaks?.darkMode ? '#2D0A4E' : '#FFFFFF') : 'transparent',
-              color: activeTab === t.id ? (tweaks?.darkMode ? '#D946A8' : '#7B2FBE') : subColor,
-              fontSize: '14px',
-              fontFamily: 'Calibri, sans-serif',
-              fontWeight: activeTab === t.id ? '700' : '500',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              boxShadow: activeTab === t.id ? '0 2px 8px rgba(0,0,0,0.08)' : 'none'
-            }}
-          >{t.label}</button>
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            padding: '8px 18px', borderRadius: qxRadius.full, border: 'none',
+            background: tab === t.id ? T.bgElev : 'transparent',
+            color: tab === t.id ? T.ink : T.inkDim,
+            fontFamily: qxType.body, fontSize: 13, fontWeight: tab === t.id ? 600 : 500,
+            cursor: 'pointer', transition: `all 140ms ${qxEase}`,
+            boxShadow: tab === t.id ? qxShadow(tweaks?.darkMode).sm : 'none',
+          }}>{t.label}</button>
         ))}
       </div>
 
-      {/* Tab content */}
-      {activeTab === 'brand' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <Card>
-            <SectionLabel>Colour Palette</SectionLabel>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {colorRows.map(row => (
-                <div key={row.key} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '16px',
-                  padding: '14px 0',
-                  borderBottom: `1px solid ${tweaks?.darkMode ? 'rgba(255,255,255,0.05)' : '#F0EAF8'}`
-                }}>
-                  {/* Swatch + input */}
-                  <div style={{ position: 'relative', flexShrink: 0 }}>
-                    <div style={{
-                      width: '44px',
-                      height: '44px',
-                      borderRadius: '10px',
-                      background: colors[row.key],
-                      border: `2px solid ${tweaks?.darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
-                      cursor: 'pointer',
-                      overflow: 'hidden'
-                    }}>
-                      <input
-                        type="color"
-                        value={colors[row.key]}
-                        onChange={e => setColors(prev => ({ ...prev, [row.key]: e.target.value }))}
-                        style={{
-                          width: '200%',
-                          height: '200%',
-                          margin: '-50%',
-                          cursor: 'pointer',
-                          border: 'none',
-                          opacity: 0,
-                          position: 'absolute',
-                          top: 0,
-                          left: 0
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '14px', fontWeight: '600', color: textColor, marginBottom: '2px' }}>{row.label}</div>
-                    <div style={{ fontSize: '12px', color: subColor }}>{row.role}</div>
-                  </div>
-                  <div style={{
-                    padding: '8px 14px',
-                    borderRadius: '8px',
-                    background: tweaks?.darkMode ? 'rgba(255,255,255,0.06)' : '#F5F0FB',
-                    border: `1px solid ${borderColor}`,
-                    fontFamily: 'monospace',
-                    fontSize: '13px',
-                    color: textColor,
-                    letterSpacing: '0.5px'
-                  }}>
-                    {colors[row.key].toUpperCase()}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              {savedColors && (
-                <span style={{ fontSize: '13px', color: '#3DB870', alignSelf: 'center' }}>✓ Saved</span>
-              )}
-              <button
-                onClick={() => { setSavedColors(true); setTimeout(() => setSavedColors(false), 2500); }}
-                style={{
-                  padding: '11px 22px',
-                  borderRadius: '10px',
-                  border: 'none',
-                  background: 'linear-gradient(135deg, #7B2FBE, #D946A8)',
-                  color: '#fff',
-                  fontSize: '14px',
-                  fontFamily: 'Calibri, sans-serif',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 16px rgba(217,70,168,0.25)'
-                }}
-              >Save Colours</button>
-            </div>
-          </Card>
-
-          {/* Logo upload */}
-          <Card>
-            <SectionLabel>Logo</SectionLabel>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-              <div style={{
-                width: '120px',
-                height: '60px',
-                borderRadius: '10px',
-                background: '#2D0A4E',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                border: `1.5px solid ${borderColor}`
-              }}>
-                {logoUploaded ? (
-                  <span style={{ color: '#D946A8', fontSize: '12px', fontWeight: '700' }}>NEW LOGO</span>
-                ) : (
-                  <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                    <polygon points="14,2 26,8 26,20 14,26 2,20 2,8" fill="none" stroke="#D946A8" strokeWidth="1.5"/>
-                    <polygon points="14,2 26,8 14,14 2,8" fill="#7B2FBE" opacity="0.8"/>
-                    <polygon points="14,14 26,8 26,20 14,26" fill="#D946A8" opacity="0.5"/>
-                    <polygon points="14,14 14,26 2,20 2,8" fill="#7B2FBE" opacity="0.5"/>
-                  </svg>
-                )}
-              </div>
-              <div>
-                <div style={{ fontSize: '14px', fontWeight: '600', color: textColor, marginBottom: '4px' }}>
-                  {logoUploaded ? 'Logo updated' : 'Quidax Logo (current)'}
-                </div>
-                <div style={{ fontSize: '12px', color: subColor, marginBottom: '12px' }}>
-                  PNG or SVG · Transparent background · Min 400px wide
-                </div>
-                <button
-                  onClick={() => setLogoUploaded(true)}
-                  style={{
-                    padding: '9px 18px',
-                    borderRadius: '8px',
-                    border: `1.5px solid ${borderColor}`,
-                    background: 'transparent',
-                    color: '#7B2FBE',
-                    fontSize: '13px',
-                    fontFamily: 'Calibri, sans-serif',
-                    fontWeight: '600',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {logoUploaded ? 'Replace Logo' : 'Upload New Logo'}
-                </button>
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {activeTab === 'typography' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <Card>
-            <SectionLabel>Heading Font</SectionLabel>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-              <div style={{
-                flex: 1,
-                padding: '24px',
-                background: tweaks?.darkMode ? 'rgba(123,47,190,0.1)' : '#F5F0FB',
-                borderRadius: '12px',
-                border: `1.5px solid ${borderColor}`
-              }}>
-                <div style={{
-                  fontFamily: '"Arial Black", sans-serif',
-                  fontSize: '36px',
-                  fontWeight: '900',
-                  color: textColor,
-                  letterSpacing: '-1px',
-                  lineHeight: 1.1,
-                  marginBottom: '8px'
-                }}>Mabry Pro</div>
-                <div style={{
-                  fontFamily: '"Arial Black", sans-serif',
-                  fontSize: '18px',
-                  color: subColor,
-                  fontWeight: '400'
-                }}>The quick brown fox jumps</div>
-              </div>
-              <div style={{ width: '200px' }}>
-                <div style={{ fontSize: '13px', color: subColor, marginBottom: '8px' }}>Fallback stack</div>
-                <div style={{
-                  padding: '12px 14px',
-                  borderRadius: '8px',
-                  background: tweaks?.darkMode ? 'rgba(255,255,255,0.05)' : '#F5F5F5',
-                  fontFamily: 'monospace',
-                  fontSize: '12px',
-                  color: textColor,
-                  lineHeight: 1.6
-                }}>
-                  "Mabry Pro",<br/>
-                  "Arial Black",<br/>
-                  sans-serif
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          <Card>
-            <SectionLabel>Body Font</SectionLabel>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-              <div style={{
-                flex: 1,
-                padding: '24px',
-                background: tweaks?.darkMode ? 'rgba(123,47,190,0.1)' : '#F5F0FB',
-                borderRadius: '12px',
-                border: `1.5px solid ${borderColor}`
-              }}>
-                <div style={{
-                  fontFamily: 'Calibri, "Segoe UI", sans-serif',
-                  fontSize: '28px',
-                  fontWeight: '400',
-                  color: textColor,
-                  marginBottom: '8px'
-                }}>Mabry Pro Regular</div>
-                <div style={{
-                  fontFamily: 'Calibri, "Segoe UI", sans-serif',
-                  fontSize: '15px',
-                  color: subColor,
-                  lineHeight: 1.65
-                }}>
-                  AutoDeck AI generates professional branded<br/>
-                  presentations in seconds. Clean, readable, bold.
-                </div>
-              </div>
-              <div style={{ width: '200px' }}>
-                <div style={{ fontSize: '13px', color: subColor, marginBottom: '8px' }}>Fallback stack</div>
-                <div style={{
-                  padding: '12px 14px',
-                  borderRadius: '8px',
-                  background: tweaks?.darkMode ? 'rgba(255,255,255,0.05)' : '#F5F5F5',
-                  fontFamily: 'monospace',
-                  fontSize: '12px',
-                  color: textColor,
-                  lineHeight: 1.6
-                }}>
-                  "Mabry Pro",<br/>
-                  "Calibri",<br/>
-                  "Segoe UI",<br/>
-                  sans-serif
-                </div>
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {activeTab === 'templates' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <Card>
-            <SectionLabel>Active Master Template</SectionLabel>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '20px',
-              padding: '20px',
-              background: tweaks?.darkMode ? 'rgba(217,70,168,0.08)' : 'rgba(217,70,168,0.05)',
-              borderRadius: '12px',
-              border: '1.5px solid rgba(217,70,168,0.2)',
-              marginBottom: '20px'
-            }}>
-              <div style={{
-                width: '52px',
-                height: '52px',
-                borderRadius: '12px',
-                background: 'linear-gradient(135deg, #7B2FBE, #D946A8)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0
-              }}>
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                  <rect x="3" y="3" width="16" height="16" rx="2" stroke="white" strokeWidth="1.5"/>
-                  <path d="M3 8h16M8 8v12" stroke="white" strokeWidth="1.5"/>
-                </svg>
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '15px', fontWeight: '700', color: textColor, marginBottom: '3px' }}>
-                  {activeTemplate}
-                </div>
-                <div style={{ fontSize: '12px', color: subColor }}>
-                  Uploaded 12 Apr 2026 · 4 layouts · All templates use this master
-                </div>
-              </div>
-              <div style={{
-                padding: '5px 12px',
-                borderRadius: '20px',
-                background: 'rgba(80,200,120,0.15)',
-                border: '1px solid rgba(80,200,120,0.3)',
-                color: '#3DB870',
-                fontSize: '12px',
-                fontWeight: '700'
-              }}>Active</div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button
-                onClick={() => { setTemplateUploaded(true); setActiveTemplate('Quidax Master v4.pptx'); }}
-                style={{
-                  padding: '11px 20px',
-                  borderRadius: '10px',
-                  border: 'none',
-                  background: 'linear-gradient(135deg, #7B2FBE, #D946A8)',
-                  color: '#fff',
-                  fontSize: '14px',
-                  fontFamily: 'Calibri, sans-serif',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '7px',
-                  boxShadow: '0 4px 16px rgba(217,70,168,0.25)'
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                  <path d="M7 11V3M4 6l3-3 3 3M2 11h10" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                Upload New Template
-              </button>
-              <button
-                style={{
-                  padding: '11px 20px',
-                  borderRadius: '10px',
-                  border: `1.5px solid ${borderColor}`,
-                  background: 'transparent',
-                  color: subColor,
-                  fontSize: '14px',
-                  fontFamily: 'Calibri, sans-serif',
-                  fontWeight: '600',
-                  cursor: 'pointer'
-                }}
-              >Remove</button>
-            </div>
-            {templateUploaded && (
-              <div style={{
-                marginTop: '16px',
-                padding: '12px 16px',
-                borderRadius: '8px',
-                background: 'rgba(80,200,120,0.1)',
-                border: '1px solid rgba(80,200,120,0.25)',
-                color: '#3DB870',
-                fontSize: '13px',
-                fontFamily: 'Calibri, sans-serif'
-              }}>
-                ✓ New template uploaded and set as active. All new decks will use this master.
-              </div>
-            )}
-          </Card>
-        </div>
-      )}
-
-      {activeTab === 'voice' && (
+      {tab === 'brand' && (
         <Card>
-          <SectionLabel>Brand Voice & AI Persona</SectionLabel>
-          <p style={{ color: subColor, fontSize: '14px', margin: '0 0 24px', lineHeight: 1.6 }}>
-            These settings shape how AutoDeck AI writes slide content — headlines, bullets, summaries.
-            Choose a tone that matches Quidax's communication style.
+          <Eyebrow>Colour palette</Eyebrow>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {colorRows.map((row, i) => (
+              <div key={row.key} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 0', borderBottom: i < colorRows.length - 1 ? `1px solid ${T.border}` : 'none' }}>
+                <label style={{ position: 'relative', width: 40, height: 40, borderRadius: qxRadius.sm, background: colors[row.key], border: `1px solid ${T.border}`, cursor: 'pointer', overflow: 'hidden', flexShrink: 0 }}>
+                  <input type="color" value={colors[row.key]} onChange={e => setColors(p => ({ ...p, [row.key]: e.target.value }))}
+                    style={{ position: 'absolute', inset: '-50%', width: '200%', height: '200%', opacity: 0, cursor: 'pointer' }} />
+                </label>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: T.ink, marginBottom: 2 }}>{row.label}</div>
+                  <div style={{ fontSize: 12.5, color: T.inkDim }}>{row.role}</div>
+                </div>
+                <span style={{ fontFamily: qxType.mono, fontSize: 12, color: T.ink, background: T.ghostBg, border: `1px solid ${T.border}`, padding: '6px 12px', borderRadius: qxRadius.xs }}>
+                  {colors[row.key].toUpperCase()}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12, marginTop: 20 }}>
+            {saved && <span style={{ fontSize: 13, color: '#1F8A5B' }}>✓ Saved</span>}
+            <button onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 2000); }} style={primaryLimeButton()}>
+              Save palette
+            </button>
+          </div>
+        </Card>
+      )}
+
+      {tab === 'type' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Card>
+            <Eyebrow>Display · Space Grotesk</Eyebrow>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 24 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: qxType.display, fontSize: 56, fontWeight: 500, color: T.ink, letterSpacing: '-0.03em', lineHeight: 1.02 }}>
+                  Branded decks,<br/>
+                  <span style={{ color: T.primary, fontStyle: 'italic', fontWeight: 400 }}>without the busywork.</span>
+                </div>
+              </div>
+              <div style={{ width: 200, fontFamily: qxType.mono, fontSize: 11, color: T.inkDim, lineHeight: 1.7, padding: 12, background: T.ghostBg, border: `1px solid ${T.border}`, borderRadius: qxRadius.sm }}>
+                "Space Grotesk",<br/>"Inter",<br/>system-ui
+              </div>
+            </div>
+          </Card>
+          <Card>
+            <Eyebrow>Body · Inter</Eyebrow>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 24 }}>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontFamily: qxType.body, fontSize: 17, color: T.ink, lineHeight: 1.55, margin: 0 }}>
+                  Inter is the primary UI face. Calm, neutral, and used for everything that isn't a moment.
+                </p>
+                <p style={{ fontFamily: qxType.body, fontSize: 13, color: T.inkDim, lineHeight: 1.6, margin: '12px 0 0' }}>
+                  Smaller meta and helper copy lives at 13px / 1.6 in muted ink — readable but never loud.
+                </p>
+              </div>
+              <div style={{ width: 200, fontFamily: qxType.mono, fontSize: 11, color: T.inkDim, lineHeight: 1.7, padding: 12, background: T.ghostBg, border: `1px solid ${T.border}`, borderRadius: qxRadius.sm }}>
+                "Inter",<br/>system-ui
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {tab === 'tpl' && (
+        <Card>
+          <Eyebrow>Active master template</Eyebrow>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 18, background: T.ghostBg, borderRadius: qxRadius.md, border: `1px solid ${T.border}`, marginBottom: 18 }}>
+            <div style={{ width: 44, height: 44, borderRadius: qxRadius.sm, background: T.primary, color: '#F6F1FB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <rect x="3" y="3" width="14" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.4"/>
+                <path d="M3 7h14M7 7v10" stroke="currentColor" strokeWidth="1.4"/>
+              </svg>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 500, color: T.ink, marginBottom: 2 }}>Quidax Master v3.pptx</div>
+              <div style={{ fontFamily: qxType.mono, fontSize: 10.5, color: T.inkMute, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Uploaded 12 Apr 2026 · 4 layouts</div>
+            </div>
+            <span style={{ padding: '4px 10px', borderRadius: qxRadius.full, background: 'rgba(52,199,123,0.10)', border: '1px solid rgba(52,199,123,0.25)', color: '#1F8A5B', fontFamily: qxType.mono, fontSize: 10, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase' }}>Active</span>
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button style={primaryLimeButton()}>Upload new</button>
+            <button style={ghostButton(T)}>Remove</button>
+          </div>
+        </Card>
+      )}
+
+      {tab === 'voice' && (
+        <Card>
+          <Eyebrow>Brand voice</Eyebrow>
+          <p style={{ fontSize: 14, color: T.inkDim, margin: '0 0 20px', lineHeight: 1.55, maxWidth: 560 }}>
+            Shape how AutoDeck AI writes headlines, bullets, and summaries. Pick a tone that matches Quidax's communication style.
           </p>
           {[
             { id: 'professional', label: 'Professional', desc: 'Clear, confident, business-appropriate. No jargon.' },
-            { id: 'bold', label: 'Bold & Direct', desc: 'Punchy, assertive, energetic. Short sentences. Big impact.' },
-            { id: 'approachable', label: 'Approachable', desc: 'Warm and conversational. Human-first language.' },
-            { id: 'data', label: 'Data-Led', desc: 'Numbers front and centre. Evidence-based. Precise.' },
+            { id: 'bold',         label: 'Bold & direct', desc: 'Punchy, assertive, energetic. Short sentences.' },
+            { id: 'approachable', label: 'Approachable',  desc: 'Warm and conversational. Human-first language.' },
+            { id: 'data',         label: 'Data-led',      desc: 'Numbers front and centre. Evidence-based. Precise.' },
           ].map(v => (
-            <div
-              key={v.id}
-              onClick={() => setBrandVoice(v.id)}
-              style={{
-                padding: '18px',
-                borderRadius: '12px',
-                border: `2px solid ${brandVoice === v.id ? '#7B2FBE' : borderColor}`,
-                background: brandVoice === v.id ? (tweaks?.darkMode ? 'rgba(123,47,190,0.12)' : 'rgba(123,47,190,0.06)') : 'transparent',
-                marginBottom: '10px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '14px',
-                transition: 'all 0.15s ease'
-              }}
-            >
+            <div key={v.id} onClick={() => setVoice(v.id)} style={{
+              display: 'flex', alignItems: 'center', gap: 14,
+              padding: 16, marginBottom: 8,
+              borderRadius: qxRadius.md,
+              border: `1px solid ${voice === v.id ? T.primary : T.border}`,
+              background: voice === v.id ? T.ghostBg : 'transparent',
+              cursor: 'pointer', transition: `all 140ms ${qxEase}`,
+            }}>
               <div style={{
-                width: '20px',
-                height: '20px',
-                borderRadius: '50%',
-                border: `2px solid ${brandVoice === v.id ? '#7B2FBE' : borderColor}`,
-                background: brandVoice === v.id ? '#7B2FBE' : 'transparent',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0
+                width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                border: `1.5px solid ${voice === v.id ? T.primary : T.borderHi}`,
+                background: voice === v.id ? T.primary : 'transparent',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                {brandVoice === v.id && (
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#fff' }} />
-                )}
+                {voice === v.id && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#F6F1FB' }} />}
               </div>
               <div>
-                <div style={{ fontSize: '14px', fontWeight: '700', color: textColor, marginBottom: '3px' }}>{v.label}</div>
-                <div style={{ fontSize: '13px', color: subColor }}>{v.desc}</div>
+                <div style={{ fontSize: 14, fontWeight: 500, color: T.ink, marginBottom: 2 }}>{v.label}</div>
+                <div style={{ fontSize: 13, color: T.inkDim }}>{v.desc}</div>
               </div>
             </div>
           ))}
-          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
-            <button
-              style={{
-                padding: '11px 22px',
-                borderRadius: '10px',
-                border: 'none',
-                background: 'linear-gradient(135deg, #7B2FBE, #D946A8)',
-                color: '#fff',
-                fontSize: '14px',
-                fontFamily: 'Calibri, sans-serif',
-                fontWeight: '700',
-                cursor: 'pointer',
-                boxShadow: '0 4px 16px rgba(217,70,168,0.25)'
-              }}
-            >Save Voice Settings</button>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+            <button style={primaryLimeButton()}>Save voice</button>
           </div>
         </Card>
       )}
     </div>
   );
 };
-
 Object.assign(window, { AdminScreen });
