@@ -3,9 +3,15 @@
 // ============================================================
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "darkMode": false,
-  "userRole": "employee",
   "accentColor": "#D946A8"
 }/*EDITMODE-END*/;
+
+const ADMIN_EMAILS = ['admin@quidax.com'];
+
+const isAdminUser = (user) => {
+  const email = user?.email?.toLowerCase();
+  return ADMIN_EMAILS.includes(email);
+};
 
 const App = () => {
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
@@ -16,7 +22,7 @@ const App = () => {
   const [authError, setAuthError] = React.useState("");
   const [slideshowSlides, setSlideshowSlides] = React.useState(null);
 
-  const userRole = tweaks?.userRole === 'admin' ? 'admin' : 'employee';
+  const userRole = isAdminUser(currentUser) ? 'admin' : 'employee';
 
   React.useEffect(() => {
     const unsubscribe = window.firebaseAuth.onAuthStateChanged(async (user) => {
@@ -27,9 +33,10 @@ const App = () => {
           setAuthError("Only @quidax.com accounts are allowed.");
           return;
         }
-        setCurrentUser({ email: user.email, uid: user.uid, displayName: user.displayName });
+        const signedInUser = { email: user.email, uid: user.uid, displayName: user.displayName };
+        setCurrentUser(signedInUser);
         setAuthError("");
-        setScreen(prev => prev === 'login' ? 'home' : prev);
+        setScreen(prev => prev === 'login' ? (isAdminUser(signedInUser) ? 'admin' : 'home') : prev);
       } else {
         setCurrentUser(null);
         setScreen('login');
@@ -40,7 +47,7 @@ const App = () => {
 
   const handleLogin = (userData) => {
     setCurrentUser(userData);
-    setScreen('home');
+    setScreen(isAdminUser(userData) ? 'admin' : 'home');
   };
 
   const handleLogout = async () => {
@@ -167,7 +174,7 @@ const App = () => {
               <circle cx="24" cy="33" r="2" fill="currentColor"/>
             </svg>
             <div style={{ fontSize: '16px', fontWeight: '600' }}>Admin access only</div>
-            <div style={{ fontSize: '14px' }}>Switch to Admin role in Tweaks to view this panel</div>
+            <div style={{ fontSize: '14px' }}>Sign in with an admin account to view this panel</div>
           </div>
         )}
       </div>}
@@ -178,17 +185,6 @@ const App = () => {
             label="Dark Mode"
             value={tweaks?.darkMode}
             onChange={v => setTweak('darkMode', v)}
-          />
-        </TweakSection>
-        <TweakSection title="User Role">
-          <TweakRadio
-            label="View As"
-            value={tweaks?.userRole}
-            options={[
-              { label: 'Employee', value: 'employee' },
-              { label: 'Admin', value: 'admin' }
-            ]}
-            onChange={v => setTweak('userRole', v)}
           />
         </TweakSection>
         <TweakSection title="Navigation">
