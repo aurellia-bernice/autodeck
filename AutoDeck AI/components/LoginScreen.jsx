@@ -114,7 +114,7 @@ const LoginScreen = ({ onLogin, authError, onClearAuthError }) => {
         </div>
 
         <div style={{ position: 'relative', zIndex: 1, fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.32)' }}>
-          Quidax · Lagos × Cape Town
+          Quidax · Lagos × Nigeria
         </div>
       </div>
 
