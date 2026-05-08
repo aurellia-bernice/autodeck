@@ -1,0 +1,135 @@
+[debug] [2026-05-08T18:44:38.306Z] ----------------------------------------------------------------------
+[debug] [2026-05-08T18:44:38.309Z] Command:       /Users/aurellia_amore/.nvm/versions/node/v20.20.2/bin/node /Users/aurellia_amore/.local/bin/firebase deploy --only hosting
+[debug] [2026-05-08T18:44:38.309Z] CLI Version:   15.17.0
+[debug] [2026-05-08T18:44:38.309Z] Platform:      darwin
+[debug] [2026-05-08T18:44:38.309Z] Node Version:  v20.20.2
+[debug] [2026-05-08T18:44:38.309Z] Time:          Fri May 08 2026 19:44:38 GMT+0100 (West Africa Time)
+[debug] [2026-05-08T18:44:38.309Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-05-08T18:44:38.311Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-05-08T18:44:39.501Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-05-08T18:44:39.502Z] > authorizing via signed-in user (baekechi@quidax.com)
+[debug] [2026-05-08T18:44:39.502Z] [iam] checking project autodeck-ai for permissions ["firebase.projects.get","firebasehosting.sites.update"]
+[debug] [2026-05-08T18:44:39.503Z] Checked if tokens are valid: false, expires at: 1778195304967
+[debug] [2026-05-08T18:44:39.503Z] Checked if tokens are valid: false, expires at: 1778195304967
+[debug] [2026-05-08T18:44:39.504Z] > refreshing access token with scopes: []
+[debug] [2026-05-08T18:44:39.505Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-05-08T18:44:39.505Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-05-08T18:44:40.019Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-05-08T18:44:40.020Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-05-08T18:44:40.036Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/autodeck-ai:testIamPermissions [none]
+[debug] [2026-05-08T18:44:40.037Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/autodeck-ai:testIamPermissions  x-goog-user-project=autodeck-ai
+[debug] [2026-05-08T18:44:40.037Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/autodeck-ai:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-05-08T18:44:40.041Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-05-08T18:44:40.041Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2026-05-08T18:44:41.088Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/autodeck-ai:testIamPermissions 200
+[debug] [2026-05-08T18:44:41.089Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/autodeck-ai:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-05-08T18:44:41.090Z] Checked if tokens are valid: true, expires at: 1778269479020
+[debug] [2026-05-08T18:44:41.090Z] Checked if tokens are valid: true, expires at: 1778269479020
+[debug] [2026-05-08T18:44:41.090Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/autodeck-ai [none]
+[debug] [2026-05-08T18:44:41.808Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/autodeck-ai 200
+[debug] [2026-05-08T18:44:41.808Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/autodeck-ai {"projectId":"autodeck-ai","projectNumber":"1054256355272","displayName":"Autodeck-ai","name":"projects/autodeck-ai","resources":{"hostingSite":"autodeck-ai"},"state":"ACTIVE","etag":"1_d22a24bc-0c08-4936-be74-5d93cec5b526"}
+[info] 
+[info] === Deploying to 'autodeck-ai'...
+[info] 
+[info] i  deploying hosting 
+[debug] [2026-05-08T18:44:41.811Z] Checked if tokens are valid: true, expires at: 1778269479020
+[debug] [2026-05-08T18:44:41.811Z] Checked if tokens are valid: true, expires at: 1778269479020
+[debug] [2026-05-08T18:44:41.811Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/autodeck-ai/sites/autodeck-ai [none]
+[debug] [2026-05-08T18:44:43.141Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/autodeck-ai/sites/autodeck-ai 200
+[debug] [2026-05-08T18:44:43.141Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/autodeck-ai/sites/autodeck-ai {"name":"projects/autodeck-ai/sites/autodeck-ai","defaultUrl":"https://autodeck-ai.web.app","type":"DEFAULT_SITE"}
+[debug] [2026-05-08T18:44:43.143Z] Checked if tokens are valid: true, expires at: 1778269479020
+[debug] [2026-05-08T18:44:43.143Z] Checked if tokens are valid: true, expires at: 1778269479020
+[debug] [2026-05-08T18:44:43.144Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/autodeck-ai/versions [none]
+[debug] [2026-05-08T18:44:43.144Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/autodeck-ai/versions {"status":"CREATED","labels":{"deployment-tool":"cli-firebase"}}
+[debug] [2026-05-08T18:44:45.398Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/autodeck-ai/versions 200
+[debug] [2026-05-08T18:44:45.400Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/autodeck-ai/versions {"name":"projects/1054256355272/sites/autodeck-ai/versions/3ff45866f9aa0f41","status":"CREATED","config":{},"labels":{"deployment-tool":"cli-firebase"}}
+[info] i  hosting[autodeck-ai]: beginning deploy... 
+[info] i  hosting[autodeck-ai]: found 24 files in AutoDeck AI 
+[debug] [2026-05-08T18:44:45.420Z] [hosting] uploading with 200 concurrency
+[debug] [2026-05-08T18:44:45.432Z] Checked if tokens are valid: true, expires at: 1778269479020
+[debug] [2026-05-08T18:44:45.432Z] Checked if tokens are valid: true, expires at: 1778269479020
+[debug] [2026-05-08T18:44:45.433Z] [hosting] hash cache [QXV0b0RlY2sgQUk] stored for 24 files
+[debug] [2026-05-08T18:44:45.433Z] [hosting][hash queue][FINAL] {"max":8,"min":0,"avg":1.2916666666666667,"active":0,"complete":24,"success":24,"errored":0,"retried":0,"total":24,"elapsed":11}
+[debug] [2026-05-08T18:44:45.433Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/1054256355272/sites/autodeck-ai/versions/3ff45866f9aa0f41:populateFiles [none]
+[debug] [2026-05-08T18:44:45.433Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/1054256355272/sites/autodeck-ai/versions/3ff45866f9aa0f41:populateFiles {"files":{"/tokens.jsx":"e6709bce113a02003243e8f78f5860de971f919302410b2d7f0d72ae7e49b9c2","/s.jsx":"9b8b589dd1b0e4f7a3cba8bfa09d84c9f8f95c88c56d61ad88de056e9914b66d","/firebase-config.js":"ef98509a9dc9eb25a4325ec11455f080ee6ec77e99899d63753b6b8be7671301","/action.html":"80c8b6bf568d9b3e2274467b91dbcf343980d379f5ccc5c33e50780b90bd9a5a","/AutoDeck AI.html":"f1f492f26f30f27ef8647d92b14081c2bd32f02d89d38e35926d62e2b3ddb9ec","/ARCHITECTURE.md":"605c369da32242816ee5f8c95428d6db30ce6f16b3ae5a310d54b53090b15eda","/components/tweaks-panel.jsx":"7f1ed91b7998e22f7396f1294cb43b79e4f23f0af39c70f61e7672daee7f7270","/components/motion.jsx":"bb115b90d6c0c89307c7e9b373a4a3356dcbe98f6756dacc112c5df7cf310847","/components/SlideGenerator.jsx":"ebb6917de43a58be317c723fc93a4677260cd1d7893e35f126d63755f8378412","/components/ResetPasswordScreen.jsx":"5a0649e2d484f35898a4af4a5346fed731deed36709526b25c707433d954920b","/components/ProcessingScreen.jsx":"c1124c44d056916747616da054b12f68b57aec23b22bb73d58fefad5c7a53293","/components/PreviewScreen.jsx":"b873b1fa4a77a56aa19cf31c635edb2cdb27c71cb149dd26ae94eed9d2c11bc5","/components/HomeScreenB.jsx":"2582c35a19bf9ff465c48e5493c248f15889e789eaf968539fac268b4f546356","/components/HomeScreenA.jsx":"44cf670ff4e5c3ba310eacfd434df0faab0e5d127857e0001dc5c967c811288c","/components/HomeScreen.jsx":"240cc496a81d9c9b8f38b6f3dabeaaaa1c7de96bee219d9d6d25de05aa312d4a","/components/HistoryScreen.jsx":"a3e9ec6a7f93fa05555ed35d2ebd13c8bf08294f5ea1b91c68ee2b5099fcbad5","/components/ChangePasswordScreen.jsx":"8babfa8f41ac4a9a6b73dc287e454562be6ff4e9a1d238925d85ece39b3ddc4d","/components/AdminScreen.jsx":"0a9b7c68ad59a0a71b37d105e09c387cec8a12048a946e0d5c5c38510ebbfe3f","/index.html":"f1f492f26f30f27ef8647d92b14081c2bd32f02d89d38e35926d62e2b3ddb9ec","/app.jsx":"134d59dc07a6395feacf14245df71fbb6331f84e7ed94973d96e3f52582eae1d","/components/Sidebar.jsx":"cd3ec503f6c48e7cc5b03003956d7a3382a0cebe4854b7f4529f298270dc0914","/components/LoginScreen.jsx":"b5aa7b295600458df333fa1f67fb59b5956cdca3454e9482eff8a9bb5db88d19","/components/AccountSettingsScreen.jsx":"1df0f45620b273d646ffd1fabe6b8e81c24e8c521d13a24279508b247bce14f1","/design-canvas.jsx":"594c5179e184a3fa3890e919380b070ff0aa9311c2777dd949c711ad071bb0ab"}}
+[debug] [2026-05-08T18:44:46.918Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/1054256355272/sites/autodeck-ai/versions/3ff45866f9aa0f41:populateFiles 200
+[debug] [2026-05-08T18:44:46.919Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/1054256355272/sites/autodeck-ai/versions/3ff45866f9aa0f41:populateFiles {"uploadRequiredHashes":["594c5179e184a3fa3890e919380b070ff0aa9311c2777dd949c711ad071bb0ab","134d59dc07a6395feacf14245df71fbb6331f84e7ed94973d96e3f52582eae1d"],"uploadUrl":"https://upload-firebasehosting.googleapis.com/upload/sites/autodeck-ai/versions/3ff45866f9aa0f41/files"}
+[debug] [2026-05-08T18:44:46.921Z] Checked if tokens are valid: true, expires at: 1778269479020
+[debug] [2026-05-08T18:44:46.921Z] Checked if tokens are valid: true, expires at: 1778269479020
+[debug] [2026-05-08T18:44:46.922Z] Checked if tokens are valid: true, expires at: 1778269479020
+[debug] [2026-05-08T18:44:46.922Z] Checked if tokens are valid: true, expires at: 1778269479020
+[debug] [2026-05-08T18:44:46.922Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/autodeck-ai/versions/3ff45866f9aa0f41/files/594c5179e184a3fa3890e919380b070ff0aa9311c2777dd949c711ad071bb0ab [none]
+[debug] [2026-05-08T18:44:46.922Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/autodeck-ai/versions/3ff45866f9aa0f41/files/594c5179e184a3fa3890e919380b070ff0aa9311c2777dd949c711ad071bb0ab [stream]
+[debug] [2026-05-08T18:44:46.924Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/autodeck-ai/versions/3ff45866f9aa0f41/files/134d59dc07a6395feacf14245df71fbb6331f84e7ed94973d96e3f52582eae1d [none]
+[debug] [2026-05-08T18:44:46.925Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/autodeck-ai/versions/3ff45866f9aa0f41/files/134d59dc07a6395feacf14245df71fbb6331f84e7ed94973d96e3f52582eae1d [stream]
+[debug] [2026-05-08T18:44:46.926Z] [hosting][populate queue][FINAL] {"max":1490,"min":1490,"avg":1490,"active":0,"complete":1,"success":1,"errored":0,"retried":0,"total":1,"elapsed":1494}
+[debug] [2026-05-08T18:44:46.926Z] [hosting] uploads queued: 2
+[info] i  hosting: uploading new files [0/2] (0%) 
+[debug] [2026-05-08T18:44:48.048Z] <<< [apiv2][status] POST https://upload-firebasehosting.googleapis.com/upload/sites/autodeck-ai/versions/3ff45866f9aa0f41/files/134d59dc07a6395feacf14245df71fbb6331f84e7ed94973d96e3f52582eae1d 200
+[debug] [2026-05-08T18:44:48.049Z] <<< [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/autodeck-ai/versions/3ff45866f9aa0f41/files/134d59dc07a6395feacf14245df71fbb6331f84e7ed94973d96e3f52582eae1d [stream]
+[debug] [2026-05-08T18:44:48.187Z] <<< [apiv2][status] POST https://upload-firebasehosting.googleapis.com/upload/sites/autodeck-ai/versions/3ff45866f9aa0f41/files/594c5179e184a3fa3890e919380b070ff0aa9311c2777dd949c711ad071bb0ab 200
+[debug] [2026-05-08T18:44:48.187Z] <<< [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/autodeck-ai/versions/3ff45866f9aa0f41/files/594c5179e184a3fa3890e919380b070ff0aa9311c2777dd949c711ad071bb0ab [stream]
+[debug] [2026-05-08T18:44:48.188Z] [hosting][upload queue][FINAL] {"max":1268,"min":1128,"avg":1198,"active":0,"complete":2,"success":2,"errored":0,"retried":0,"total":2,"elapsed":1268}
+[info] i  hosting: upload complete 
+[info] ✔  hosting[autodeck-ai]: file upload complete 
+[debug] [2026-05-08T18:44:48.188Z] [hosting] deploy completed after 2784ms
+[debug] [2026-05-08T18:44:48.189Z] [
+  {
+    "config": {
+      "public": "AutoDeck AI",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**",
+        "screenshots/**",
+        "firebase-config.example.js",
+        "**/*.sh",
+        "**/*.bat",
+        "**/*.ps1"
+      ],
+      "rewrites": [
+        {
+          "source": "/",
+          "destination": "/index.html"
+        }
+      ],
+      "headers": [
+        {
+          "source": "**/*.jsx",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/javascript"
+            }
+          ]
+        }
+      ],
+      "site": "autodeck-ai"
+    },
+    "version": "projects/1054256355272/sites/autodeck-ai/versions/3ff45866f9aa0f41"
+  }
+]
+[info] i  hosting[autodeck-ai]: finalizing version... 
+[debug] [2026-05-08T18:44:48.190Z] Checked if tokens are valid: true, expires at: 1778269479020
+[debug] [2026-05-08T18:44:48.190Z] Checked if tokens are valid: true, expires at: 1778269479020
+[debug] [2026-05-08T18:44:48.192Z] >>> [apiv2][query] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/autodeck-ai/versions/3ff45866f9aa0f41 updateMask=status%2Cconfig
+[debug] [2026-05-08T18:44:48.192Z] >>> [apiv2][body] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/autodeck-ai/versions/3ff45866f9aa0f41 {"status":"FINALIZED","config":{"rewrites":[{"glob":"/","path":"/index.html"}],"headers":[{"glob":"**/*.jsx","headers":{"Content-Type":"application/javascript"}}]}}
+[debug] [2026-05-08T18:44:50.342Z] <<< [apiv2][status] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/autodeck-ai/versions/3ff45866f9aa0f41 200
+[debug] [2026-05-08T18:44:50.343Z] <<< [apiv2][body] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/autodeck-ai/versions/3ff45866f9aa0f41 {"name":"projects/1054256355272/sites/autodeck-ai/versions/3ff45866f9aa0f41","status":"FINALIZED","config":{"headers":[{"headers":{"Content-Type":"application/javascript"},"glob":"**/*.jsx"}],"rewrites":[{"glob":"/","path":"/index.html"}]},"labels":{"deployment-tool":"cli-firebase"},"createTime":"2026-05-08T18:44:44.042492Z","createUser":{"email":"baekechi@quidax.com"},"finalizeTime":"2026-05-08T18:44:50.227132Z","finalizeUser":{"email":"baekechi@quidax.com"}}
+[debug] [2026-05-08T18:44:50.343Z] [hosting] finalized version for autodeck-ai:[object Object]
+[info] ✔  hosting[autodeck-ai]: version finalized 
+[info] i  hosting[autodeck-ai]: releasing new version... 
+[debug] [2026-05-08T18:44:50.343Z] Checked if tokens are valid: true, expires at: 1778269479020
+[debug] [2026-05-08T18:44:50.343Z] Checked if tokens are valid: true, expires at: 1778269479020
+[debug] [2026-05-08T18:44:50.344Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/autodeck-ai/channels/live/releases versionName=projects%2F1054256355272%2Fsites%2Fautodeck-ai%2Fversions%2F3ff45866f9aa0f41
+[debug] [2026-05-08T18:44:50.344Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/autodeck-ai/channels/live/releases {}
+[debug] [2026-05-08T18:44:51.781Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/autodeck-ai/channels/live/releases 200
+[debug] [2026-05-08T18:44:51.781Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/autodeck-ai/channels/live/releases {"name":"projects/1054256355272/sites/autodeck-ai/channels/live/releases/1778265890671000","version":{"name":"projects/1054256355272/sites/autodeck-ai/versions/3ff45866f9aa0f41","status":"FINALIZED","config":{"headers":[{"headers":{"Content-Type":"application/javascript"},"glob":"**/*.jsx"}],"rewrites":[{"glob":"/","path":"/index.html"}]},"labels":{"deployment-tool":"cli-firebase"},"createTime":"2026-05-08T18:44:44.042492Z","createUser":{"email":"baekechi@quidax.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocLEpD3dyB6DbnaFlohBPFXUYZWqb_FbWevsrFJYy_VgsvMZsYs"},"finalizeTime":"2026-05-08T18:44:50.227132Z","finalizeUser":{"email":"baekechi@quidax.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocLEpD3dyB6DbnaFlohBPFXUYZWqb_FbWevsrFJYy_VgsvMZsYs"}},"type":"DEPLOY","releaseTime":"2026-05-08T18:44:50.671Z","releaseUser":{"email":"baekechi@quidax.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocLEpD3dyB6DbnaFlohBPFXUYZWqb_FbWevsrFJYy_VgsvMZsYs"}}
+[debug] [2026-05-08T18:44:51.781Z] [hosting] release: {"name":"projects/1054256355272/sites/autodeck-ai/channels/live/releases/1778265890671000","version":{"name":"projects/1054256355272/sites/autodeck-ai/versions/3ff45866f9aa0f41","status":"FINALIZED","config":{"headers":[{"headers":{"Content-Type":"application/javascript"},"glob":"**/*.jsx"}],"rewrites":[{"glob":"/","path":"/index.html"}]},"labels":{"deployment-tool":"cli-firebase"},"createTime":"2026-05-08T18:44:44.042492Z","createUser":{"email":"baekechi@quidax.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocLEpD3dyB6DbnaFlohBPFXUYZWqb_FbWevsrFJYy_VgsvMZsYs"},"finalizeTime":"2026-05-08T18:44:50.227132Z","finalizeUser":{"email":"baekechi@quidax.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocLEpD3dyB6DbnaFlohBPFXUYZWqb_FbWevsrFJYy_VgsvMZsYs"}},"type":"DEPLOY","releaseTime":"2026-05-08T18:44:50.671Z","releaseUser":{"email":"baekechi@quidax.com","imageUrl":"https://lh3.googleusercontent.com/a/ACg8ocLEpD3dyB6DbnaFlohBPFXUYZWqb_FbWevsrFJYy_VgsvMZsYs"}}
+[info] ✔  hosting[autodeck-ai]: release complete 
+[info] 
+[info] ✔  Deploy complete! 
+[info] 
+[info] Project Console: https://console.firebase.google.com/project/autodeck-ai/overview
+[info] Hosting URL: https://autodeck-ai.web.app
