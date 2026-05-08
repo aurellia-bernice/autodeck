@@ -13,7 +13,8 @@
       "Bash(find \"/Users/aurellia_amore/Downloads\" \"/Users/aurellia_amore/Desktop\" -name \"*.jsx\" 2>/dev/null | head -10)",
       "Read(//Users/aurellia_amore/Downloads/**)",
       "Bash(find \"/Users/aurellia_amore\" -name \"s.jsx\" 2>/dev/null)",
-      "Read(//Users/aurellia_amore/**)"
+      "Read(//Users/aurellia_amore/**)",
+      "Bash(git checkout *)"
     ]
   }
 }
