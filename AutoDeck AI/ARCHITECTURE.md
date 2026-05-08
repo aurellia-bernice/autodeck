@@ -2,7 +2,7 @@
 
 ## What is AutoDeck AI?
 
-AutoDeck AI is an internal Quidax tool that lets employees turn raw notes or uploaded documents into fully branded presentations. It is currently a **100% client-side prototype** — no backend, no database, no API calls. All state lives in React component memory and is lost on page refresh.
+AutoDeck AI is an internal Quidax tool that lets employees turn raw notes or uploaded documents into fully branded presentations. It is currently a **client-side prototype** with Firebase Auth integration. While it uses real authentication, the presentation data and state still live in React component memory and are lost on page refresh (no Firestore persistence yet).
 
 ---
 
@@ -17,7 +17,7 @@ AutoDeck AI is an internal Quidax tool that lets employees turn raw notes or upl
 | Fonts | Calibri / Arial Black (system fonts) | No Google Fonts dependency |
 | Images | picsum.photos seed URLs | Free, no API key, consistent results per keyword |
 | AI agent | Simulated (keyword rule engine) | No LLM call yet — parses words like "shorter", "add bullet" |
-| Auth | Simulated (no real token/session) | LoginScreen accepts any email+password |
+| Auth | Firebase Auth | Integrated with Email/Password and Google SSO |
 | Storage | None | Zero persistence — everything resets on refresh |
 
 ---
@@ -28,13 +28,20 @@ AutoDeck AI is an internal Quidax tool that lets employees turn raw notes or upl
 AutoDeck AI/
 ├── AutoDeck AI.html          # Entry point — loads scripts in order via <script type="text/babel">
 ├── app.jsx                   # Root component, router (screen state), TweaksPanel
+├── tokens.jsx                # Design tokens (colors, type, etc.)
 ├── start-server.sh           # Mac/Linux: python3 -m http.server 8080
 ├── start-server.bat          # Windows: python -m http.server 8080
 └── components/
+    ├── motion.jsx            # Shared motion/animation primitives (Framer Motion style)
     ├── tweaks-panel.jsx      # Dev tool: useTweaks hook + TweakToggle/Radio/Select/Section
-    ├── LoginScreen.jsx       # Auth UI — email/password form + SSO button (simulated)
+    ├── LoginScreen.jsx       # Auth UI — email/password form + SSO button
     ├── Sidebar.jsx           # Left nav — Home, History, Admin links + user badge
-    ├── HomeScreen.jsx        # Generate form — text input, file upload, slide count, template picker
+    ├── HomeScreen.jsx        # Wrapper for Home variants
+    ├── HomeScreenA.jsx       # Home variant A
+    ├── HomeScreenB.jsx       # Home variant B
+    ├── AccountSettingsScreen.jsx # User profile and settings
+    ├── ChangePasswordScreen.jsx  # Change password UI
+    ├── ResetPasswordScreen.jsx   # Reset password UI
     ├── ProcessingScreen.jsx  # Animated progress screen — 4 phases, ~15s simulated generation
     ├── PreviewScreen.jsx     # Card grid of generated slides — edit, delete, add, reorder
     ├── SlideGenerator.jsx    # Gamma-style slideshow — themes, layouts, alignment, image search, AI agent chat
@@ -256,11 +263,10 @@ These are the same underlying database. "Firebase Firestore" is the developer-fr
 
 ## What to Build Next (in order)
 
-1. **Wire up Firebase Auth** — replace the fake login with `signInWithEmailAndPassword` + `GoogleAuthProvider` for SSO. 5–10 lines of code.
-2. **Persist Decks + Slides to Firestore** — after ProcessingScreen completes, write the generated slides to `decks/{deckId}/slides/`. History screen reads from the same collection filtered by `userId`.
-3. **Move generation to a server** — currently the "AI" is a keyword rule engine in the browser. A Cloud Function (or any API) can run a real LLM call, write results to Firestore, and the client listens with `onSnapshot`.
-4. **Firebase Storage** for uploaded files (PDF/DOCX) and brand logo.
-5. **Brand config** — write AdminScreen's "Save" buttons to the `config/brand` Firestore document. All clients read it on load.
+1. **Persist Decks + Slides to Firestore** — after ProcessingScreen completes, write the generated slides to `decks/{deckId}/slides/`. History screen reads from the same collection filtered by `userId`.
+2. **Move generation to a server** — currently the "AI" is a keyword rule engine in the browser. A Cloud Function (or any API) can run a real LLM call, write results to Firestore, and the client listens with `onSnapshot`.
+3. **Firebase Storage** for uploaded files (PDF/DOCX) and brand logo.
+4. **Brand config** — write AdminScreen's "Save" buttons to the `config/brand` Firestore document. All clients read it on load.
 
 ---
 
@@ -269,7 +275,6 @@ These are the same underlying database. "Firebase Firestore" is the developer-fr
 | Gap | Impact | Fix |
 |---|---|---|
 | No real AI generation | Core feature is fake (hardcoded slides) | Integrate Claude/GPT API in a Cloud Function |
-| No auth | Anyone can open the URL | Firebase Auth |
 | No persistence | History, edits lost on refresh | Firestore |
 | File upload UI exists but files aren't parsed | Drag-and-drop accepts files but discards them | Server-side parser (Cloud Function + PDF.js or Unstructured) |
 | PPTX export is a toast | "Download PPTX" shows a notification, no file | pptxgenjs library or a server-side export function |
