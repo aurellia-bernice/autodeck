@@ -377,7 +377,7 @@ const App = () => {
           />
         )}
         {screen === 'admin' && userRole === 'admin' && (
-          <AdminScreen tweaks={tweaks} brandConfig={brandConfig} onBrandSave={setBrandConfig} />
+          <AdminScreen tweaks={tweaks} brandConfig={brandConfig} onBrandSave={(cfg) => setBrandConfig(p => ({ ...p, ...cfg }))} />
         )}
         {screen === 'admin' && userRole !== 'admin' && (
           <div style={{

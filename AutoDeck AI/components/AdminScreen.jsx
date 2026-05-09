@@ -87,9 +87,15 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
     return remaining;
   });
 
-  const [displayFont, setDisplayFont] = React.useState(FONTS[0]);
-  const [bodyFont,    setBodyFont]    = React.useState(FONTS[1]);
-  const [fontSaved,   setFontSaved]   = React.useState(false);
+  const [displayFont, setDisplayFont] = React.useState(() => {
+    if (brandConfig?.displayFont) return FONTS.find(f => f.family === brandConfig.displayFont) || FONTS[0];
+    return FONTS[0];
+  });
+  const [bodyFont, setBodyFont] = React.useState(() => {
+    if (brandConfig?.bodyFont) return FONTS.find(f => f.family === brandConfig.bodyFont) || FONTS[1];
+    return FONTS[1];
+  });
+  const [fontSaved, setFontSaved] = React.useState(false);
 
   const loadGoogleFont = (google) => {
     if (!google) return;
@@ -271,7 +277,12 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
           {/* Save */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12 }}>
             {fontSaved && <span style={{ fontSize: 13, color: '#1F8A5B' }}>✓ Saved</span>}
-            <button onClick={() => { setFontSaved(true); setTimeout(() => setFontSaved(false), 2000); }} style={primaryLimeButton()}>
+            <button onClick={() => {
+              const cfg = { displayFont: displayFont.family, bodyFont: bodyFont.family };
+              onBrandSave && onBrandSave(cfg);
+              if (window.firebaseDb) window.firebaseDb.doc('config/brand').set(cfg, { merge: true }).catch(() => {});
+              setFontSaved(true); setTimeout(() => setFontSaved(false), 2000);
+            }} style={primaryLimeButton()}>
               Save typography
             </button>
           </div>
