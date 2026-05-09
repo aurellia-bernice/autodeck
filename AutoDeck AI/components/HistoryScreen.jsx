@@ -2,7 +2,18 @@
 // HistoryScreen — like a library, not a table.
 // Featured deck up top, masonry of past decks below, quick stats strip.
 // ============================================================
-const HistoryScreen = ({ tweaks }) => {
+const SEED_DECKS = [
+  { id: 's1', title: 'Q2 Sales Strategy Overview',  slides: 10, template: 'Professional', date: '2026-05-03', size: '2.4 MB', author: 'Adaeze O.', favourite: true },
+  { id: 's2', title: 'Product Roadmap H2 2026',      slides: 8,  template: 'Bold',         date: '2026-05-02', size: '1.8 MB', author: 'Tunde A.',  favourite: false },
+  { id: 's3', title: 'HR Onboarding — New Hires',    slides: 15, template: 'Minimal',      date: '2026-04-30', size: '3.1 MB', author: 'Chiamaka I.', favourite: true },
+  { id: 's4', title: 'Engineering All Hands April',  slides: 12, template: 'Corporate',    date: '2026-04-28', size: '2.0 MB', author: 'Femi K.',   favourite: false },
+  { id: 's5', title: 'Investor Update — Series B',   slides: 10, template: 'Professional', date: '2026-04-22', size: '2.7 MB', author: 'Adaeze O.', favourite: true },
+  { id: 's6', title: 'Brand Guidelines 2026',        slides: 20, template: 'Bold',         date: '2026-04-18', size: '4.2 MB', author: 'Design',    favourite: false },
+  { id: 's7', title: 'Customer Success Stories Q1',  slides: 8,  template: 'Minimal',      date: '2026-04-10', size: '1.5 MB', author: 'Sade B.',   favourite: false },
+  { id: 's8', title: 'Operations Review March',      slides: 10, template: 'Corporate',    date: '2026-03-31', size: '2.2 MB', author: 'Tunde A.',  favourite: false },
+];
+
+const HistoryScreen = ({ tweaks, currentUser }) => {
   const T = qxTheme(tweaks?.darkMode);
   const dark = tweaks?.darkMode;
   const [search, setSearch] = React.useState('');
@@ -16,23 +27,46 @@ const HistoryScreen = ({ tweaks }) => {
     Corporate:    ['#0F0A24', '#312E81', '#A5B4FC'],
   };
 
-  const [decks, setDecks] = React.useState([
-    { id: 1, title: 'Q2 Sales Strategy Overview',  slides: 10, template: 'Professional', date: '2026-05-03', size: '2.4 MB', author: 'Adaeze O.', favourite: true },
-    { id: 2, title: 'Product Roadmap H2 2026',      slides: 8,  template: 'Bold',         date: '2026-05-02', size: '1.8 MB', author: 'Tunde A.',  favourite: false },
-    { id: 3, title: 'HR Onboarding — New Hires',    slides: 15, template: 'Minimal',      date: '2026-04-30', size: '3.1 MB', author: 'Chiamaka I.', favourite: true },
-    { id: 4, title: 'Engineering All Hands April',  slides: 12, template: 'Corporate',    date: '2026-04-28', size: '2.0 MB', author: 'Femi K.',   favourite: false },
-    { id: 5, title: 'Investor Update — Series B',   slides: 10, template: 'Professional', date: '2026-04-22', size: '2.7 MB', author: 'Adaeze O.', favourite: true },
-    { id: 6, title: 'Brand Guidelines 2026',        slides: 20, template: 'Bold',         date: '2026-04-18', size: '4.2 MB', author: 'Design',    favourite: false },
-    { id: 7, title: 'Customer Success Stories Q1',  slides: 8,  template: 'Minimal',      date: '2026-04-10', size: '1.5 MB', author: 'Sade B.',   favourite: false },
-    { id: 8, title: 'Operations Review March',      slides: 10, template: 'Corporate',    date: '2026-03-31', size: '2.2 MB', author: 'Tunde A.',  favourite: false },
-  ]);
+  const [decks, setDecks] = React.useState(SEED_DECKS);
+
+  React.useEffect(() => {
+    if (!window.firebaseDb || !currentUser?.uid) return;
+    const unsub = window.firebaseDb
+      .collection('decks')
+      .where('userId', '==', currentUser.uid)
+      .orderBy('createdAt', 'desc')
+      .onSnapshot((snap) => {
+        if (snap.empty) return;
+        const live = snap.docs.map((doc) => {
+          const d = doc.data();
+          const ts = d.createdAt?.toDate?.();
+          return {
+            id: doc.id,
+            title: d.title || 'Untitled',
+            slides: d.slideCount || 0,
+            template: d.templateStyle || 'Professional',
+            date: ts ? ts.toISOString().slice(0, 10) : '',
+            size: `${d.slideCount || 0} slides`,
+            author: d.author || currentUser.displayName || currentUser.email?.split('@')[0] || '',
+            favourite: false,
+          };
+        });
+        setDecks(live);
+      }, () => {});
+    return () => unsub();
+  }, [currentUser?.uid]);
 
   const templates = ['All', 'Professional', 'Minimal', 'Bold', 'Corporate'];
   const filtered = decks.filter(d => d.title.toLowerCase().includes(search.toLowerCase()) && (filter === 'All' || d.template === filter));
   const featured = filtered[0];
   const rest = filtered.slice(1);
   const fmt = (s) => new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-  const handleDelete = (id) => setDecks(p => p.filter(d => d.id !== id));
+  const handleDelete = (id) => {
+    setDecks(p => p.filter(d => d.id !== id));
+    if (window.firebaseDb && !String(id).startsWith('s')) {
+      window.firebaseDb.collection('decks').doc(id).delete().catch(() => {});
+    }
+  };
   const toggleFav = (id) => setDecks(p => p.map(d => d.id === id ? { ...d, favourite: !d.favourite } : d));
 
   const totalSlides = decks.reduce((s, d) => s + d.slides, 0);

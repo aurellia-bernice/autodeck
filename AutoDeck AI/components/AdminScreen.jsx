@@ -17,14 +17,14 @@ const ghostButton = (T) => ({
   cursor: 'pointer',
 });
 
-const AdminScreen = ({ tweaks }) => {
+const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
   const T = qxTheme(tweaks?.darkMode);
   const [tab, setTab] = React.useState('brand');
-  const [colors, setColors] = React.useState({
+  const [colors, setColors] = React.useState(brandConfig?.colors || {
     primary: '#5F2A91', secondary: '#7A3FB0', accent: '#B891DC',
     lime: '#D4FF3F', bgDark: '#0F031F', bgLight: '#FAF8FC',
   });
-  const [voice, setVoice] = React.useState('professional');
+  const [voice, setVoice] = React.useState(brandConfig?.voice || 'professional');
   const [saved, setSaved] = React.useState(false);
 
   const tabs = [
@@ -105,7 +105,12 @@ const AdminScreen = ({ tweaks }) => {
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12, marginTop: 20 }}>
             {saved && <span style={{ fontSize: 13, color: '#1F8A5B' }}>✓ Saved</span>}
-            <button onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 2000); }} style={primaryLimeButton()}>
+            <button onClick={() => {
+              const cfg = { colors, voice };
+              onBrandSave && onBrandSave(cfg);
+              if (window.firebaseDb) window.firebaseDb.doc('config/brand').set(cfg).catch(() => {});
+              setSaved(true); setTimeout(() => setSaved(false), 2000);
+            }} style={primaryLimeButton()}>
               Save palette
             </button>
           </div>
@@ -204,8 +209,14 @@ const AdminScreen = ({ tweaks }) => {
               </div>
             </div>
           ))}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-            <button style={primaryLimeButton()}>Save voice</button>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12, marginTop: 16 }}>
+            {saved && <span style={{ fontSize: 13, color: '#1F8A5B' }}>✓ Saved</span>}
+            <button onClick={() => {
+              const cfg = { colors, voice };
+              onBrandSave && onBrandSave(cfg);
+              if (window.firebaseDb) window.firebaseDb.doc('config/brand').set(cfg).catch(() => {});
+              setSaved(true); setTimeout(() => setSaved(false), 2000);
+            }} style={primaryLimeButton()}>Save voice</button>
           </div>
         </Card>
       )}

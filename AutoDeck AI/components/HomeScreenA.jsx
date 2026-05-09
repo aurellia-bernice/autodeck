@@ -8,14 +8,60 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
   const [slideCount, setSlideCount] = React.useState('Auto');
   const [templateStyle, setTemplateStyle] = React.useState('Professional');
   const [uploadedFile, setUploadedFile] = React.useState(null);
+  const [parsedFileText, setParsedFileText] = React.useState('');
+  const [parsing, setParsing] = React.useState(false);
   const [dragOver, setDragOver] = React.useState(false);
   const [activePrompt, setActivePrompt] = React.useState(0);
+
+  const parseFile = async (file) => {
+    if (!file) { setParsedFileText(''); return; }
+    const ext = file.name.split('.').pop().toLowerCase();
+    setParsing(true);
+    try {
+      if (ext === 'txt') {
+        const text = await new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = e => res(e.target.result);
+          r.onerror = rej;
+          r.readAsText(file);
+        });
+        setParsedFileText(text);
+      } else if (ext === 'pdf' && window.pdfjsLib) {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        const buf = await file.arrayBuffer();
+        const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+        const pages = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          pages.push(content.items.map(item => item.str).join(' '));
+        }
+        setParsedFileText(pages.join('\n'));
+      } else if (ext === 'docx' && window.firebase?.app) {
+        const base64 = await new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = e => res(String(e.target.result || '').split(',')[1] || '');
+          r.onerror = rej;
+          r.readAsDataURL(file);
+        });
+        const parseDocxFn = firebase.app().functions('us-central1').httpsCallable('parseDocx');
+        const { data } = await parseDocxFn({ base64 });
+        setParsedFileText(data?.text || '');
+      } else {
+        setParsedFileText('');
+      }
+    } catch (_) {
+      setParsedFileText('');
+    }
+    setParsing(false);
+  };
 
   const slideOptions = ['5', '8', '10', '15', 'Auto'];
   const templates = ['Professional', 'Minimal', 'Bold', 'Corporate'];
 
-  const canGenerate = inputText.trim().length > 10 || uploadedFile;
+  const canGenerate = !parsing && (inputText.trim().length > 10 || uploadedFile);
   const wordCount = inputText.trim() ? inputText.trim().split(/\s+/).length : 0;
+  const parsedWordCount = parsedFileText.trim() ? parsedFileText.trim().split(/\s+/).length : 0;
   const estSlides = wordCount > 0 ? Math.max(3, Math.min(20, Math.round(wordCount / 60))) : 0;
 
   const promptIdeas = [
@@ -35,7 +81,7 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
   const handleDrop = (e) => {
     e.preventDefault(); setDragOver(false);
     const file = e.dataTransfer.files[0];
-    if (file) setUploadedFile(file);
+    if (file) { setUploadedFile(file); parseFile(file); }
   };
 
   return (
@@ -165,12 +211,12 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
               {uploadedFile ? truncate(uploadedFile.name, 22) : 'Attach file'}
             </button>
             <input id="hsAFile" type="file" accept=".pdf,.docx,.txt,.pptx" style={{ display: 'none' }}
-                   onChange={e => e.target.files[0] && setUploadedFile(e.target.files[0])} />
+                   onChange={e => { const f = e.target.files[0]; if (f) { setUploadedFile(f); parseFile(f); } }} />
 
             <div style={{ flex: 1 }} />
 
             <span style={{ fontFamily: qxType.mono, fontSize: 11, color: T.inkMute, letterSpacing: '0.05em' }}>
-              {wordCount > 0 ? `${wordCount.toLocaleString()} words · ~${estSlides} slides` : 'or drag a file'}
+              {parsing ? 'parsing file...' : parsedWordCount > 0 ? `${parsedWordCount.toLocaleString()} file words parsed` : wordCount > 0 ? `${wordCount.toLocaleString()} words · ~${estSlides} slides` : 'or drag a file'}
             </span>
           </div>
         </div>
@@ -188,7 +234,7 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
         {/* CTA — the lime moment */}
         <div style={{ ...qxMotion.fadeUp(360), marginTop: 36, display: 'flex', alignItems: 'center', gap: 16 }}>
           <button
-            onClick={() => canGenerate && onGenerate({ inputText, slideCount, templateStyle, uploadedFile })}
+            onClick={() => canGenerate && onGenerate({ inputText, slideCount, templateStyle, uploadedFile, parsedFileText })}
             disabled={!canGenerate}
             style={{
               padding: '17px 32px', borderRadius: qxRadius.full,
@@ -204,7 +250,7 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
             }}
             onMouseEnter={e => { if (canGenerate) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 36px rgba(212,255,63,0.55)'; } }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; if (canGenerate) e.currentTarget.style.boxShadow = '0 8px 30px rgba(212,255,63,0.42)'; }}>
-            Generate deck
+            {parsing ? 'Parsing file...' : 'Generate deck'}
             <svg width="15" height="15" viewBox="0 0 14 14" fill="none">
               <path d="M3 7h8M8 4l3 3-3 3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>

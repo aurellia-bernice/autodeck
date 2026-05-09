@@ -3,7 +3,60 @@
 // The deck announces itself like a magazine. The outline below
 // is dense, ranked, and inline-editable. One lime moment: Open.
 // ============================================================
-const PreviewScreen = ({ config, onGenerateAgain, onViewSlideshow, tweaks }) => {
+const normalizePreviewSlides = (slides) => {
+  if (!Array.isArray(slides)) return [];
+  return slides
+    .map((slide) => {
+      const title = String(slide?.title || '').trim();
+      const bullets = Array.isArray(slide?.bullets)
+        ? slide.bullets.map((b) => String(b || '').trim()).filter(Boolean)
+        : [];
+      return { ...slide, title, bullets: bullets.slice(0, 4) };
+    })
+    .filter((slide) => slide.title || slide.bullets.length);
+};
+
+const makePreviewDraftSlides = (config, count) => {
+  const source = [
+    config?.inputText,
+    config?.parsedFileText,
+    config?.uploadedFile?.name ? `Source document: ${config.uploadedFile.name}` : '',
+  ].filter(Boolean).join('\n\n').trim();
+  if (!source) return [];
+
+  const clean = (value, maxWords = 18) => String(value || '')
+    .replace(/^[\s\-*0-9.)]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, maxWords)
+    .join(' ')
+    .replace(/[.,;:!]+$/, '');
+  const title = (value, fallback) => {
+    const t = clean(value, 8);
+    return t ? t.charAt(0).toUpperCase() + t.slice(1) : fallback;
+  };
+  const compact = source.replace(/\s+/g, ' ').trim();
+  const sentences = (compact.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [compact])
+    .map((s) => clean(s, 22))
+    .filter(Boolean);
+
+  return Array.from({ length: count }, (_, i) => {
+    const start = Math.floor((i * sentences.length) / count);
+    const end = Math.max(start + 1, Math.floor(((i + 1) * sentences.length) / count));
+    const chunk = sentences.slice(start, end);
+    const bullets = chunk.slice(0, 4);
+    while (bullets.length < 2) bullets.push('Clarify the main takeaway for this section');
+    return {
+      title: i === 0 ? title(compact, 'Presentation Overview') : title(chunk[0], `Section ${i + 1}`),
+      kicker: i === 0 ? 'Overview' : 'From your context',
+      bullets,
+    };
+  });
+};
+
+const PreviewScreen = ({ config, slides: generatedSlides = [], generationStatus = 'idle', generationError, onGenerateAgain, onViewSlideshow, tweaks }) => {
   const T = qxTheme(tweaks?.darkMode);
   const dark = tweaks?.darkMode;
   const [editingIndex, setEditingIndex] = React.useState(null);
@@ -11,9 +64,10 @@ const PreviewScreen = ({ config, onGenerateAgain, onViewSlideshow, tweaks }) => 
   const [expanded, setExpanded] = React.useState(new Set([0]));
   const [theme, setTheme] = React.useState('purple');
 
-  const inputText = config?.inputText || 'Q2 Sales Strategy and market expansion plan for Quidax';
+  const inputText = config?.inputText || config?.parsedFileText || config?.uploadedFile?.name || 'Q2 Sales Strategy and market expansion plan for Quidax';
   const deckTitle = inputText.trim().split(/\s+/).slice(0, 8).join(' ').replace(/[.,;:!]+$/, '');
   const slideCount = config?.slideCount === 'Auto' || !config?.slideCount ? 10 : (parseInt(config.slideCount) || 10);
+  const incomingSlides = normalizePreviewSlides(generatedSlides);
 
   const seed = [
     { title: 'Executive Summary',     kicker: 'Where we stand',      bullets: ['Strong Q2 performance across all verticals', 'New markets entered: Ghana, Senegal', 'Revenue up 34% YoY'] },
@@ -27,7 +81,18 @@ const PreviewScreen = ({ config, onGenerateAgain, onViewSlideshow, tweaks }) => 
     { title: 'Partnerships',          kicker: 'Who we built with',   bullets: ['MTN Mobile Money integration live', 'Flutterwave API partnership signed', 'Binance liquidity pool access'] },
     { title: 'Next Steps & Asks',     kicker: 'Calls to action',     bullets: ['Board approval for Series B extension', 'Regulatory counsel in 3 new markets', 'Marketing budget increase for Q3'] },
   ];
-  const [slides, setSlides] = React.useState(seed.slice(0, slideCount));
+  const initialSlides = incomingSlides.length
+    ? incomingSlides
+    : (makePreviewDraftSlides(config, slideCount).length ? makePreviewDraftSlides(config, slideCount) : seed.slice(0, slideCount));
+  const [slides, setSlides] = React.useState(initialSlides);
+
+  React.useEffect(() => {
+    const nextSlides = normalizePreviewSlides(generatedSlides);
+    if (!nextSlides.length) return;
+    setSlides(nextSlides);
+    setEditingIndex(null);
+    setExpanded(new Set([0]));
+  }, [JSON.stringify(incomingSlides.map((s) => ({ title: s.title, bullets: s.bullets })))]);
 
   const toggleExpand = (i) => setExpanded(prev => {
     const next = new Set(prev);
@@ -188,17 +253,23 @@ const PreviewScreen = ({ config, onGenerateAgain, onViewSlideshow, tweaks }) => 
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: T.bg, fontFamily: qxType.body, color: T.ink, padding: '32px 40px 80px' }}>
+      <div style={{ minHeight: '100vh', background: T.bg, fontFamily: qxType.body, color: T.ink, padding: '32px 40px 80px' }}>
       {/* Eyebrow strip */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div style={{ fontFamily: qxType.mono, fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.inkMute, display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: QX.lime, boxShadow: `0 0 12px ${QX.lime}`, animation: 'qxBreathe 2.4s ease-in-out infinite' }} />
-          Ready · Just generated
+          {generationStatus === 'error' ? 'Ready · Context draft' : 'Ready · Just generated'}
         </div>
         <div style={{ fontFamily: qxType.mono, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.inkMute }}>
           AutoDeck AI · Preview
         </div>
       </div>
+
+      {generationStatus === 'error' && generationError && (
+        <div style={{ marginBottom: 18, padding: '12px 16px', borderRadius: qxRadius.sm, border: `1px solid ${T.border}`, background: T.surface, color: T.inkDim, fontSize: 13.5 }}>
+          {generationError}
+        </div>
+      )}
 
       <Cover />
 

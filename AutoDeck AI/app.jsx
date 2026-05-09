@@ -7,10 +7,83 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
 }/*EDITMODE-END*/;
 
 const ADMIN_EMAILS = ['admin@quidax.com'];
+const GENERATION_TIMEOUT_MS = 105000;
 
 const isAdminUser = (user) => {
   const email = user?.email?.toLowerCase();
   return ADMIN_EMAILS.includes(email);
+};
+
+const normalizeDeckSlides = (slides) => {
+  if (!Array.isArray(slides)) return [];
+  return slides
+    .map((slide) => {
+      const title = String(slide?.title || '').trim();
+      const bullets = Array.isArray(slide?.bullets)
+        ? slide.bullets.map((b) => String(b || '').trim()).filter(Boolean)
+        : [];
+      return { title, bullets: bullets.slice(0, 4) };
+    })
+    .filter((slide) => slide.title || slide.bullets.length);
+};
+
+const requestedSlideCount = (slideCount, sourceText = '') => {
+  const explicit = parseInt(slideCount, 10);
+  if (Number.isFinite(explicit) && explicit > 0) return Math.max(3, Math.min(20, explicit));
+  const words = sourceText.trim() ? sourceText.trim().split(/\s+/).length : 0;
+  return Math.max(5, Math.min(12, Math.round(words / 80) || 8));
+};
+
+const cleanSlideText = (value, maxWords = 18) => {
+  const words = String(value || '')
+    .replace(/^[\s\-*0-9.)]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  return words.slice(0, maxWords).join(' ').replace(/[.,;:!]+$/, '');
+};
+
+const titleFromText = (text, fallback) => {
+  const cleaned = cleanSlideText(text, 8);
+  if (!cleaned) return fallback;
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+};
+
+const buildContextDraftSlides = (config = {}) => {
+  const source = [
+    config.inputText,
+    config.parsedFileText,
+    config.uploadedFile?.name ? `Source document: ${config.uploadedFile.name}` : '',
+  ].filter(Boolean).join('\n\n').trim();
+  if (!source) return [];
+
+  const count = requestedSlideCount(config.slideCount, source);
+  const compact = source.replace(/\s+/g, ' ').trim();
+  const sentences = (compact.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [compact])
+    .map((s) => cleanSlideText(s, 22))
+    .filter(Boolean);
+  const words = compact.toLowerCase().match(/[a-z0-9]{4,}/g) || [];
+  const stop = new Set(['this', 'that', 'with', 'from', 'have', 'will', 'your', 'about', 'into', 'their', 'there', 'where', 'when', 'what', 'were', 'been', 'being', 'they', 'them', 'than', 'then', 'also', 'should', 'could']);
+  const keywords = [...new Set(words.filter((w) => !stop.has(w)))].slice(0, 12);
+
+  return Array.from({ length: count }, (_, i) => {
+    const start = Math.floor((i * sentences.length) / count);
+    const end = Math.max(start + 1, Math.floor(((i + 1) * sentences.length) / count));
+    const chunk = sentences.slice(start, end);
+    const focus = chunk[0] || sentences[i % sentences.length] || compact;
+    const bullets = chunk.slice(0, 4);
+
+    while (bullets.length < 2) {
+      const keyword = keywords[(i + bullets.length) % keywords.length];
+      bullets.push(keyword ? `Focus on ${keyword} as a key message` : 'Clarify the main takeaway for this section');
+    }
+
+    return {
+      title: i === 0 ? titleFromText(compact, 'Presentation Overview') : titleFromText(focus, `Section ${i + 1}`),
+      bullets,
+    };
+  });
 };
 
 const App = () => {
@@ -21,8 +94,21 @@ const App = () => {
   const [authReady, setAuthReady] = React.useState(false);
   const [authError, setAuthError] = React.useState("");
   const [slideshowSlides, setSlideshowSlides] = React.useState(null);
+  const [brandConfig, setBrandConfig] = React.useState(null);
+  const [generationStatus, setGenerationStatus] = React.useState('idle');
+  const [generationError, setGenerationError] = React.useState('');
+  const [activeDeckId, setActiveDeckId] = React.useState(null);
+  const generationRunRef = React.useRef(0);
 
   const userRole = isAdminUser(currentUser) ? 'admin' : 'employee';
+
+  React.useEffect(() => {
+    if (window.firebaseDb) {
+      window.firebaseDb.doc('config/brand').get()
+        .then(doc => { if (doc.exists) setBrandConfig(doc.data()); })
+        .catch(() => {});
+    }
+  }, []);
 
   React.useEffect(() => {
     const unsubscribe = window.firebaseAuth.onAuthStateChanged(async (user) => {
@@ -66,9 +152,100 @@ const App = () => {
     );
   }
 
-  const handleGenerate = (config) => {
+  const uploadSourceFile = async (deckId, config) => {
+    if (!window.firebaseStorage || !deckId || !config?.uploadedFile) return;
+    const file = config.uploadedFile;
+    const path = `uploads/${deckId}/${file.name}`;
+    const snap = await window.firebaseStorage.ref(path).put(file);
+    const url = await snap.ref.getDownloadURL();
+    await window.firebaseDb.collection('decks').doc(deckId).update({
+      uploadedFileUrl: url,
+      uploadedFileName: file.name,
+    });
+  };
+
+  const handleGenerate = async (config) => {
+    const runId = generationRunRef.current + 1;
+    generationRunRef.current = runId;
+    const fallbackSlides = buildContextDraftSlides(config);
+    let timeoutId = null;
+
     setDeckConfig(config);
+    setSlideshowSlides(fallbackSlides.length ? fallbackSlides : null);
+    setGenerationStatus('loading');
+    setGenerationError('');
+    setActiveDeckId(null);
     setScreen('processing');
+
+    const finishGeneration = (slides, status, message = '') => {
+      if (generationRunRef.current !== runId) return;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      const normalized = normalizeDeckSlides(slides);
+      setSlideshowSlides(normalized.length ? normalized : fallbackSlides);
+      setGenerationStatus(status);
+      setGenerationError(message);
+    };
+
+    timeoutId = setTimeout(() => {
+      finishGeneration(
+        fallbackSlides,
+        'error',
+        'AI generation is taking longer than expected. Showing a draft from your content.'
+      );
+    }, GENERATION_TIMEOUT_MS);
+
+    if (!window.firebaseDb || !window.firebase?.app || !currentUser) {
+      finishGeneration(
+        fallbackSlides,
+        'error',
+        currentUser ? 'AI generation is unavailable. Showing a draft from your content.' : 'Sign in to use AI generation. Showing a draft from your content.'
+      );
+      return;
+    }
+
+    let deckRef = null;
+    try {
+      const rawTitleSource = (config.inputText || config.parsedFileText || config.uploadedFile?.name || 'Untitled deck').trim();
+      const title = rawTitleSource.split(/\s+/).slice(0, 8).join(' ');
+      deckRef = await window.firebaseDb.collection('decks').add({
+        userId: currentUser.uid,
+        author: currentUser.displayName || currentUser.email.split('@')[0],
+        title,
+        inputText: config.inputText || '',
+        parsedFileText: config.parsedFileText || '',
+        templateStyle: config.templateStyle || 'Professional',
+        slideCount: requestedSlideCount(config.slideCount, rawTitleSource),
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        status: 'processing',
+      });
+      setActiveDeckId(deckRef.id);
+      uploadSourceFile(deckRef.id, config).catch(() => {});
+
+      const generateDeckFn = firebase.app().functions('us-central1').httpsCallable('generateDeck');
+      const { data } = await generateDeckFn({
+        deckId: deckRef.id,
+        inputText: config.inputText || '',
+        parsedFileText: config.parsedFileText || '',
+        slideCount: config.slideCount || 'Auto',
+        templateStyle: config.templateStyle || 'Professional',
+        brandVoice: brandConfig?.voice || 'professional',
+      });
+
+      const generatedSlides = normalizeDeckSlides(data?.slides);
+      if (!generatedSlides.length) {
+        throw new Error('The AI service returned no slides.');
+      }
+      finishGeneration(generatedSlides, 'ready');
+    } catch (err) {
+      const message = 'AI generation failed. Showing a draft from your content.';
+      if (deckRef) {
+        deckRef.update({ status: 'error', error: err?.message || message }).catch(() => {});
+      }
+      finishGeneration(fallbackSlides, 'error', message);
+    }
   };
 
   const handleProcessingComplete = () => {
@@ -120,6 +297,8 @@ const App = () => {
         {screen === 'processing' && (
           <ProcessingScreen
             config={deckConfig}
+            generationStatus={generationStatus}
+            generationError={generationError}
             onComplete={handleProcessingComplete}
             tweaks={tweaks}
           />
@@ -127,8 +306,49 @@ const App = () => {
         {screen === 'preview' && (
           <PreviewScreen
             config={deckConfig}
+            slides={slideshowSlides || []}
+            generationStatus={generationStatus}
+            generationError={generationError}
             onGenerateAgain={handleGenerateAgain}
-            onViewSlideshow={(slides) => { setSlideshowSlides(slides); setScreen('slideshow'); }}
+            onViewSlideshow={async (slides) => {
+              const finalSlides = normalizeDeckSlides(slides);
+              setSlideshowSlides(finalSlides);
+              setScreen('slideshow');
+              if (window.firebaseDb && currentUser && deckConfig) {
+                try {
+                  if (activeDeckId) {
+                    await window.firebaseDb.collection('decks').doc(activeDeckId).update({
+                      status: 'ready',
+                      slideCount: finalSlides.length,
+                      slides: finalSlides,
+                    });
+                    uploadSourceFile(activeDeckId, deckConfig).catch(() => {});
+                  } else {
+                    const rawTitleSource = (deckConfig.inputText || deckConfig.parsedFileText || deckConfig.uploadedFile?.name || 'Untitled deck').trim();
+                    const title = rawTitleSource.split(/\s+/).slice(0, 8).join(' ');
+                    const deckRef = await window.firebaseDb.collection('decks').add({
+                      userId: currentUser.uid,
+                      author: currentUser.displayName || currentUser.email.split('@')[0],
+                      title,
+                      inputText: deckConfig.inputText || '',
+                      parsedFileText: deckConfig.parsedFileText || '',
+                      templateStyle: deckConfig.templateStyle || 'Professional',
+                      slideCount: finalSlides.length,
+                      slides: finalSlides,
+                      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                      status: 'ready',
+                    });
+                    const batch = window.firebaseDb.batch();
+                    finalSlides.forEach((s, i) => {
+                      const ref = deckRef.collection('slides').doc();
+                      batch.set(ref, { index: i, title: s.title || '', bullets: s.bullets || [] });
+                    });
+                    await batch.commit();
+                    uploadSourceFile(deckRef.id, deckConfig).catch(() => {});
+                  }
+                } catch (_) {}
+              }
+            }}
             tweaks={tweaks}
           />
         )}
@@ -137,11 +357,12 @@ const App = () => {
             slides={slideshowSlides || []}
             config={deckConfig}
             tweaks={tweaks}
+            brandConfig={brandConfig}
             onBack={() => setScreen('preview')}
           />
         )}
         {screen === 'history' && (
-          <HistoryScreen tweaks={tweaks} />
+          <HistoryScreen tweaks={tweaks} currentUser={currentUser} />
         )}
         {screen === 'changePassword' && (
           <ChangePasswordScreen tweaks={tweaks} onBack={() => setScreen('settings')} />
@@ -156,7 +377,7 @@ const App = () => {
           />
         )}
         {screen === 'admin' && userRole === 'admin' && (
-          <AdminScreen tweaks={tweaks} />
+          <AdminScreen tweaks={tweaks} brandConfig={brandConfig} onBrandSave={setBrandConfig} />
         )}
         {screen === 'admin' && userRole !== 'admin' && (
           <div style={{

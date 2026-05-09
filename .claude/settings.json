@@ -14,7 +14,11 @@
       "Read(//Users/aurellia_amore/Downloads/**)",
       "Bash(find \"/Users/aurellia_amore\" -name \"s.jsx\" 2>/dev/null)",
       "Read(//Users/aurellia_amore/**)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(firebase --version)",
+      "Bash(firebase projects:list)",
+      "Bash(gcloud --version)",
+      "Bash(echo \"Server PID: $!\")"
     ]
   }
 }

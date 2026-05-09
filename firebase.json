@@ -1,4 +1,11 @@
 {
+  "functions": [
+    {
+      "source": "AutoDeck AI/functions",
+      "codebase": "autodeck",
+      "ignore": ["node_modules", ".git"]
+    }
+  ],
   "hosting": {
     "public": "AutoDeck AI",
     "ignore": [

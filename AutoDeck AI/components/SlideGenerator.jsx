@@ -10,13 +10,13 @@ const DEMO_SLIDES = [
   { title: 'Key Metrics', bullets: ['Monthly active users: 1.2M', 'Transaction volume: $280M', 'NPS score: 72'] },
 ];
 
-const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
+const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, onBack }) => {
   const safeInitial = Array.isArray(initialSlides) && initialSlides.length > 0 ? initialSlides : DEMO_SLIDES;
 
   // ─── state ───────────────────────────────────────────────
   const [localSlides, setLocalSlides] = React.useState(() => safeInitial.map((s) => ({ ...s })));
   const [currentIndex, setCurrentIndex] = React.useState(0);
-  const [globalTheme, setGlobalTheme] = React.useState('purple');
+  const [globalTheme, setGlobalTheme] = React.useState(brandConfig?.colors ? 'custom' : 'purple');
   const [slideThemeOverrides, setSlideThemeOverrides] = React.useState({});
   const [slideLayoutOverrides, setSlideLayoutOverrides] = React.useState({});
   const [slideAlignments, setSlideAlignments] = React.useState({});
@@ -41,7 +41,18 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
   const agentInputRef = React.useRef(null);
 
   // ─── theme palette (per-slide) ───────────────────────────
+  const customTheme = brandConfig?.colors ? {
+    name: 'Brand',
+    swatch: brandConfig.colors.primary,
+    gradient: `linear-gradient(155deg,${brandConfig.colors.bgDark || '#0F031F'} 0%,${brandConfig.colors.primary} 55%,${brandConfig.colors.secondary || brandConfig.colors.primary} 100%)`,
+    title: brandConfig.colors.bgLight || '#F6F1FB',
+    text: `${brandConfig.colors.bgLight || '#F6F1FB'}c7`,
+    accent: brandConfig.colors.lime || brandConfig.colors.accent || '#D4FF3F',
+    rule: `${brandConfig.colors.bgLight || '#F6F1FB'}2e`,
+  } : null;
+
   const THEMES = {
+    ...(customTheme ? { custom: customTheme } : {}),
     purple:   { name: 'Quidax',   swatch: '#7B2FBE', gradient: 'linear-gradient(155deg,#1A0530 0%,#2D0F4E 50%,#451B6E 100%)', title: '#F6F1FB', text: 'rgba(246,241,251,0.78)', accent: '#D4FF3F', rule: 'rgba(246,241,251,0.18)' },
     midnight: { name: 'Midnight', swatch: '#312E81', gradient: 'linear-gradient(155deg,#0F0A24 0%,#1E1B4B 55%,#312E81 100%)', title: '#F5F3FF', text: 'rgba(245,243,255,0.78)', accent: '#A5B4FC', rule: 'rgba(245,243,255,0.18)' },
     soft:     { name: 'Soft',     swatch: '#E9D5FF', gradient: 'linear-gradient(155deg,#FAF5FF 0%,#F3E8FF 55%,#FCE7F3 100%)', title: '#1A0530', text: 'rgba(26,5,48,0.72)',     accent: '#7B2FBE', rule: 'rgba(26,5,48,0.18)'    },
@@ -146,8 +157,56 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
     showToast('Press Esc to exit presentation', 'info');
   };
   const handleExportPDF    = () => { setShowMenu(false); window.print(); };
-  const handleDownloadPPTX = () => { setShowMenu(false); showToast('Generating .pptx…', 'loading'); setTimeout(() => showToast('✓ PPTX ready in your downloads', 'success'), 2400); };
-  const handleDownloadPNG  = () => { setShowMenu(false); showToast('Saving slide as PNG…', 'loading'); setTimeout(() => showToast('✓ Slide saved as PNG', 'success'), 1600); };
+
+  const handleDownloadPPTX = async () => {
+    setShowMenu(false);
+    showToast('Generating .pptx…', 'loading');
+    try {
+      const pptx = new PptxGenJS();
+      pptx.layout = 'LAYOUT_WIDE';
+      localSlides.forEach((s, i) => {
+        const t = getTheme(i);
+        const pSlide = pptx.addSlide();
+        const bg = t.swatch.replace('#', '');
+        pSlide.background = { color: bg };
+        pSlide.addText(s.title || '', {
+          x: 0.5, y: 1.0, w: '85%', h: 1.2,
+          fontSize: 36, bold: true,
+          color: (t.title || '#FFFFFF').replace('#', ''),
+          fontFace: 'Calibri',
+        });
+        if (s.bullets && s.bullets.length) {
+          pSlide.addText(s.bullets.map(b => ({ text: b, options: { bullet: { type: 'number' } } })), {
+            x: 0.5, y: 2.6, w: '85%', h: 3.8,
+            fontSize: 18,
+            color: 'FFFFFF',
+            fontFace: 'Calibri',
+          });
+        }
+      });
+      await pptx.writeFile({ fileName: `${deckTitle || 'AutoDeck'}.pptx` });
+      showToast('✓ PPTX downloaded', 'success');
+    } catch (err) {
+      showToast('Export failed — try again', 'info');
+    }
+  };
+
+  const handleDownloadPNG = async () => {
+    setShowMenu(false);
+    showToast('Saving slide as PNG…', 'loading');
+    try {
+      const el = document.getElementById('main-slide');
+      if (!el) { showToast('Slide not found', 'info'); return; }
+      const canvas = await html2canvas(el, { useCORS: true, scale: 2, backgroundColor: null });
+      const a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png');
+      a.download = `slide-${currentIndex + 1}.png`;
+      a.click();
+      showToast('✓ Slide saved as PNG', 'success');
+    } catch (err) {
+      showToast('Export failed — try again', 'info');
+    }
+  };
   const handleShare        = () => { setShowMenu(false); const link = `autodeck.quidax.com/d/${Math.random().toString(36).slice(2, 8)}`; navigator.clipboard?.writeText(link).catch(() => {}); showToast('Link copied · ' + link, 'success'); };
   const handleDuplicate    = () => { setShowMenu(false); showToast('Deck duplicated to your library', 'success'); };
 
@@ -208,18 +267,48 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, onBack }) => {
     return replies[Math.floor(Math.random() * replies.length)];
   };
 
-  const handleAgentSend = () => {
+  const handleAgentSend = async () => {
     const text = agentInput.trim();
     if (!text || agentThinking) return;
-    setAgentMessages((p) => [...p, { role: 'user', text }]);
+    const updatedHistory = [...agentMessages, { role: 'user', text }];
+    setAgentMessages(updatedHistory);
     setAgentInput('');
     setAgentThinking(true);
-    setTimeout(() => {
-      const reply = simulateAgentResponse(text, agentSlideIndex);
-      setAgentMessages((p) => [...p, { role: 'assistant', text: reply }]);
-      setAgentThinking(false);
-      setTimeout(() => agentInputRef.current?.focus(), 30);
-    }, 800 + Math.random() * 600);
+
+    let reply = null;
+    let usedRealApi = false;
+
+    try {
+      if (window.firebase?.app) {
+        const agentEditFn = firebase.app().functions('us-central1').httpsCallable('agentEdit');
+        const slide = localSlides[agentSlideIndex] || {};
+        const { data } = await agentEditFn({
+          slideTitle: slide.title || '',
+          bullets: slide.bullets || [],
+          userMessage: text,
+          history: agentMessages.map(m => ({ role: m.role, text: m.text })),
+        });
+        if (data.updatedTitle || data.updatedBullets) {
+          setLocalSlides((prev) => {
+            const next = prev.map((s) => ({ ...s, bullets: [...s.bullets] }));
+            const s = next[agentSlideIndex];
+            if (data.updatedTitle) s.title = data.updatedTitle;
+            if (data.updatedBullets) s.bullets = data.updatedBullets;
+            return next;
+          });
+          reply = data.assistantReply || `Done — slide ${agentSlideIndex + 1} updated.`;
+          usedRealApi = true;
+        }
+      }
+    } catch (_) {}
+
+    if (!usedRealApi) {
+      reply = simulateAgentResponse(text, agentSlideIndex);
+    }
+
+    setAgentMessages((p) => [...p, { role: 'assistant', text: reply }]);
+    setAgentThinking(false);
+    setTimeout(() => agentInputRef.current?.focus(), 30);
   };
 
   // ─── slide chrome (inside the slide canvas) ──────────────
