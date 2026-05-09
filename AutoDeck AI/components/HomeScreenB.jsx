@@ -17,7 +17,7 @@ const HomeScreenB = ({ onGenerate, tweaks }) => {
     { id: 'Professional', desc: 'Clean, structured, default Quidax brand.' },
     { id: 'Minimal',      desc: 'Generous whitespace, type-led.' },
     { id: 'Bold',         desc: 'High-contrast title moments.' },
-    { id: 'Corporate',    desc: 'Traditional, formal layouts.' },
+    { id: 'Fun',          desc: 'Playful & energetic layouts.' },
   ];
   const audiences = ['Internal team', 'Leadership', 'Clients', 'Investors', 'Public'];
 

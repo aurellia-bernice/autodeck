@@ -57,7 +57,7 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
   };
 
   const slideOptions = ['5', '8', '10', '15', 'Auto'];
-  const templates = ['Professional', 'Minimal', 'Bold', 'Corporate'];
+  const templates = ['Professional', 'Minimal', 'Bold', 'Fun'];
 
   const canGenerate = !parsing && (inputText.trim().length > 10 || uploadedFile);
   const wordCount = inputText.trim() ? inputText.trim().split(/\s+/).length : 0;

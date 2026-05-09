@@ -6,11 +6,11 @@ const SEED_DECKS = [
   { id: 's1', title: 'Q2 Sales Strategy Overview',  slides: 10, template: 'Professional', date: '2026-05-03', size: '2.4 MB', author: 'Adaeze O.', favourite: true },
   { id: 's2', title: 'Product Roadmap H2 2026',      slides: 8,  template: 'Bold',         date: '2026-05-02', size: '1.8 MB', author: 'Tunde A.',  favourite: false },
   { id: 's3', title: 'HR Onboarding — New Hires',    slides: 15, template: 'Minimal',      date: '2026-04-30', size: '3.1 MB', author: 'Chiamaka I.', favourite: true },
-  { id: 's4', title: 'Engineering All Hands April',  slides: 12, template: 'Corporate',    date: '2026-04-28', size: '2.0 MB', author: 'Femi K.',   favourite: false },
+  { id: 's4', title: 'Engineering All Hands April',  slides: 12, template: 'Professional', date: '2026-04-28', size: '2.0 MB', author: 'Femi K.',   favourite: false },
   { id: 's5', title: 'Investor Update — Series B',   slides: 10, template: 'Professional', date: '2026-04-22', size: '2.7 MB', author: 'Adaeze O.', favourite: true },
   { id: 's6', title: 'Brand Guidelines 2026',        slides: 20, template: 'Bold',         date: '2026-04-18', size: '4.2 MB', author: 'Design',    favourite: false },
   { id: 's7', title: 'Customer Success Stories Q1',  slides: 8,  template: 'Minimal',      date: '2026-04-10', size: '1.5 MB', author: 'Sade B.',   favourite: false },
-  { id: 's8', title: 'Operations Review March',      slides: 10, template: 'Corporate',    date: '2026-03-31', size: '2.2 MB', author: 'Tunde A.',  favourite: false },
+  { id: 's8', title: 'Operations Review March',      slides: 10, template: 'Fun',    date: '2026-03-31', size: '2.2 MB', author: 'Tunde A.',  favourite: false },
 ];
 
 const HistoryScreen = ({ tweaks, currentUser }) => {
@@ -24,7 +24,7 @@ const HistoryScreen = ({ tweaks, currentUser }) => {
     Professional: ['#2D0F4E', '#5F2A91', '#B891DC'],
     Bold:         ['#431407', '#9A3412', '#FED7AA'],
     Minimal:      ['#F6F1FB', '#D9C2EE', '#5F2A91'],
-    Corporate:    ['#0F0A24', '#312E81', '#A5B4FC'],
+    Fun:    ['#0F0A24', '#312E81', '#A5B4FC'],
   };
 
   const [decks, setDecks] = React.useState(SEED_DECKS);
@@ -56,7 +56,7 @@ const HistoryScreen = ({ tweaks, currentUser }) => {
     return () => unsub();
   }, [currentUser?.uid]);
 
-  const templates = ['All', 'Professional', 'Minimal', 'Bold', 'Corporate'];
+  const templates = ['All', 'Professional', 'Minimal', 'Bold', 'Fun'];
   const filtered = decks.filter(d => d.title.toLowerCase().includes(search.toLowerCase()) && (filter === 'All' || d.template === filter));
   const featured = filtered[0];
   const rest = filtered.slice(1);
