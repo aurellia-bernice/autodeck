@@ -111,7 +111,10 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
   const selectDisplayFont = (f) => { loadGoogleFont(f.google); setDisplayFont(f); };
   const selectBodyFont    = (f) => { loadGoogleFont(f.google); setBodyFont(f); };
 
-  const updateColor = (id, value) => setColorRows(p => p.map(r => r.id === id ? { ...r, value } : r));
+  const [swatchHovered, setSwatchHovered] = React.useState(null);
+
+  const updateColor      = (id, value) => setColorRows(p => p.map(r => r.id === id ? { ...r, value, label: value.toUpperCase() } : r));
+  const updateColorLabel = (id, label) => setColorRows(p => p.map(r => r.id === id ? { ...r, label } : r));
   const deleteColor = (id) => setColorRows(p => p.filter(r => r.id !== id));
   const addColor = () => {
     setColorRows(p => [...p, { id: nextId, label: 'New colour', role: 'Custom role', value: '#888888' }]);
@@ -164,12 +167,28 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {colorRows.map((row, i) => (
               <div key={row.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 0', borderBottom: i < colorRows.length - 1 ? `1px solid ${T.border}` : 'none' }}>
-                <label style={{ position: 'relative', width: 40, height: 40, borderRadius: qxRadius.sm, background: row.value, border: `1px solid ${T.border}`, cursor: 'pointer', overflow: 'hidden', flexShrink: 0 }}>
-                  <input type="color" value={row.value} onChange={e => updateColor(row.id, e.target.value)}
-                    style={{ position: 'absolute', inset: '-50%', width: '200%', height: '200%', opacity: 0, cursor: 'pointer' }} />
+                <label
+                  onMouseEnter={() => setSwatchHovered(row.id)}
+                  onMouseLeave={() => setSwatchHovered(null)}
+                  style={{ position: 'relative', width: 40, height: 40, borderRadius: qxRadius.sm, background: row.value, border: `1px solid ${T.border}`, cursor: 'pointer', overflow: 'hidden', flexShrink: 0, transition: `box-shadow 120ms ${qxEase}`, boxShadow: swatchHovered === row.id ? '0 0 0 3px rgba(95,42,145,0.25)' : 'none' }}>
+                  <input type="color" value={row.value}
+                    onChange={e => updateColor(row.id, e.target.value)}
+                    onInput={e => updateColor(row.id, e.target.value)}
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', border: 'none', padding: 0 }} />
+                  {swatchHovered === row.id && (
+                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.30)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path d="M9.5 1.5l3 3L4 13H1v-3L9.5 1.5z" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </div>
+                  )}
                 </label>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: T.ink, marginBottom: 2 }}>{row.label}</div>
+                  <input
+                    value={row.label}
+                    onChange={e => updateColorLabel(row.id, e.target.value)}
+                    style={{ fontSize: 14, fontWeight: 500, color: T.ink, fontFamily: qxType.body, background: 'transparent', border: 'none', outline: 'none', width: '100%', padding: 0, marginBottom: 2, cursor: 'text' }}
+                  />
                   <div style={{ fontSize: 12.5, color: T.inkDim }}>{row.role}</div>
                 </div>
                 <span style={{ fontFamily: qxType.mono, fontSize: 12, color: T.ink, background: T.ghostBg, border: `1px solid ${T.border}`, padding: '6px 12px', borderRadius: qxRadius.xs }}>
