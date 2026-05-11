@@ -1,70 +1,93 @@
-# AutoDeck AI — Architecture & Database Decision Guide
+# AutoDeck AI — Architecture Reference
 
 ## What is AutoDeck AI?
 
-AutoDeck AI is an internal Quidax tool that lets employees turn raw notes or uploaded documents into fully branded presentations. It is currently a **100% client-side prototype** — no backend, no database, no API calls. All state lives in React component memory and is lost on page refresh.
+An internal Quidax tool that turns raw notes or uploaded documents into fully branded presentations. Users paste content or upload a file, choose a style and slide count, and Claude generates a structured deck. Admins manage brand configuration (colours, typography, templates, voice) from a dedicated panel.
 
 ---
 
-## Tech Stack (Current)
+## Tech Stack
 
-| Layer | Technology | Why |
+| Layer | Technology | Notes |
 |---|---|---|
-| UI Framework | React 18.3.1 (CDN, UMD build) | No build step needed |
-| Transpiler | Babel Standalone 7.29.0 | Transforms JSX in the browser at runtime |
-| Styling | Inline React styles only | No CSS files, no Tailwind, no CSS-in-JS library |
-| Dev server | Python `http.server 8080` | Needed because Babel can't load `.jsx` over `file://` |
-| Fonts | Calibri / Arial Black (system fonts) | No Google Fonts dependency |
-| Images | picsum.photos seed URLs | Free, no API key, consistent results per keyword |
-| AI agent | Simulated (keyword rule engine) | No LLM call yet — parses words like "shorter", "add bullet" |
-| Auth | Simulated (no real token/session) | LoginScreen accepts any email+password |
-| Storage | None | Zero persistence — everything resets on refresh |
+| UI Framework | React 18.3.1 (CDN, UMD) | No build step |
+| Transpiler | Babel Standalone 7.29.0 | JSX transformed in the browser at runtime |
+| Styling | Inline React styles only | Design tokens in `tokens.jsx` |
+| Auth | Firebase Auth (compat SDK v10.12.2) | Email/password + Google SSO, @quidax.com restricted |
+| Database | Cloud Firestore (compat SDK v10.12.2) | Decks, slides, brand config |
+| File Storage | Firebase Storage (compat SDK v10.12.2) | Uploaded source documents |
+| Backend | Firebase Cloud Functions v2 (Node.js) | AI generation, DOCX parsing |
+| AI Model | Claude via Anthropic SDK | `generateDeck` and `agentEdit` functions |
+| PPTX Export | pptxgenjs 3.12.0 (CDN) | Working — downloads `.pptx` |
+| PNG Export | html2canvas 1.4.1 (CDN) | Working — captures slide canvas |
+| PDF Parsing | PDF.js 3.11.174 (CDN) | In-browser, no server needed |
+| DOCX Parsing | mammoth (in Cloud Function) | `parseDocx` function converts to plain text |
+| Fonts | Google Fonts (on-demand) | Injected via `<link>` when selected in Admin |
+| Images | picsum.photos seed URLs | Placeholder images, no API key |
+| Dev server | Python `http.server` / PowerShell / `.bat` | Needed because Babel can't load `.jsx` over `file://` |
 
 ---
 
 ## File Structure
 
 ```
-AutoDeck AI/
-├── AutoDeck AI.html          # Entry point — loads scripts in order via <script type="text/babel">
-├── app.jsx                   # Root component, router (screen state), TweaksPanel
-├── start-server.sh           # Mac/Linux: python3 -m http.server 8080
-├── start-server.bat          # Windows: python -m http.server 8080
-└── components/
-    ├── tweaks-panel.jsx      # Dev tool: useTweaks hook + TweakToggle/Radio/Select/Section
-    ├── LoginScreen.jsx       # Auth UI — email/password form + SSO button (simulated)
-    ├── Sidebar.jsx           # Left nav — Home, History, Admin links + user badge
-    ├── HomeScreen.jsx        # Generate form — text input, file upload, slide count, template picker
-    ├── ProcessingScreen.jsx  # Animated progress screen — 4 phases, ~15s simulated generation
-    ├── PreviewScreen.jsx     # Card grid of generated slides — edit, delete, add, reorder
-    ├── SlideGenerator.jsx    # Gamma-style slideshow — themes, layouts, alignment, image search, AI agent chat
-    ├── HistoryScreen.jsx     # List of past decks — search, filter by template, delete
-    └── AdminScreen.jsx       # Brand config — colours, typography, templates, brand voice
+autodeck/
+├── firebase.json                   # Hosting public dir = "AutoDeck AI", Functions source
+├── package.json                    # Playwright tests only
+└── AutoDeck AI/
+    ├── AutoDeck AI.html            # Entry point — loads all scripts in order
+    ├── index.html                  # Alias entry point (same app)
+    ├── app.jsx                     # Root: routing, auth state, generation logic, brandConfig
+    ├── tokens.jsx                  # Design tokens: qxTheme, qxRadius, qxType, qxEase, qxShadow, QX
+    ├── firebase-config.js          # ⚠ Gitignored — Firebase project credentials
+    ├── firebase-config.example.js  # Template for firebase-config.js
+    ├── functions/
+    │   └── index.js                # Cloud Functions: generateDeck, agentEdit, parseDocx
+    └── components/
+        ├── motion.jsx              # Shared animation helpers
+        ├── tweaks-panel.jsx        # Dev overlay: dark mode toggle, screen jump (localStorage)
+        ├── Sidebar.jsx             # Left nav — links, user badge, logout, admin-gated Admin link
+        ├── LoginScreen.jsx         # Sign in / Sign up / Forgot password / Google SSO
+        ├── HomeScreen.jsx          # Re-exports HomeScreenA (legacy full impl commented out)
+        ├── HomeScreenA.jsx         # ✅ Active generate form
+        ├── HomeScreenB.jsx         # Alternate generate form (unused)
+        ├── ProcessingScreen.jsx    # Animated generation progress, syncs to real generationStatus
+        ├── PreviewScreen.jsx       # Slide outline — inline edit, delete, add, reorder
+        ├── SlideGenerator.jsx      # Full slideshow: themes, layouts, alignment, image search, agent
+        ├── HistoryScreen.jsx       # Past decks from Firestore (seed fallback if no data)
+        ├── AdminScreen.jsx         # Brand config: colours, typography, templates, voice
+        ├── ChangePasswordScreen.jsx    # Re-auth + set new password via Firebase Auth
+        ├── AccountSettingsScreen.jsx   # Edit display name, view email, member since
+        └── ResetPasswordScreen.jsx     # Standalone password reset (linked from email)
 ```
 
-**Script loading order matters** — `app.jsx` is last because it uses every component. Each component file ends with `Object.assign(window, { ComponentName })` to expose itself globally (since there are no ES modules in this setup).
+**Loading order matters.** `tokens.jsx` → `motion.jsx` → components → `app.jsx`. Each file ends with `Object.assign(window, { ComponentName })` to expose itself globally (no ES modules).
 
 ---
 
 ## Screen Flow
 
 ```
-LoginScreen
+LoginScreen (sign in / sign up / forgot password / Google SSO)
     │
-    └─► HomeScreen (text input + file upload + config)
+    └─► HomeScreenA (text input + file upload + slide count + template style)
             │
-            └─► ProcessingScreen (~15s animated generation)
+            └─► ProcessingScreen (animated phases, listens to real generationStatus)
                     │
-                    └─► PreviewScreen (card grid — edit/delete/add slides)
+                    └─► PreviewScreen (slide outline — inline editable)
                                 │
-                                └─► SlideGenerator (full slideshow viewer)
-                                        ├── Customise panel (layout, image search, theme)
-                                        └── Edit with Agent (chat modal → modifies slide content)
+                                └─► SlideGenerator (slideshow viewer)
+                                        ├── Customise panel (layout, theme, alignment, image)
+                                        └── AI Agent panel (chat → modifies slide content)
 
-Sidebar always visible (except during Processing + Slideshow):
+Sidebar always visible (except Processing + Slideshow):
     ├── Home / Generate
     ├── History
-    └── Admin (design team only — role-gated)
+    ├── Account Settings
+    └── Admin (email-gated: admin@quidax.com only)
+
+Settings path:
+    Sidebar → Account Settings → Change Password
 ```
 
 ---
@@ -72,207 +95,184 @@ Sidebar always visible (except during Processing + Slideshow):
 ## Component Responsibilities
 
 ### `app.jsx`
-- Single source of truth for screen routing (`screen` state)
-- Holds `deckConfig` (the user's generation request) and `slideshowSlides` (slides passed into SlideGenerator)
-- Renders `TweaksPanel` — a dev-only overlay for toggling dark mode, user role, and jumping to any screen
+- **Screen router** — `screen` state drives which component renders
+- **Auth** — `onAuthStateChanged` listener; enforces @quidax.com domain; sets `currentUser`
+- **Admin gate** — `isAdminUser(user)` checks email against `ADMIN_EMAILS` array (`['admin@quidax.com']`)
+- **Generation orchestration** — `handleGenerate` writes deck to Firestore, calls `generateDeck` Cloud Function, handles timeout (105s), falls back to a client-side draft on failure
+- **Brand config** — loads `config/brand` from Firestore on mount; passes `brandConfig` to SlideGenerator and AdminScreen; merges (not replaces) on save via `onBrandSave={(cfg) => setBrandConfig(p => ({ ...p, ...cfg }))}`
+- **`slideshowSlides`** — normalised slides array passed into SlideGenerator; set from both AI response and client-side fallback
 
-### `HomeScreen`
-- User inputs: free-text textarea, drag-and-drop file upload (PDF/DOCX/TXT/PPTX), slide count (5/8/10/15/Auto), template style (Professional/Minimal/Bold/Corporate)
-- On submit: passes `{ inputText, slideCount, templateStyle, uploadedFile }` up to `app.jsx` as `deckConfig`
-- **No actual file parsing or AI call** — the file object is captured but never processed
+### `HomeScreenA` (active generate form)
+- User inputs: free-text textarea, drag-and-drop file upload, slide count picker (5/8/10/15/Auto), template style (Professional / Minimal / Bold / Fun)
+- **File parsing in the browser:**
+  - `.txt` — FileReader
+  - `.pdf` — PDF.js
+  - `.docx` — calls `parseDocx` Cloud Function (base64 → mammoth → plain text)
+- Live word count + estimated slide count shown as the user types
+- Prompt idea chips autofill the textarea
+- On submit: calls `onGenerate({ inputText, parsedFileText, slideCount, templateStyle, uploadedFile })`
 
 ### `ProcessingScreen`
-- Receives `deckConfig` as a prop (doesn't use it — generation is simulated)
-- Runs a 4-phase animation (~15 seconds total): "Parsing content" → "Structuring slides" → "Applying brand formatting" → "Finalising"
-- On complete: calls `onComplete()` → app moves to PreviewScreen
+- Props: `config`, `generationStatus` (`'idle' | 'loading' | 'ready' | 'error'`), `generationError`, `onComplete`
+- 4 animated phases with a simulated progress bar and streaming slide thumbnail skeletons
+- Waits for `generationStatus` to leave `'loading'` before completing — stays open until AI returns
+- On error: shows the error message, still calls `onComplete` (fallback slides shown in PreviewScreen)
 
 ### `PreviewScreen`
-- Generates 10 hardcoded default slides (title + bullets array) regardless of input
-- Local state: `slides`, `editingIndex`, `editDraft`
-- Features: inline card edit (pencil), delete (trash icon), add new slide (+ button)
-- "View as Slideshow" button passes the current slides array up to `app.jsx` → triggers SlideGenerator
+- Receives `slides` (AI-generated or client fallback) and `config`
+- Builds a local draft from `config` if slides are empty
+- Inline card editing: click pencil → edit title/bullets in place
+- Add / delete / reorder slides
+- "Open slideshow" passes final slides array up to `app.jsx` → saves to Firestore → navigates to SlideGenerator
 
 ### `SlideGenerator`
-- The most complex component (~750 lines)
-- Props: `slides` (array from PreviewScreen), `config`, `tweaks`, `onBack`
-- Local state:
-  - `localSlides` — mutable copy; agent chat edits flow here
-  - `globalTheme` + `slideThemeOverrides` — per-slide theme overrides
-  - `slideLayoutOverrides` — per-slide layout (standard/centered/split/bigTitle/quote/minimal)
-  - `slideAlignments` — per-slide text alignment (left/center/right)
-  - `slideImages` — per-slide background image URL
-  - `agentOpen`, `agentMessages`, `agentInput`, `agentThinking` — AI chat state
-- 8 colour themes: Quidax (purple), Midnight, Soft, Ocean, Forest, Sunset, Slate, Rose
-- 6 layouts with SVG icon previews, top 4 shown in the edit panel
-- Image search via picsum.photos seed URLs (no API key needed)
-- Agent: simulated keyword parser — modifies `localSlides` based on instructions
-- Export: Print API for PDF; PPTX/PNG are toasts only (not yet implemented)
+- Props: `slides`, `config`, `tweaks`, `brandConfig`, `onBack`
+- **Fonts from brand config:** `SlideContent` reads `brandConfig?.displayFont` / `brandConfig?.bodyFont` and falls back to `qxType.display` / `qxType.body` — slide canvas reflects admin typography choices
+- **Themes:** 8 colour palettes (Quidax/purple, Midnight, Soft, Ocean, Forest, Sunset, Slate, Rose) + optional custom theme built from `brandConfig.colors`
+- **Layouts:** standard, split, bigTitle, stat, quote, image, minimal, centered — per-slide overrides
+- **Exports:** PPTX via pptxgenjs (working), PNG via html2canvas (working), PDF via `window.print()`
+- **Agent chat:** calls `agentEdit` Cloud Function; falls back to keyword parser if Function unavailable
+- Per-slide state: theme override, layout override, alignment, background image
 
 ### `HistoryScreen`
-- Hardcoded list of 8 past decks (no real data)
-- Client-side search and filter by template style
-- Delete animates out with opacity transition
+- On mount with a logged-in user and Firestore available: subscribes to `decks` collection filtered by `userId`, ordered by `createdAt desc`
+- Falls back to 8 hardcoded seed decks if Firestore is unavailable or returns no results
+- Shelf view + list view toggle; search by title; filter by template (All / Professional / Minimal / Bold / Fun)
+- Delete removes from Firestore (for real decks) and local state
 
 ### `AdminScreen`
-- Brand config UI with 4 tabs: Colours, Typography, Templates, Brand Voice
-- Colour pickers update local state only (not persisted anywhere)
-- "Save" buttons show a confirmation toast but write nothing to any store
-- Role-gated: `app.jsx` checks `currentUser === 'admin'` before rendering
+Four tabs — all changes persist to `config/brand` in Firestore (with `{ merge: true }`) and update app-level `brandConfig` via `onBrandSave`.
 
-### `Sidebar`
-- Receives `currentScreen` and `onNavigate`
-- Admin link only shown when `currentUser === 'admin'`
-- No real routing — just calls `onNavigate(dest)` which sets screen state in `app.jsx`
+**Brand Colours**
+- Array-based state (`colorRows`): each row has `{ id, label, role, value }`
+- Colour swatch: hover shows pencil overlay + focus ring; `onInput` + `onChange` for live preview
+- Picking a new colour auto-updates the row label to the hex value; label is also directly editable
+- Add row (dashed `+` button) / delete row (trash icon, red on hover)
 
-### `tweaks-panel.jsx`
-- Dev tool overlay (bottom-right corner)
-- `useTweaks(defaults)` hook — persists to `localStorage` so tweaks survive refresh
-- Controls: dark mode toggle, user role (Employee/Admin), screen navigation jump
+**Typography**
+- 15 font options (Space Grotesk, Inter, Poppins, Montserrat, Raleway, DM Sans, Nunito, Lato, Roboto, Open Sans, Playfair Display, Lora, Georgia, Arial, Verdana)
+- Google Fonts loaded on demand via injected `<link>` tags — no upfront load
+- Live preview: display font shown as large headline; body font shown as paragraph text
+- Save writes `{ displayFont, bodyFont }` (CSS family strings) to Firestore; SlideGenerator picks these up via `brandConfig`
+- AdminScreen initialises pickers from `brandConfig` if fonts were previously saved
+
+**Templates**
+- Upload `.pptx` / `.ppt` / `.key` files; displayed in a list with name, upload date, layout count
+- Set one template as active (green "Active" badge); others show "Set active" button
+- Delete with trash icon (auto-promotes next template to active)
+- Note: uploaded template files are stored in component state only — not yet wired to generation
+
+**Voice**
+- Four options matching the generate tab: Professional / Minimal / Bold / Fun
+- Each voice is an expandable card with a radio selector + description + upload area
+- Upload area accepts `.pdf` / `.docx` / `.txt` voice documentation per style
+- "Doc uploaded" badge appears in the card header when a file is attached
+- Note: voice docs are stored in state only — not yet passed to `generateDeck`
+
+### `LoginScreen`
+- Modes: sign in, sign up, forgot password
+- Real Firebase Auth: `signInWithEmailAndPassword`, `createUserWithEmailAndPassword`, `GoogleAuthProvider`
+- `@quidax.com` domain enforced client-side before any Firebase call
+- Forgot password: `sendPasswordResetEmail` (sender display name configurable in Firebase Console → Authentication → Templates)
+- Sign up sets `displayName` via `updateProfile`
+
+### `ChangePasswordScreen`
+- Re-authenticates with current password via `EmailAuthProvider.credential` + `reauthenticateWithCredential`
+- Then calls `updatePassword` — required by Firebase for sensitive operations
+- Password strength indicator (4 levels)
+
+### `AccountSettingsScreen`
+- Edit display name via `firebaseAuth.currentUser.updateProfile`
+- Shows email (read-only), member since date from `user.metadata.creationTime`
+- Links to Change Password screen
 
 ---
 
-## What Data Needs to Persist
+## Cloud Functions (`functions/index.js`)
 
-This is the full data model implied by the current UI. **None of it is persisted yet.**
+### `generateDeck`
+- **Trigger:** HTTPS callable, auth required
+- **Input:** `{ deckId, inputText, parsedFileText, slideCount, templateStyle, brandVoice }`
+- **Process:** builds a structured prompt with voice guidance → calls Claude (`claude-sonnet-4-5` or similar) → parses JSON array response → normalises slides → updates Firestore deck document
+- **Timeout:** 120s function / 105s client-side guard
+- **Voice mapping:** `professional` / `bold` / `approachable` / `data` → prompt instruction strings
+- **Output:** `{ slides: [{ title, bullets[] }] }`
 
-### 1. Users
-```
+### `agentEdit`
+- **Trigger:** HTTPS callable, auth required
+- **Input:** `{ slideTitle, bullets, userMessage, history }`
+- **Process:** calls Claude with conversation history → returns updated slide content
+- **Output:** `{ updatedTitle?, updatedBullets?, assistantReply }`
+
+### `parseDocx`
+- **Trigger:** HTTPS callable, auth required
+- **Input:** `{ base64 }` — base64-encoded `.docx` file
+- **Process:** mammoth converts DOCX → plain text
+- **Output:** `{ text }`
+
+---
+
+## Firestore Data Model
+
+### `decks/{deckId}`
+```js
 {
-  id: string,
-  email: string,          // e.g. "name@quidax.com"
-  role: "employee" | "admin",
-  createdAt: timestamp,
-  lastLogin: timestamp
-}
-```
-
-### 2. Decks (generated presentations)
-```
-{
-  id: string,
-  userId: string,         // owner
-  title: string,          // derived from inputText
-  inputText: string,      // original pasted content
-  uploadedFileName: string | null,
-  slideCount: "5" | "8" | "10" | "15" | "Auto",
-  templateStyle: "Professional" | "Minimal" | "Bold" | "Corporate",
-  createdAt: timestamp,
-  status: "processing" | "ready" | "failed",
-  fileSize: number        // MB, shown in History
-}
-```
-
-### 3. Slides (per deck)
-```
-{
-  id: string,
-  deckId: string,
-  index: number,          // ordering
+  userId: string,
+  author: string,
   title: string,
-  bullets: string[],      // body content
-  layout: "standard" | "centered" | "split" | "bigTitle" | "quote" | "minimal",
-  theme: string | null,   // null = inherit global theme
-  alignment: "left" | "center" | "right",
-  backgroundImageUrl: string | null
+  inputText: string,
+  parsedFileText: string,
+  templateStyle: 'Professional' | 'Minimal' | 'Bold' | 'Fun',
+  slideCount: number,
+  slides: [{ title, bullets }],       // top-level copy for quick reads
+  uploadedFileUrl: string | null,
+  uploadedFileName: string | null,
+  createdAt: Timestamp,
+  status: 'processing' | 'ready' | 'error',
+  error: string | null
 }
 ```
 
-### 4. Brand Config (global, admin-managed)
-```
+### `decks/{deckId}/slides/{slideId}`
+```js
 {
-  id: "singleton",        // one doc
-  colors: {
-    primary: string,      // hex
-    secondary: string,
-    accent1: string,
-    accent2: string,
-    bgDark: string,
-    bgLight: string
-  },
-  headingFont: string,
-  bodyFont: string,
-  brandVoice: "professional" | "bold" | "approachable" | "data",
-  activeMasterTemplate: string,   // filename
-  logoUrl: string
+  index: number,
+  title: string,
+  bullets: string[]
 }
 ```
 
-### 5. Agent Chat History (optional, nice-to-have)
-```
+### `config/brand` (singleton)
+```js
 {
-  id: string,
-  deckId: string,
-  slideId: string,
-  messages: [{ role: "user"|"assistant", text: string, timestamp }],
-  createdAt: timestamp
+  colorRows: [{ id, label, role, value }],   // hex palette
+  voice: 'professional' | 'minimal' | 'bold' | 'fun',
+  displayFont: string,                        // CSS font-family
+  bodyFont: string,                           // CSS font-family
+  voiceDocs: { professional, minimal, bold, fun }  // filenames (state only for now)
 }
 ```
 
 ---
 
-## Database Decision: Google Firebase (Firestore)
+## Auth Model
 
-Given you're considering Google's stack, here is an honest comparison:
-
-### Firebase Firestore ✅ (Recommended for this tool)
-
-**Why it fits:**
-- **Internal tool, small team** — Firestore's free tier (Spark) covers ~50k reads/day, 20k writes/day, 1GB storage. An internal team of 50–100 people won't get close to these limits.
-- **No backend needed to start** — Firestore's client SDK works directly from the browser. You can add auth, read/write data, and store files (via Firebase Storage for uploaded docs and logos) without writing a single server.
-- **Real-time sync is free** — If you want the Processing screen to show live progress from a server-side generation job, Firestore listeners (`onSnapshot`) handle that with zero extra infrastructure.
-- **Firebase Auth** handles the login screen (Google SSO, email/password) and gives you proper JWTs — replaces the current fake login with about 10 lines of code.
-- **Firebase Storage** holds uploaded documents (PDF/DOCX) and the brand logo — separate from Firestore but same SDK, same console.
-- **Works with your current no-build setup** — The Firebase SDK can be loaded via CDN just like React.
-
-**Data model fit:**
-- Users → `users/{userId}` document
-- Decks → `decks/{deckId}` document with `userId` field (query by user)
-- Slides → `decks/{deckId}/slides/{slideId}` subcollection (naturally nested, ordered by `index`)
-- Brand config → `config/brand` singleton document (admin writes, all users read)
-- Agent chat → `decks/{deckId}/slides/{slideId}/agentHistory` subcollection
-
-**Limitations to know:**
-- Firestore is a document/NoSQL store — no joins. If you need to query "all slides across all decks that use the Ocean theme", that requires a top-level `slides` collection (or a composite index). The subcollection model above is simpler but limits cross-deck slide queries.
-- Free plan has no SLA. For a production internal tool at a company like Quidax, you'd want the Blaze (pay-as-you-go) plan — still very cheap at this scale, likely under $5/month.
+| Rule | Implementation |
+|---|---|
+| Only @quidax.com emails | Enforced in LoginScreen before Firebase call + in `onAuthStateChanged` (signs out if domain wrong) |
+| Admin access | `ADMIN_EMAILS = ['admin@quidax.com']` in `app.jsx` — email comparison |
+| Cloud Functions | All three functions check `request.auth` and throw `unauthenticated` if missing |
+| Password reset sender name | Set in Firebase Console → Authentication → Templates → Password reset → From name |
 
 ---
 
-### Google Cloud Firestore vs Firebase Firestore
-These are the same underlying database. "Firebase Firestore" is the developer-friendly version with the Firebase console, Auth, Storage bundled in. "Cloud Firestore" is the same DB accessed via Google Cloud Console with more granular IAM controls. For an internal tool, **Firebase Firestore is the right entry point** — you can migrate to Cloud Firestore later if Quidax's GCP environment demands it.
-
----
-
-### Alternatives for comparison
-
-| Option | Fit | Notes |
-|---|---|---|
-| **Firebase Firestore** | ✅ Best fit | Real-time, no server, auth bundled, free tier generous |
-| **Google Cloud SQL (Postgres)** | ⚠️ Overkill | Relational SQL is great but requires a server/API layer — more infra for a small internal tool |
-| **Supabase (Postgres + Auth + Storage)** | ✅ Strong alternative | Open-source Firebase equivalent, SQL instead of NoSQL, better for complex queries |
-| **PlanetScale / Neon** | ⚠️ Partial | DB only, no auth/storage bundled — need separate solutions |
-| **localStorage only** | ❌ Not viable | Already used for tweaks; device-bound, no sharing across users |
-
----
-
-## What to Build Next (in order)
-
-1. **Wire up Firebase Auth** — replace the fake login with `signInWithEmailAndPassword` + `GoogleAuthProvider` for SSO. 5–10 lines of code.
-2. **Persist Decks + Slides to Firestore** — after ProcessingScreen completes, write the generated slides to `decks/{deckId}/slides/`. History screen reads from the same collection filtered by `userId`.
-3. **Move generation to a server** — currently the "AI" is a keyword rule engine in the browser. A Cloud Function (or any API) can run a real LLM call, write results to Firestore, and the client listens with `onSnapshot`.
-4. **Firebase Storage** for uploaded files (PDF/DOCX) and brand logo.
-5. **Brand config** — write AdminScreen's "Save" buttons to the `config/brand` Firestore document. All clients read it on load.
-
----
-
-## Known Gaps in Current Prototype
+## Known Gaps
 
 | Gap | Impact | Fix |
 |---|---|---|
-| No real AI generation | Core feature is fake (hardcoded slides) | Integrate Claude/GPT API in a Cloud Function |
-| No auth | Anyone can open the URL | Firebase Auth |
-| No persistence | History, edits lost on refresh | Firestore |
-| File upload UI exists but files aren't parsed | Drag-and-drop accepts files but discards them | Server-side parser (Cloud Function + PDF.js or Unstructured) |
-| PPTX export is a toast | "Download PPTX" shows a notification, no file | pptxgenjs library or a server-side export function |
-| PNG export is a toast | Same | html2canvas or Puppeteer screenshot |
-| Agent is a keyword parser | Very limited edit intelligence | Real LLM call per message |
-| Brand config not applied | Admin saves colours but slides ignore them | Pass brand config from Firestore into SlideGenerator themes |
+| Voice docs not passed to generation | Uploaded voice docs (Admin → Voice tab) are stored in state but not sent to `generateDeck` | Pass matching voice doc text alongside `brandVoice` in the Cloud Function call |
+| Template uploads not used in generation | File picked in Admin → Templates is stored in state only | Upload to Firebase Storage; pass template reference to generation |
+| PPTX export ignores brand fonts | `handleDownloadPPTX` hardcodes `fontFace: 'Calibri'` | Map `brandConfig.displayFont` / `bodyFont` to font names in pptxgenjs |
+| `config/brand.colors` shape mismatch | `brandConfig.colorRows` is an array; `SlideGenerator` reads `brandConfig.colors.primary` (object) for the custom theme | Either reshape on save or update the `customTheme` derivation to read from `colorRows` |
+| No Firestore security rules documented | Unknown if rules restrict reads/writes correctly | Audit rules in Firebase Console |
+| Agent voice guide uses old keys | `voiceGuide` in `generateDeck` has keys `professional/bold/approachable/data`; UI now uses `professional/minimal/bold/fun` | Add `minimal` and `fun` keys; rename `approachable` → remove or map |
