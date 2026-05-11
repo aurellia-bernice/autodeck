@@ -231,7 +231,7 @@ const App = () => {
         parsedFileText: config.parsedFileText || '',
         slideCount: config.slideCount || 'Auto',
         templateStyle: config.templateStyle || 'Professional',
-        brandVoice: brandConfig?.voice || 'professional',
+        brandVoice: (config.templateStyle || 'Professional').toLowerCase(),
       });
 
       const generatedSlides = normalizeDeckSlides(data?.slides);

@@ -30,6 +30,25 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
   const [showGrid, setShowGrid] = React.useState(false);
   const [toast, setToast] = React.useState(null);
   const [transitionKey, setTransitionKey] = React.useState(0);
+  const [editingField, setEditingField] = React.useState(null); // { field: 'title'|'bullet', bi?: number }
+
+  const commitEdit = (value) => {
+    if (!editingField) return;
+    const trimmed = value.trim();
+    setLocalSlides(prev => prev.map((s, i) => {
+      if (i !== currentIndex) return s;
+      if (editingField.field === 'title') return { ...s, title: trimmed || s.title };
+      if (editingField.field === 'eyebrow') return { ...s, eyebrow: trimmed || s.eyebrow };
+      if (editingField.field === 'figure') return { ...s, figure: trimmed || s.figure };
+      if (editingField.field === 'stat-num') {
+        const bullets = [...s.bullets]; bullets[0] = trimmed || bullets[0]; return { ...s, bullets };
+      }
+      const bullets = [...s.bullets];
+      bullets[editingField.bi] = trimmed || bullets[editingField.bi];
+      return { ...s, bullets };
+    }));
+    setEditingField(null);
+  };
 
   // agent state
   const [agentOpen, setAgentOpen] = React.useState(false);
@@ -115,6 +134,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
   };
 
   const goTo = (i) => {
+    setEditingField(null);
     const next = Math.max(0, Math.min(localSlides.length - 1, i));
     setCurrentIndex(next);
     setTransitionKey((k) => k + 1);
@@ -134,7 +154,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
   React.useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'Escape') { setEditPanelOpen(false); setShowMenu(false); setShowThemePop(false); setAgentOpen(false); }
-      if (editPanelOpen || agentOpen) return;
+      if (editPanelOpen || agentOpen || editingField) return;
       if (e.key === 'ArrowRight') goTo(currentIndex + 1);
       if (e.key === 'ArrowLeft')  goTo(currentIndex - 1);
       if (e.key === 'g') setShowGrid((s) => !s);
@@ -142,7 +162,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [currentIndex, localSlides.length, editPanelOpen, agentOpen]);
+  }, [currentIndex, localSlides.length, editPanelOpen, agentOpen, editingField]);
 
   // scroll agent chat
   React.useEffect(() => {
@@ -351,6 +371,52 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
   const SlideContent = ({ slide, t, layout, align, bgImg, index, total, gridOn }) => {
     const dFont = brandConfig?.displayFont || qxType.display;
     const bFont = brandConfig?.bodyFont    || qxType.body;
+
+    const EditableText = ({ tag: Tag = 'div', field, bi, editValue, style, children, ...rest }) => {
+      const isEditing =
+        field === 'title'    ? editingField?.field === 'title'    :
+        field === 'eyebrow'  ? editingField?.field === 'eyebrow'  :
+        field === 'figure'   ? editingField?.field === 'figure'   :
+        field === 'stat-num' ? editingField?.field === 'stat-num' :
+        editingField?.field === 'bullet' && editingField?.bi === bi;
+      return (
+        <Tag
+          contentEditable={isEditing}
+          suppressContentEditableWarning
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            const el = e.currentTarget;
+            const ef =
+              field === 'title'    ? { field: 'title' }    :
+              field === 'eyebrow'  ? { field: 'eyebrow' }  :
+              field === 'figure'   ? { field: 'figure' }   :
+              field === 'stat-num' ? { field: 'stat-num' } :
+              { field: 'bullet', bi };
+            setEditingField(ef);
+            requestAnimationFrame(() => {
+              if (editValue !== undefined) el.textContent = editValue;
+              el.focus();
+            });
+          }}
+          onBlur={isEditing ? (e) => commitEdit(e.currentTarget.textContent) : undefined}
+          onKeyDown={isEditing ? (e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') { e.preventDefault(); commitEdit(e.currentTarget.textContent); }
+            if (e.key === 'Escape') { e.preventDefault(); setEditingField(null); }
+          } : undefined}
+          style={{
+            ...style,
+            cursor: 'text',
+            outline: isEditing ? '2px solid rgba(212,255,63,0.55)' : 'none',
+            borderRadius: isEditing ? 4 : undefined,
+          }}
+          {...rest}
+        >
+          {children}
+        </Tag>
+      );
+    };
+
     const hasImg  = !!bgImg && layout !== 'image';
     const isLight = t.swatch === '#E9D5FF';
     const fg  = hasImg ? '#fff' : t.title;
@@ -366,7 +432,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     const Eyebrow = ({ children, color }) => (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, justifyContent: ai }}>
         <div style={{ width: 24, height: 1, background: color || ac }} />
-        <span style={{ fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.30em', textTransform: 'uppercase', color: color || ac, opacity: 0.95 }}>{children}</span>
+        <EditableText tag="span" field="eyebrow" style={{ fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.30em', textTransform: 'uppercase', color: color || ac, opacity: 0.95 }}>{children}</EditableText>
       </div>
     );
 
@@ -376,11 +442,11 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
         <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
         <GridOverlay visible={gridOn} color={gridColor} />
         <div style={{ ...bodyInset, alignItems: 'center', justifyContent: 'center', textAlign: 'center', flexDirection: 'column' }}>
-          <Eyebrow>Slide {String(index + 1).padStart(2, '0')}</Eyebrow>
-          <h2 style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(28px,4.6vw,52px)', color: fg, lineHeight: 1.05, letterSpacing: '-0.025em', margin: 0, maxWidth: '82%' }}>{slide.title}</h2>
+          <Eyebrow>{slide.eyebrow || `Slide ${String(index + 1).padStart(2, '0')}`}</Eyebrow>
+          <EditableText tag="h2" field="title" style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(28px,4.6vw,52px)', color: fg, lineHeight: 1.05, letterSpacing: '-0.025em', margin: 0, maxWidth: '82%' }}>{slide.title}</EditableText>
           <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 8, maxWidth: '70%' }}>
             {slide.bullets.slice(0, 3).map((b, j) => (
-              <div key={j} style={{ color: tx, fontFamily: bFont, fontSize: 'clamp(13px,1.45vw,16px)', lineHeight: 1.6 }}>{b}</div>
+              <EditableText key={j} tag="div" field="bullet" bi={j} style={{ color: tx, fontFamily: bFont, fontSize: 'clamp(13px,1.45vw,16px)', lineHeight: 1.6 }}>{b}</EditableText>
             ))}
           </div>
         </div>
@@ -394,14 +460,14 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
         <GridOverlay visible={gridOn} color={gridColor} />
         <div style={{ ...bodyInset, gap: 48 }}>
           <div style={{ flex: '0 0 44%', display: 'flex', flexDirection: 'column', justifyContent: 'center', borderRight: `1px solid ${t.rule}`, paddingRight: 36 }}>
-            <Eyebrow>Section · {String(index + 1).padStart(2, '0')}</Eyebrow>
-            <h2 style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(26px,3.4vw,40px)', color: fg, lineHeight: 1.06, letterSpacing: '-0.022em', margin: 0, textAlign: ta }}>{slide.title}</h2>
+            <Eyebrow>{slide.eyebrow || `Section · ${String(index + 1).padStart(2, '0')}`}</Eyebrow>
+            <EditableText tag="h2" field="title" style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(26px,3.4vw,40px)', color: fg, lineHeight: 1.06, letterSpacing: '-0.022em', margin: 0, textAlign: ta }}>{slide.title}</EditableText>
           </div>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 14, paddingLeft: 8 }}>
             {slide.bullets.map((b, j) => (
               <div key={j} style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
                 <span style={{ fontFamily: qxType.mono, fontSize: 11, color: ac, letterSpacing: '0.10em', flexShrink: 0, marginTop: 4 }}>{String(j + 1).padStart(2, '0')}</span>
-                <span style={{ color: tx, fontFamily: bFont, fontSize: 'clamp(13px,1.4vw,16px)', lineHeight: 1.55 }}>{b}</span>
+                <EditableText tag="span" field="bullet" bi={j} style={{ color: tx, fontFamily: bFont, fontSize: 'clamp(13px,1.4vw,16px)', lineHeight: 1.55 }}>{b}</EditableText>
               </div>
             ))}
           </div>
@@ -415,10 +481,10 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
         <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
         <GridOverlay visible={gridOn} color={gridColor} />
         <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'flex-end', alignItems: ai }}>
-          <Eyebrow>The headline</Eyebrow>
-          <h2 style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(40px,7vw,84px)', color: fg, lineHeight: 0.98, letterSpacing: '-0.035em', margin: 0, textAlign: ta, maxWidth: '95%' }}>{slide.title}</h2>
+          <Eyebrow>{slide.eyebrow || 'The headline'}</Eyebrow>
+          <EditableText tag="h2" field="title" style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(40px,7vw,84px)', color: fg, lineHeight: 0.98, letterSpacing: '-0.035em', margin: 0, textAlign: ta, maxWidth: '95%' }}>{slide.title}</EditableText>
           {slide.bullets[0] && (
-            <div style={{ marginTop: 24, color: tx, fontFamily: bFont, fontSize: 'clamp(14px,1.55vw,18px)', lineHeight: 1.55, maxWidth: '62%', textAlign: ta }}>{slide.bullets[0]}</div>
+            <EditableText tag="div" field="bullet" bi={0} style={{ marginTop: 24, color: tx, fontFamily: bFont, fontSize: 'clamp(14px,1.55vw,18px)', lineHeight: 1.55, maxWidth: '62%', textAlign: ta }}>{slide.bullets[0]}</EditableText>
           )}
         </div>
       </div>
@@ -431,12 +497,12 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
         <GridOverlay visible={gridOn} color={gridColor} />
         <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
           <div style={{ fontFamily: 'Georgia, serif', fontSize: 'clamp(80px,11vw,140px)', color: ac, lineHeight: 0.5, marginBottom: 8, opacity: 0.85 }}>"</div>
-          <blockquote style={{ fontFamily: dFont, fontStyle: 'italic', fontWeight: 400, fontSize: 'clamp(20px,2.6vw,32px)', color: fg, lineHeight: 1.35, letterSpacing: '-0.012em', margin: 0, maxWidth: '82%' }}>
+          <EditableText tag="blockquote" field="bullet" bi={0} style={{ fontFamily: dFont, fontStyle: 'italic', fontWeight: 400, fontSize: 'clamp(20px,2.6vw,32px)', color: fg, lineHeight: 1.35, letterSpacing: '-0.012em', margin: 0, maxWidth: '82%' }}>
             {slide.bullets[0] || slide.title}
-          </blockquote>
+          </EditableText>
           <div style={{ marginTop: 28, display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 32, height: 1, background: ac }} />
-            <span style={{ fontFamily: qxType.mono, fontSize: 11, letterSpacing: '0.28em', textTransform: 'uppercase', color: tx }}>{slide.title}</span>
+            <EditableText tag="span" field="title" style={{ fontFamily: qxType.mono, fontSize: 11, letterSpacing: '0.28em', textTransform: 'uppercase', color: tx }}>{slide.title}</EditableText>
           </div>
         </div>
       </div>
@@ -448,8 +514,8 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
         <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
         <GridOverlay visible={gridOn} color={gridColor} />
         <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'center', alignItems: ai }}>
-          <Eyebrow>Slide {String(index + 1).padStart(2, '0')} · {String(total).padStart(2, '0')}</Eyebrow>
-          <h2 style={{ fontFamily: dFont, fontWeight: 500, fontSize: 'clamp(34px,5.5vw,68px)', color: fg, lineHeight: 1.0, letterSpacing: '-0.030em', margin: 0, textAlign: ta, maxWidth: '90%' }}>{slide.title}</h2>
+          <Eyebrow>{slide.eyebrow || `Slide ${String(index + 1).padStart(2, '0')} · ${String(total).padStart(2, '0')}`}</Eyebrow>
+          <EditableText tag="h2" field="title" style={{ fontFamily: dFont, fontWeight: 500, fontSize: 'clamp(34px,5.5vw,68px)', color: fg, lineHeight: 1.0, letterSpacing: '-0.030em', margin: 0, textAlign: ta, maxWidth: '90%' }}>{slide.title}</EditableText>
         </div>
       </div>
     );
@@ -466,17 +532,17 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
           <GridOverlay visible={gridOn} color={gridColor} />
           <div style={{ ...bodyInset, gap: 48, alignItems: 'center' }}>
             <div style={{ flex: '0 0 56%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <Eyebrow>The number</Eyebrow>
-              <div style={{ display: 'flex', alignItems: 'flex-start', lineHeight: 0.85, gap: 4 }}>
+              <Eyebrow>{slide.eyebrow || 'The number'}</Eyebrow>
+              <EditableText field="stat-num" editValue={slide.bullets[0] || ''} style={{ display: 'flex', alignItems: 'flex-start', lineHeight: 0.85, gap: 4 }}>
                 <span style={{ fontFamily: dFont, fontWeight: 500, fontSize: 'clamp(120px,18vw,240px)', color: fg, letterSpacing: '-0.05em' }}>{num}</span>
                 <span style={{ fontFamily: dFont, fontWeight: 500, fontSize: 'clamp(48px,7vw,90px)', color: ac, letterSpacing: '-0.02em', marginTop: '0.5em' }}>{suf}</span>
-              </div>
+              </EditableText>
             </div>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 18, borderLeft: `1px solid ${t.rule}`, paddingLeft: 36 }}>
-              <h3 style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(20px,2.4vw,28px)', color: fg, lineHeight: 1.15, letterSpacing: '-0.018em', margin: 0 }}>{slide.title}</h3>
+              <EditableText tag="h3" field="title" style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(20px,2.4vw,28px)', color: fg, lineHeight: 1.15, letterSpacing: '-0.018em', margin: 0 }}>{slide.title}</EditableText>
               <p style={{ fontFamily: bFont, fontSize: 'clamp(13px,1.4vw,16px)', lineHeight: 1.55, color: tx, margin: 0 }}>{ctx}</p>
               {slide.bullets[1] && (
-                <div style={{ paddingTop: 14, borderTop: `1px solid ${t.rule}`, fontFamily: bFont, fontSize: 'clamp(12px,1.25vw,14px)', color: tx, opacity: 0.85, lineHeight: 1.5 }}>{slide.bullets[1]}</div>
+                <EditableText tag="div" field="bullet" bi={1} style={{ paddingTop: 14, borderTop: `1px solid ${t.rule}`, fontFamily: bFont, fontSize: 'clamp(12px,1.25vw,14px)', color: tx, opacity: 0.85, lineHeight: 1.5 }}>{slide.bullets[1]}</EditableText>
               )}
             </div>
           </div>
@@ -491,17 +557,24 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
           <SlideFrame t={t} hasImg={false} index={index} total={total} isLight={isLight} />
           <GridOverlay visible={gridOn} color={gridColor} />
           <div style={{ ...bodyInset, gap: 36 }}>
-            <div style={{ flex: '0 0 52%', borderRadius: 8, overflow: 'hidden', position: 'relative', background: `url(${img}) center/cover no-repeat`, border: `1px solid ${t.rule}` }}>
-              <div style={{ position: 'absolute', top: 14, left: 14, fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.24em', textTransform: 'uppercase', color: '#fff', opacity: 0.85, padding: '5px 9px', background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)', borderRadius: 4 }}>Figure {String(index + 1).padStart(2, '0')}</div>
+            <div style={{ flex: '0 0 52%', borderRadius: 8, overflow: 'hidden', position: 'relative', background: `url(${img}) center/cover no-repeat`, border: `1px solid ${t.rule}`, cursor: 'pointer' }}
+              onDoubleClick={(e) => { e.stopPropagation(); setEditPanelOpen(true); setEditTab('image'); }}
+              onMouseEnter={(e) => { const ov = e.currentTarget.querySelector('.img-hover-ov'); if (ov) ov.style.opacity = '1'; }}
+              onMouseLeave={(e) => { const ov = e.currentTarget.querySelector('.img-hover-ov'); if (ov) ov.style.opacity = '0'; }}
+            >
+              <EditableText tag="div" field="figure" style={{ position: 'absolute', top: 14, left: 14, fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.24em', textTransform: 'uppercase', color: '#fff', opacity: 0.85, padding: '5px 9px', background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)', borderRadius: 4, zIndex: 2, position: 'absolute' }}>{slide.figure || `Figure ${String(index + 1).padStart(2, '0')}`}</EditableText>
+              <div className="img-hover-ov" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 180ms', pointerEvents: 'none' }}>
+                <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: '#fff', padding: '6px 12px', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', borderRadius: 6 }}>Double-click to change image</span>
+              </div>
             </div>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 14 }}>
-              <Eyebrow>{`Section · ${String(index + 1).padStart(2, '0')}`}</Eyebrow>
-              <h2 style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(22px,3vw,38px)', color: fg, lineHeight: 1.08, letterSpacing: '-0.022em', margin: 0 }}>{slide.title}</h2>
+              <Eyebrow>{slide.eyebrow || `Section · ${String(index + 1).padStart(2, '0')}`}</Eyebrow>
+              <EditableText tag="h2" field="title" style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(22px,3vw,38px)', color: fg, lineHeight: 1.08, letterSpacing: '-0.022em', margin: 0 }}>{slide.title}</EditableText>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 6 }}>
                 {slide.bullets.map((b, j) => (
                   <div key={j} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                     <div style={{ width: 4, height: 4, borderRadius: '50%', background: ac, marginTop: 9, flexShrink: 0 }} />
-                    <span style={{ color: tx, fontFamily: bFont, fontSize: 'clamp(13px,1.35vw,15px)', lineHeight: 1.55 }}>{b}</span>
+                    <EditableText tag="span" field="bullet" bi={j} style={{ color: tx, fontFamily: bFont, fontSize: 'clamp(13px,1.35vw,15px)', lineHeight: 1.55 }}>{b}</EditableText>
                   </div>
                 ))}
               </div>
@@ -518,13 +591,13 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
         <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
         <GridOverlay visible={gridOn} color={gridColor} />
         <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'center', alignItems: ai }}>
-          <Eyebrow>Section · {String(index + 1).padStart(2, '0')}</Eyebrow>
-          <h2 style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(26px,3.6vw,42px)', color: fg, lineHeight: 1.08, letterSpacing: '-0.025em', margin: 0, textAlign: ta, maxWidth: '80%' }}>{slide.title}</h2>
+          <Eyebrow>{slide.eyebrow || `Section · ${String(index + 1).padStart(2, '0')}`}</Eyebrow>
+          <EditableText tag="h2" field="title" style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(26px,3.6vw,42px)', color: fg, lineHeight: 1.08, letterSpacing: '-0.025em', margin: 0, textAlign: ta, maxWidth: '80%' }}>{slide.title}</EditableText>
           <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: '82%' }}>
             {slide.bullets.map((b, j) => (
               <div key={j} style={{ display: 'flex', gap: 14, alignItems: 'flex-start', justifyContent: ai === 'flex-end' ? 'flex-end' : 'flex-start' }}>
                 <span style={{ fontFamily: qxType.mono, fontSize: 11, color: ac, letterSpacing: '0.10em', flexShrink: 0, marginTop: 5 }}>{String(j + 1).padStart(2, '0')}</span>
-                <span style={{ color: tx, fontFamily: bFont, fontSize: 'clamp(13px,1.45vw,16.5px)', lineHeight: 1.55, textAlign: ta }}>{b}</span>
+                <EditableText tag="span" field="bullet" bi={j} style={{ color: tx, fontFamily: bFont, fontSize: 'clamp(13px,1.45vw,16.5px)', lineHeight: 1.55, textAlign: ta }}>{b}</EditableText>
               </div>
             ))}
           </div>

@@ -23,7 +23,6 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
     { id: 6, label: 'Light canvas',    role: 'App background',                  value: '#FAF8FC' },
   ]);
   const [nextId, setNextId] = React.useState(7);
-  const [voice, setVoice] = React.useState(brandConfig?.voice || 'professional');
   const [voiceDocs, setVoiceDocs] = React.useState({ professional: null, minimal: null, bold: null, fun: null });
   const voiceDocRefs = {
     professional: React.useRef(null),
@@ -219,9 +218,9 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
           <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12, marginTop: 20 }}>
             {saved && <span style={{ fontSize: 13, color: '#1F8A5B' }}>✓ Saved</span>}
             <button onClick={() => {
-              const cfg = { colorRows, voice };
+              const cfg = { colorRows };
               onBrandSave && onBrandSave(cfg);
-              if (window.firebaseDb) window.firebaseDb.doc('config/brand').set(cfg).catch(() => {});
+              if (window.firebaseDb) window.firebaseDb.doc('config/brand').set(cfg, { merge: true }).catch(() => {});
               setSaved(true); setTimeout(() => setSaved(false), 2000);
             }} style={primaryLimeButton()}>
               Save palette
@@ -384,27 +383,15 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
             { id: 'fun',          label: 'Fun',          desc: 'Playful, warm, energetic. Human and upbeat.' },
           ].map(v => {
             const doc = voiceDocs[v.id];
-            const isActive = voice === v.id;
             return (
               <div key={v.id} style={{
                 borderRadius: qxRadius.lg,
-                border: `1px solid ${isActive ? T.primary : T.border}`,
-                background: isActive ? T.ghostBg : T.surface,
+                border: `1px solid ${T.border}`,
+                background: T.surface,
                 overflow: 'hidden',
-                transition: `all 140ms ${qxEase}`,
-                boxShadow: isActive ? qxShadow(tweaks?.darkMode).sm : 'none',
               }}>
-                {/* Header row — click to select */}
-                <div onClick={() => setVoice(v.id)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', cursor: 'pointer' }}>
-                  <div style={{
-                    width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
-                    border: `1.5px solid ${isActive ? T.primary : T.borderHi}`,
-                    background: isActive ? T.primary : 'transparent',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: `all 140ms ${qxEase}`,
-                  }}>
-                    {isActive && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#F6F1FB' }} />}
-                  </div>
+                {/* Header — info only, not selectable */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px' }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: T.ink, marginBottom: 2 }}>{v.label}</div>
                     <div style={{ fontSize: 13, color: T.inkDim }}>{v.desc}</div>
@@ -460,9 +447,9 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
           <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12, marginTop: 4 }}>
             {saved && <span style={{ fontSize: 13, color: '#1F8A5B' }}>✓ Saved</span>}
             <button onClick={() => {
-              const cfg = { colorRows, voice, voiceDocs: Object.fromEntries(Object.entries(voiceDocs).map(([k, v]) => [k, v ? v.name : null])) };
+              const cfg = { voiceDocs: Object.fromEntries(Object.entries(voiceDocs).map(([k, v]) => [k, v ? v.name : null])) };
               onBrandSave && onBrandSave(cfg);
-              if (window.firebaseDb) window.firebaseDb.doc('config/brand').set(cfg).catch(() => {});
+              if (window.firebaseDb) window.firebaseDb.doc('config/brand').set(cfg, { merge: true }).catch(() => {});
               setSaved(true); setTimeout(() => setSaved(false), 2000);
             }} style={primaryLimeButton()}>Save voice</button>
           </div>
