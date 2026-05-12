@@ -849,14 +849,57 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
               {/* IMAGE TAB */}
               {editTab === 'image' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)' }}>Background photo</div>
-                  <input value={imgQuery} onChange={(e) => handleImgSearch(e.target.value)} placeholder="Search — business, finance, city…"
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(246,241,251,0.10)', background: 'rgba(246,241,251,0.04)', color: '#F6F1FB', fontFamily: qxType.body, fontSize: 12.5, outline: 'none', boxSizing: 'border-box' }} />
+                  {/* Current image strip */}
                   {slideImages[currentIndex] && (
-                    <button onClick={removeImage} style={{ padding: '8px', borderRadius: 7, border: '1px solid rgba(224,62,107,0.35)', background: 'rgba(224,62,107,0.06)', color: '#F472A6', fontFamily: qxType.body, fontSize: 11.5, cursor: 'pointer' }}>
-                      Remove current image
-                    </button>
+                    <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '16/9', background: `url(${slideImages[currentIndex]}) center/cover no-repeat`, border: '1px solid rgba(246,241,251,0.10)' }}>
+                      <button onClick={removeImage} style={{ position: 'absolute', top: 7, right: 7, padding: '4px 9px', borderRadius: 6, border: '1px solid rgba(224,62,107,0.45)', background: 'rgba(0,0,0,0.60)', backdropFilter: 'blur(6px)', color: '#F472A6', fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', cursor: 'pointer' }}>Remove</button>
+                    </div>
                   )}
+
+                  {/* Upload from computer */}
+                  <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)' }}>Upload from computer</div>
+                  <label
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '18px 12px', border: '1px dashed rgba(246,241,251,0.16)', borderRadius: 9, cursor: 'pointer', background: 'rgba(246,241,251,0.02)', transition: `background 140ms ${qxEase}` }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(246,241,251,0.06)'; e.currentTarget.style.borderColor = 'rgba(246,241,251,0.28)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(246,241,251,0.02)'; e.currentTarget.style.borderColor = 'rgba(246,241,251,0.16)'; }}
+                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.background = 'rgba(212,255,63,0.06)'; e.currentTarget.style.borderColor = 'rgba(212,255,63,0.35)'; }}
+                    onDragLeave={(e) => { e.currentTarget.style.background = 'rgba(246,241,251,0.02)'; e.currentTarget.style.borderColor = 'rgba(246,241,251,0.16)'; }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.style.background = 'rgba(246,241,251,0.02)';
+                      e.currentTarget.style.borderColor = 'rgba(246,241,251,0.16)';
+                      const file = e.dataTransfer.files[0];
+                      if (file && file.type.startsWith('image/')) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => applyImage(ev.target.result);
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  >
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = (ev) => applyImage(ev.target.result);
+                      reader.readAsDataURL(file);
+                      e.target.value = '';
+                    }} />
+                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 14V4M7 8l4-4 4 4" stroke="rgba(246,241,251,0.45)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /><path d="M3 16v1a2 2 0 002 2h12a2 2 0 002-2v-1" stroke="rgba(246,241,251,0.28)" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                    <span style={{ fontFamily: qxType.body, fontSize: 12, color: 'rgba(246,241,251,0.55)' }}>Click or drag an image here</span>
+                    <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', color: 'rgba(246,241,251,0.28)', textTransform: 'uppercase' }}>JPG · PNG · WEBP · GIF</span>
+                  </label>
+
+                  {/* Divider */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0' }}>
+                    <div style={{ flex: 1, height: 1, background: 'rgba(246,241,251,0.08)' }} />
+                    <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.24em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.28)' }}>or search</span>
+                    <div style={{ flex: 1, height: 1, background: 'rgba(246,241,251,0.08)' }} />
+                  </div>
+
+                  {/* AI image search */}
+                  <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)' }}>Search photos</div>
+                  <input value={imgQuery} onChange={(e) => handleImgSearch(e.target.value)} placeholder="business, finance, city…"
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(246,241,251,0.10)', background: 'rgba(246,241,251,0.04)', color: '#F6F1FB', fontFamily: qxType.body, fontSize: 12.5, outline: 'none', boxSizing: 'border-box' }} />
                   {imgResults.length > 0 && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                       {imgResults.map((img) => (
@@ -864,11 +907,6 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
                           <img src={img.thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                         </button>
                       ))}
-                    </div>
-                  )}
-                  {!imgResults.length && !imgQuery && (
-                    <div style={{ textAlign: 'center', color: 'rgba(246,241,251,0.30)', fontFamily: qxType.body, fontSize: 12, padding: '24px 12px', border: '1px dashed rgba(246,241,251,0.10)', borderRadius: 8 }}>
-                      Search to find photos
                     </div>
                   )}
                 </div>
