@@ -16,8 +16,10 @@ async function goToScreen(page, screenValue) {
 
 // Waits for the React app to finish its initial render (Firebase auth listener fires).
 async function waitForApp(page) {
-  await page.waitForLoadState('networkidle');
-  // The login heading is the first stable landmark once React mounts
+  // 'load' fires once all resources are fetched. 'networkidle' is avoided because
+  // Firebase Auth holds a persistent connection that prevents idle from ever being reached,
+  // which caused every test to timeout in CI.
+  await page.waitForLoadState('load');
   await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible({ timeout: 10000 });
 }
 

@@ -344,6 +344,7 @@ test.describe('Gap 7 — Real slide generation (Cloud Function)', () => {
     expect(available).toBe(true);
   });
 
+  test.skip(!!process.env.CI, 'requires live authenticated Firebase session');
   test('generateDeck Cloud Function returns unauthenticated (not a 404)', async ({ page }) => {
     await loadApp(page);
     await page.waitForFunction(
@@ -364,6 +365,7 @@ test.describe('Gap 7 — Real slide generation (Cloud Function)', () => {
     expect(result).toMatch(/unauthenticated|auth|internal|permission/i);
   });
 
+  test.skip(!!process.env.CI, 'requires live authenticated Firebase session');
   test('Preview uses the submitted context instead of the old seed deck', async ({ page }) => {
     await loadApp(page);
     await goToScreen(page, 'home');
@@ -422,6 +424,7 @@ test.describe('Gap 8 — File parsing (PDF.js client-side)', () => {
 // ─── GAP 9 — AI agent ────────────────────────────────────────────────────────
 
 test.describe('Gap 9 — AI agent (Cloud Function with keyword fallback)', () => {
+  test.skip(!!process.env.CI, 'requires live authenticated Firebase session');
   test('agentEdit Cloud Function returns unauthenticated (not a 404)', async ({ page }) => {
     await loadApp(page);
     await page.waitForFunction(
