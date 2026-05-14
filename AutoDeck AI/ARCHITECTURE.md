@@ -39,6 +39,7 @@ autodeck/
     ├── index.html                  # Alias entry point (same app)
     ├── app.jsx                     # Root: routing, auth state, generation logic, brandConfig
     ├── tokens.jsx                  # Design tokens: qxTheme, qxRadius, qxType, qxEase, qxShadow, QX
+    ├── template-presets.jsx        # Built-in template recipes until source PPTX/templates are available
     ├── firebase-config.js          # ⚠ Gitignored — Firebase project credentials
     ├── firebase-config.example.js  # Template for firebase-config.js
     ├── functions/
@@ -104,6 +105,7 @@ Settings path:
 
 ### `HomeScreenA` (active generate form)
 - User inputs: free-text textarea, drag-and-drop file upload, slide count picker (5/8/10/15/Auto), template style (Professional / Minimal / Bold / Fun)
+- Template style now resolves through `template-presets.jsx` into a preset contract: allowed layouts, default theme, voice, density, image style, locked sections, and variables.
 - **File parsing in the browser:**
   - `.txt` — FileReader
   - `.pdf` — PDF.js
@@ -127,10 +129,11 @@ Settings path:
 
 ### `SlideGenerator`
 - Props: `slides`, `config`, `tweaks`, `brandConfig`, `onBack`
+- Reads optional slide metadata (`layout`, `theme`, `contentType`, `speakerNotes`, `imagePrompt`) produced by the preset-aware generation flow.
 - **Fonts from brand config:** `SlideContent` reads `brandConfig?.displayFont` / `brandConfig?.bodyFont` and falls back to `qxType.display` / `qxType.body` — slide canvas reflects admin typography choices
 - **Themes:** 8 colour palettes (Quidax/purple, Midnight, Soft, Ocean, Forest, Sunset, Slate, Rose) + optional custom theme built from `brandConfig.colors`
 - **Layouts:** standard, split, bigTitle, stat, quote, image, minimal, centered — per-slide overrides
-- **Exports:** PPTX via pptxgenjs (working), PNG via html2canvas (working), PDF via `window.print()`
+- **Exports:** PPTX via pptxgenjs (editable text/shapes with preset-aware theme translation, Office-safe font fallbacks, native PowerPoint palettes), PNG via html2canvas (working), PDF via `window.print()`
 - **Agent chat:** calls `agentEdit` Cloud Function; falls back to keyword parser if Function unavailable
 - Per-slide state: theme override, layout override, alignment, background image
 
@@ -157,10 +160,11 @@ Four tabs — all changes persist to `config/brand` in Firestore (with `{ merge:
 - AdminScreen initialises pickers from `brandConfig` if fonts were previously saved
 
 **Templates**
+- Built-in template presets are displayed first and act as source-free layout recipes while real template files are still pending
 - Upload `.pptx` / `.ppt` / `.key` files; displayed in a list with name, upload date, layout count
 - Set one template as active (green "Active" badge); others show "Set active" button
 - Delete with trash icon (auto-promotes next template to active)
-- Note: uploaded template files are stored in component state only — not yet wired to generation
+- Note: uploaded template files are stored in component state only — generation currently uses built-in preset contracts instead
 
 **Voice**
 - Four options matching the generate tab: Professional / Minimal / Bold / Fun
@@ -271,8 +275,6 @@ Four tabs — all changes persist to `config/brand` in Firestore (with `{ merge:
 | Gap | Impact | Fix |
 |---|---|---|
 | Voice docs not passed to generation | Uploaded voice docs (Admin → Voice tab) are stored in state but not sent to `generateDeck` | Pass matching voice doc text alongside `brandVoice` in the Cloud Function call |
-| Template uploads not used in generation | File picked in Admin → Templates is stored in state only | Upload to Firebase Storage; pass template reference to generation |
-| PPTX export ignores brand fonts | `handleDownloadPPTX` hardcodes `fontFace: 'Calibri'` | Map `brandConfig.displayFont` / `bodyFont` to font names in pptxgenjs |
-| `config/brand.colors` shape mismatch | `brandConfig.colorRows` is an array; `SlideGenerator` reads `brandConfig.colors.primary` (object) for the custom theme | Either reshape on save or update the `customTheme` derivation to read from `colorRows` |
+| Template source uploads not used in generation | File picked in Admin → Templates is stored in state only | Built-in presets now drive generation; later upload files to Firebase Storage and hydrate the same preset contract |
+| PPTX export needs deeper fidelity | Export keeps slides editable and now uses Office-safe fonts plus explicit PowerPoint palettes; browser gradients are represented with editable native shapes | Add layout-by-layout visual regression checks and optional flattened "pixel-perfect" export mode |
 | No Firestore security rules documented | Unknown if rules restrict reads/writes correctly | Audit rules in Firebase Console |
-| Agent voice guide uses old keys | `voiceGuide` in `generateDeck` has keys `professional/bold/approachable/data`; UI now uses `professional/minimal/bold/fun` | Add `minimal` and `fun` keys; rename `approachable` → remove or map |

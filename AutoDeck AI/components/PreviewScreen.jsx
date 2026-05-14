@@ -3,15 +3,18 @@
 // The deck announces itself like a magazine. The outline below
 // is dense, ranked, and inline-editable. One lime moment: Open.
 // ============================================================
-const normalizePreviewSlides = (slides) => {
+const normalizePreviewSlides = (slides, templateStyle = 'Professional') => {
   if (!Array.isArray(slides)) return [];
   return slides
-    .map((slide) => {
+    .map((slide, index) => {
       const title = String(slide?.title || '').trim();
       const bullets = Array.isArray(slide?.bullets)
         ? slide.bullets.map((b) => String(b || '').trim()).filter(Boolean)
         : [];
-      return { ...slide, title, bullets: bullets.slice(0, 4) };
+      const normalized = { ...slide, title, bullets: bullets.slice(0, 4) };
+      return window.AutoDeckTemplatePresets?.enhanceSlide
+        ? window.AutoDeckTemplatePresets.enhanceSlide(normalized, index, slide?.templateStyle || templateStyle)
+        : normalized;
     })
     .filter((slide) => slide.title || slide.bullets.length);
 };
@@ -42,7 +45,7 @@ const makePreviewDraftSlides = (config, count) => {
     .map((s) => clean(s, 22))
     .filter(Boolean);
 
-  return Array.from({ length: count }, (_, i) => {
+  const draftSlides = Array.from({ length: count }, (_, i) => {
     const start = Math.floor((i * sentences.length) / count);
     const end = Math.max(start + 1, Math.floor(((i + 1) * sentences.length) / count));
     const chunk = sentences.slice(start, end);
@@ -50,10 +53,14 @@ const makePreviewDraftSlides = (config, count) => {
     while (bullets.length < 2) bullets.push('Clarify the main takeaway for this section');
     return {
       title: i === 0 ? title(compact, 'Presentation Overview') : title(chunk[0], `Section ${i + 1}`),
-      kicker: i === 0 ? 'Overview' : 'From your context',
+      contentType: i === 0 ? 'opening' : i === count - 1 ? 'next steps' : 'section',
+      kicker: i === 0 ? 'Opening' : i === count - 1 ? 'Next steps' : 'From your context',
       bullets,
     };
   });
+  return window.AutoDeckTemplatePresets?.enhanceSlides
+    ? window.AutoDeckTemplatePresets.enhanceSlides(draftSlides, config?.templateStyle)
+    : draftSlides;
 };
 
 const PreviewScreen = ({ config, slides: generatedSlides = [], generationStatus = 'idle', generationError, onGenerateAgain, onViewSlideshow, tweaks }) => {
@@ -62,15 +69,15 @@ const PreviewScreen = ({ config, slides: generatedSlides = [], generationStatus 
   const [editingIndex, setEditingIndex] = React.useState(null);
   const [editDraft, setEditDraft] = React.useState({ title: '', bullets: [] });
   const [expanded, setExpanded] = React.useState(new Set([0]));
-  const [theme, setTheme] = React.useState('purple');
+  const [theme, setTheme] = React.useState(() => window.AutoDeckTemplatePresets?.getTemplatePreset?.(config?.templateStyle)?.theme || 'purple');
 
   const inputText = config?.inputText || config?.parsedFileText || config?.uploadedFile?.name || 'Q2 Sales Strategy and market expansion plan for Quidax';
   const deckTitle = inputText.trim().split(/\s+/).slice(0, 8).join(' ').replace(/[.,;:!]+$/, '');
   const slideCount = config?.slideCount === 'Auto' || !config?.slideCount ? 10 : (parseInt(config.slideCount) || 10);
-  const incomingSlides = normalizePreviewSlides(generatedSlides);
+  const incomingSlides = normalizePreviewSlides(generatedSlides, config?.templateStyle);
 
   const seed = [
-    { title: 'Executive Summary',     kicker: 'Where we stand',      bullets: ['Strong Q2 performance across all verticals', 'New markets entered: Ghana, Senegal', 'Revenue up 34% YoY'] },
+    { title: 'Executive Summary',     contentType: 'opening', kicker: 'Where we stand',      bullets: ['Strong Q2 performance across all verticals', 'New markets entered: Ghana, Senegal', 'Revenue up 34% YoY'] },
     { title: 'Market Overview',       kicker: 'The landscape',       bullets: ['Africa crypto market growing at 18% CAGR', 'Quidax positioned in top 3 exchanges', 'User base crossed 2M milestone'] },
     { title: 'Key Metrics',           kicker: 'By the numbers',      bullets: ['Monthly active users: 1.2M', 'Transaction volume: $280M', 'NPS score: 72'] },
     { title: 'Growth Initiatives',    kicker: 'What we shipped',     bullets: ['B2B partnerships with 12 new fintechs', 'Mobile app v4.0 launch', 'Merchant payment integration'] },
@@ -83,11 +90,11 @@ const PreviewScreen = ({ config, slides: generatedSlides = [], generationStatus 
   ];
   const initialSlides = incomingSlides.length
     ? incomingSlides
-    : (makePreviewDraftSlides(config, slideCount).length ? makePreviewDraftSlides(config, slideCount) : seed.slice(0, slideCount));
+    : (makePreviewDraftSlides(config, slideCount).length ? makePreviewDraftSlides(config, slideCount) : normalizePreviewSlides(seed.slice(0, slideCount), config?.templateStyle));
   const [slides, setSlides] = React.useState(initialSlides);
 
   React.useEffect(() => {
-    const nextSlides = normalizePreviewSlides(generatedSlides);
+    const nextSlides = normalizePreviewSlides(generatedSlides, config?.templateStyle);
     if (!nextSlides.length) return;
     setSlides(nextSlides);
     setEditingIndex(null);
@@ -105,15 +112,26 @@ const PreviewScreen = ({ config, slides: generatedSlides = [], generationStatus 
   const handleDelete = (i) => { setSlides(p => p.filter((_, j) => j !== i)); if (editingIndex === i) setEditingIndex(null); };
   const handleEditStart = (i) => { setEditingIndex(i); setEditDraft({ title: slides[i].title, bullets: [...slides[i].bullets] }); setExpanded(p => new Set([...p, i])); };
   const handleEditSave = () => { setSlides(p => p.map((s, j) => j === editingIndex ? { ...s, ...editDraft } : s)); setEditingIndex(null); };
-  const handleAdd = () => { setSlides(p => [...p, { title: 'New slide', kicker: 'Untitled', bullets: ['Add your content here'] }]); };
+  const handleAdd = () => {
+    setSlides((p) => {
+      const nextSlide = { title: 'New slide', contentType: 'section', kicker: 'Untitled', bullets: ['Add your content here'] };
+      const enhanced = window.AutoDeckTemplatePresets?.enhanceSlide
+        ? window.AutoDeckTemplatePresets.enhanceSlide(nextSlide, p.length, config?.templateStyle)
+        : nextSlide;
+      return [...p, enhanced];
+    });
+  };
 
   const themes = {
     purple:   { name: 'Quidax',   c1: '#2D0F4E', c2: '#5F2A91', c3: '#B891DC' },
     midnight: { name: 'Midnight', c1: '#0F0A24', c2: '#312E81', c3: '#A5B4FC' },
+    soft:     { name: 'Soft',     c1: '#FAF5FF', c2: '#E9D5FF', c3: '#7B2FBE' },
+    ocean:    { name: 'Ocean',    c1: '#0C2B4E', c2: '#0369A1', c3: '#7DD3FC' },
     sunset:   { name: 'Sunset',   c1: '#431407', c2: '#9A3412', c3: '#FED7AA' },
     forest:   { name: 'Forest',   c1: '#022C22', c2: '#065F46', c3: '#6EE7B7' },
+    rose:     { name: 'Rose',     c1: '#4C0519', c2: '#BE123C', c3: '#FECACA' },
   };
-  const tc = themes[theme];
+  const tc = themes[theme] || themes.purple;
 
   // ── COVER (editorial, full-bleed, unmistakable) ──────────
   const Cover = () => (

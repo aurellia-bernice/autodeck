@@ -57,7 +57,7 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
   };
 
   const slideOptions = ['5', '8', '10', '15', 'Auto'];
-  const templates = ['Professional', 'Minimal', 'Bold', 'Fun'];
+  const templates = window.AutoDeckTemplatePresets?.getTemplateOptions?.() || ['Professional', 'Minimal', 'Bold', 'Fun'];
 
   const canGenerate = !parsing && (inputText.trim().length > 10 || uploadedFile);
   const wordCount = inputText.trim() ? inputText.trim().split(/\s+/).length : 0;
@@ -234,7 +234,14 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
         {/* CTA — the lime moment */}
         <div style={{ ...qxMotion.fadeUp(360), marginTop: 36, display: 'flex', alignItems: 'center', gap: 16 }}>
           <button
-            onClick={() => canGenerate && onGenerate({ inputText, slideCount, templateStyle, uploadedFile, parsedFileText })}
+            onClick={() => canGenerate && onGenerate({
+              inputText,
+              slideCount,
+              templateStyle,
+              templatePreset: window.AutoDeckTemplatePresets?.summarizeForPrompt?.(templateStyle),
+              uploadedFile,
+              parsedFileText,
+            })}
             disabled={!canGenerate}
             style={{
               padding: '17px 32px', borderRadius: qxRadius.full,

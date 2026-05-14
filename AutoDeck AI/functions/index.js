@@ -56,6 +56,12 @@ const trimWords = (value, maxWords) => String(value || '')
   .slice(0, maxWords)
   .join(' ');
 
+const normalizeLayout = (value, fallback = 'standard') => {
+  const allowed = new Set(['standard', 'split', 'bigTitle', 'stat', 'quote', 'image', 'minimal', 'centered']);
+  const layout = String(value || '').trim();
+  return allowed.has(layout) ? layout : fallback;
+};
+
 const normalizeSlides = (slides, count) => {
   if (!Array.isArray(slides)) return [];
   return slides
@@ -67,13 +73,21 @@ const normalizeSlides = (slides, count) => {
             .filter(Boolean)
             .slice(0, 4)
         : [];
-      return { title, bullets };
+      return {
+        title,
+        bullets,
+        layout: normalizeLayout(slide?.layout),
+        contentType: trimWords(slide?.contentType || slide?.kicker || 'section', 4).toLowerCase(),
+        kicker: trimWords(slide?.kicker || slide?.contentType || 'Section', 4),
+        speakerNotes: trimWords(slide?.speakerNotes, 60),
+        imagePrompt: trimWords(slide?.imagePrompt, 24),
+      };
     })
     .filter((slide) => slide.title && slide.bullets.length >= 2)
     .slice(0, count);
 };
 
-const buildDeckPrompt = ({ userInstruction, sourceMaterial, count, templateStyle, voiceGuide }) => `Create exactly ${count} presentation slides from the user's context.
+const buildDeckPrompt = ({ userInstruction, sourceMaterial, count, templateStyle, voiceGuide, templatePreset }) => `Create exactly ${count} presentation slides from the user's context.
 
 This is for an internal Quidax deck. The output must feel like a thoughtful first draft from a senior presentation strategist, not a generic summary.
 
@@ -86,20 +100,30 @@ Deck requirements:
 - Avoid generic filler like "improve efficiency", "drive growth", "leverage technology", or "enhance collaboration" unless the context says that specifically.
 - Titles should be specific and useful, not labels like "Overview" or "Key Metrics" unless the source truly supports them.
 - Bullets should state the point and the implication. Prefer concrete claims over vague phrases.
+- Every slide must include a layout from the template preset's allowedLayouts list.
+- Use "stat" only when there is a real number or metric in the source.
+- Use "image" only when you can provide a concrete imagePrompt.
 
 Voice: ${voiceGuide}
 Template style: ${templateStyle || 'Professional'}
+Template preset:
+${JSON.stringify(templatePreset || {}, null, 2)}
 
 Return ONLY valid JSON. No markdown. No comments. No text before or after the JSON.
 JSON shape:
 [
   {
     "title": "Specific slide title",
+    "layout": "standard|split|bigTitle|stat|quote|image|minimal|centered",
+    "contentType": "opening|context|problem|evidence|plan|risk|decision|next steps",
+    "kicker": "Short section label",
     "bullets": [
       "Context-grounded point with a clear implication",
       "Context-grounded point with a clear implication",
       "Context-grounded point with a clear implication"
-    ]
+    ],
+    "speakerNotes": "Optional short presenter guidance grounded in the source",
+    "imagePrompt": "Optional concrete visual prompt if layout is image"
   }
 ]
 
@@ -122,7 +146,7 @@ exports.generateDeck = onCall(
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
 
-    const { deckId, inputText, parsedFileText, slideCount, templateStyle, brandVoice } = request.data;
+    const { deckId, inputText, parsedFileText, slideCount, templateStyle, brandVoice, templatePreset } = request.data;
     const userInstruction = compactText(inputText, MAX_INPUT_CHARS);
     const sourceMaterial = compactText(parsedFileText, MAX_SOURCE_CHARS);
     const content = [userInstruction, sourceMaterial].filter(Boolean).join('\n\n');
@@ -131,10 +155,12 @@ exports.generateDeck = onCall(
 
     const voiceGuide = {
       professional: 'Clear, confident, executive-ready. Plain language, strong prioritisation, no jargon.',
+      minimal:      'Concise and restrained. Use fewer words, simple structure, and no decorative filler.',
       bold:         'Punchy and direct. Short sentences, strong verbs, no inflated claims.',
+      fun:          'Warm, human, and upbeat while staying concrete. Avoid jokes that weaken clarity.',
       approachable: 'Warm and conversational while still business-ready. Human-first and concrete.',
       data:         'Evidence-led. Put numbers, facts, trends, tradeoffs, and assumptions front and centre.',
-    }[brandVoice] || 'Clear, confident, executive-ready. Plain language, strong prioritisation, no jargon.';
+    }[brandVoice] || templatePreset?.tone || 'Clear, confident, executive-ready. Plain language, strong prioritisation, no jargon.';
 
     const systemPrompt = `You are AutoDeck AI, an expert presentation strategist for Quidax.
 You transform messy user context into accurate, useful slide content.
@@ -146,6 +172,7 @@ You must be faithful to the source. If a fact is not in the source, do not add i
       count,
       templateStyle,
       voiceGuide,
+      templatePreset,
     });
 
     let slides = [];
@@ -173,7 +200,16 @@ You must be faithful to the source. If a fact is not in the source, do not add i
     const batch = db.batch();
     slides.forEach((s, i) => {
       const ref = db.collection('decks').doc(deckId).collection('slides').doc();
-      batch.set(ref, { index: i, title: s.title || '', bullets: s.bullets || [] });
+      batch.set(ref, {
+        index: i,
+        title: s.title || '',
+        bullets: s.bullets || [],
+        layout: s.layout || 'standard',
+        contentType: s.contentType || null,
+        kicker: s.kicker || null,
+        speakerNotes: s.speakerNotes || '',
+        imagePrompt: s.imagePrompt || '',
+      });
     });
     await batch.commit();
     await db.collection('decks').doc(deckId).update({ status: 'ready', slideCount: slides.length });

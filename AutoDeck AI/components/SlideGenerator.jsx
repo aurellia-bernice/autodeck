@@ -10,13 +10,50 @@ const DEMO_SLIDES = [
   { title: 'Key Metrics', bullets: ['Monthly active users: 1.2M', 'Transaction volume: $280M', 'NPS score: 72'] },
 ];
 
+const deriveBrandColors = (brandConfig) => {
+  if (brandConfig?.colors?.primary) return brandConfig.colors;
+  if (!Array.isArray(brandConfig?.colorRows)) return null;
+  const find = (...needles) => {
+    const row = brandConfig.colorRows.find((r) => {
+      const haystack = `${r.label || ''} ${r.role || ''}`.toLowerCase();
+      return needles.some((needle) => haystack.includes(needle));
+    });
+    return row?.value;
+  };
+  const primary = find('primary') || brandConfig.colorRows[0]?.value;
+  if (!primary) return null;
+  return {
+    primary,
+    secondary: find('secondary') || brandConfig.colorRows[1]?.value || primary,
+    accent: find('accent', 'lime', 'cta') || '#D4FF3F',
+    lime: find('lime') || '#D4FF3F',
+    bgDark: find('dark canvas', 'dark') || '#0F031F',
+    bgLight: find('light canvas', 'light') || '#F6F1FB',
+  };
+};
+
+const pptFontName = (family, fallback, role = 'body') => {
+  const raw = String(family || fallback || '').split(',')[0].replace(/['"]/g, '').trim();
+  const name = raw || (role === 'display' ? 'Aptos Display' : 'Aptos');
+  const lower = name.toLowerCase();
+  const safe = ['aptos', 'aptos display', 'arial', 'verdana', 'georgia', 'calibri', 'segoe ui', 'times new roman'];
+  if (safe.includes(lower)) return name;
+  if (['playfair display', 'lora'].includes(lower) || lower.includes('serif')) return 'Georgia';
+  return role === 'display' ? 'Aptos Display' : 'Aptos';
+};
+
 const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, onBack }) => {
   const safeInitial = Array.isArray(initialSlides) && initialSlides.length > 0 ? initialSlides : DEMO_SLIDES;
+  const preparedInitial = window.AutoDeckTemplatePresets?.enhanceSlides
+    ? window.AutoDeckTemplatePresets.enhanceSlides(safeInitial, config?.templateStyle)
+    : safeInitial;
+  const templatePreset = window.AutoDeckTemplatePresets?.getTemplatePreset?.(config?.templateStyle);
+  const brandColors = deriveBrandColors(brandConfig);
 
   // ─── state ───────────────────────────────────────────────
-  const [localSlides, setLocalSlides] = React.useState(() => safeInitial.map((s) => ({ ...s })));
+  const [localSlides, setLocalSlides] = React.useState(() => preparedInitial.map((s) => ({ ...s })));
   const [currentIndex, setCurrentIndex] = React.useState(0);
-  const [globalTheme, setGlobalTheme] = React.useState(brandConfig?.colors ? 'custom' : 'purple');
+  const [globalTheme, setGlobalTheme] = React.useState(brandColors ? 'custom' : templatePreset?.theme || 'purple');
   const [slideThemeOverrides, setSlideThemeOverrides] = React.useState({});
   const [slideLayoutOverrides, setSlideLayoutOverrides] = React.useState({});
   const [slideAlignments, setSlideAlignments] = React.useState({});
@@ -60,14 +97,14 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
   const agentInputRef = React.useRef(null);
 
   // ─── theme palette (per-slide) ───────────────────────────
-  const customTheme = brandConfig?.colors ? {
+  const customTheme = brandColors ? {
     name: 'Brand',
-    swatch: brandConfig.colors.primary,
-    gradient: `linear-gradient(155deg,${brandConfig.colors.bgDark || '#0F031F'} 0%,${brandConfig.colors.primary} 55%,${brandConfig.colors.secondary || brandConfig.colors.primary} 100%)`,
-    title: brandConfig.colors.bgLight || '#F6F1FB',
-    text: `${brandConfig.colors.bgLight || '#F6F1FB'}c7`,
-    accent: brandConfig.colors.lime || brandConfig.colors.accent || '#D4FF3F',
-    rule: `${brandConfig.colors.bgLight || '#F6F1FB'}2e`,
+    swatch: brandColors.primary,
+    gradient: `linear-gradient(155deg,${brandColors.bgDark || '#0F031F'} 0%,${brandColors.primary} 55%,${brandColors.secondary || brandColors.primary} 100%)`,
+    title: brandColors.bgLight || '#F6F1FB',
+    text: `${brandColors.bgLight || '#F6F1FB'}c7`,
+    accent: brandColors.lime || brandColors.accent || '#D4FF3F',
+    rule: `${brandColors.bgLight || '#F6F1FB'}2e`,
   } : null;
 
   const THEMES = {
@@ -98,6 +135,8 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
       <svg {...common}><text x="3" y="9" fontSize="9" fontFamily="Georgia" fill={acc}>"</text><rect x="9" y="6" width="28" height="1.2" rx=".5" fill={fg} opacity=".85" /><rect x="9" y="9" width="24" height="1.2" rx=".5" fill={fg} opacity=".85" /><rect x="9" y="12" width="20" height="1.2" rx=".5" fill={fg} opacity=".85" /><rect x="9" y="17" width="10" height=".6" rx=".3" fill={fg} opacity=".5" /></svg>);
     if (variant === 'minimal') return (
       <svg {...common}><rect x="2" y="10" width="22" height="2" rx=".5" fill={fg} opacity=".95" /><rect x="2" y="14" width="4" height=".7" rx=".3" fill={acc} /></svg>);
+    if (variant === 'centered') return (
+      <svg {...common}><rect x="8" y="7" width="24" height="2.4" rx=".6" fill={fg} opacity=".95" /><rect x="14" y="12" width="12" height=".8" rx=".4" fill={acc} /><rect x="10" y="15" width="20" height=".7" fill={fg} opacity=".45" /></svg>);
     if (variant === 'stat') return (
       <svg {...common}><text x="2" y="16" fontSize="14" fontWeight="600" fontFamily="serif" fill={fg}>34</text><text x="14" y="16" fontSize="14" fontWeight="600" fontFamily="serif" fill={acc}>%</text><rect x="22" y="6" width="14" height=".7" fill={fg} opacity=".5" /><rect x="22" y="8.5" width="12" height=".7" fill={fg} opacity=".5" /><rect x="22" y="11" width="14" height=".7" fill={fg} opacity=".5" /></svg>);
     if (variant === 'image') return (
@@ -113,11 +152,12 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     { key: 'quote',    name: 'Quote',      desc: 'Pull quote, attributed' },
     { key: 'image',    name: 'Image-led',  desc: 'Photo + text panel' },
     { key: 'minimal',  name: 'Minimal',    desc: 'Title alone' },
+    { key: 'centered', name: 'Centered',   desc: 'Centered title + points' },
   ];
 
   // ─── derived ─────────────────────────────────────────────
-  const getTheme  = (i) => THEMES[slideThemeOverrides[i] || globalTheme];
-  const getLayout = (i) => slideLayoutOverrides[i] || 'standard';
+  const getTheme  = (i) => THEMES[slideThemeOverrides[i] || globalTheme || localSlides[i]?.theme] || THEMES[localSlides[i]?.theme] || THEMES.purple;
+  const getLayout = (i) => slideLayoutOverrides[i] || localSlides[i]?.layout || window.AutoDeckTemplatePresets?.resolveTemplateLayout?.(localSlides[i], i, config?.templateStyle) || 'standard';
   const getAlign  = (i) => slideAlignments[i] || 'left';
   const theme  = getTheme(currentIndex);
   const layout = getLayout(currentIndex);
@@ -184,25 +224,244 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     try {
       const pptx = new PptxGenJS();
       pptx.layout = 'LAYOUT_WIDE';
+      pptx.author = 'AutoDeck AI';
+      pptx.subject = config?.templateStyle || 'Quidax internal deck';
+      const displayFont = pptFontName(brandConfig?.displayFont, qxType.display, 'display');
+      const bodyFont = pptFontName(brandConfig?.bodyFont, qxType.body, 'body');
+      pptx.theme = {
+        headFontFace: displayFont,
+        bodyFontFace: bodyFont,
+        lang: 'en-US',
+      };
+      const toPptHex = (value, fallback = 'FFFFFF') => {
+        const text = String(value || '');
+        const longHex = text.match(/#([0-9a-f]{6})/i)?.[1];
+        if (longHex) return longHex.toUpperCase();
+        const shortHex = text.match(/#([0-9a-f]{3})(?![0-9a-f])/i)?.[1];
+        if (shortHex) return shortHex.split('').map((c) => c + c).join('').toUpperCase();
+        return String(fallback || 'FFFFFF').replace('#', '').toUpperCase();
+      };
+      const gradientStops = (t) => {
+        const stops = String(t.gradient || '').match(/#[0-9a-f]{6}/gi) || [];
+        return stops.length ? stops.map((c) => toPptHex(c)) : [toPptHex(t.swatch, '1A0530')];
+      };
+      const pptPalette = (t) => {
+        const title = toPptHex(t.title, 'F6F1FB');
+        const accent = toPptHex(t.accent, 'D4FF3F');
+        const byName = {
+          Brand:   { bg: toPptHex(t.swatch, '1A0530'), panel: toPptHex(t.swatch, '2D0F4E'), band: toPptHex(t.accent, 'D4FF3F'), title, text: title === '1A0530' ? '4B345F' : 'E8DDF4', accent, rule: 'C8B6DA' },
+          Quidax:  { bg: '1A0530', panel: '2D0F4E', band: '451B6E', title: 'F6F1FB', text: 'E8DDF4', accent: 'D4FF3F', rule: 'B891DC' },
+          Midnight:{ bg: '0F0A24', panel: '1E1B4B', band: '312E81', title: 'F5F3FF', text: 'DDD6FE', accent: 'A5B4FC', rule: '818CF8' },
+          Soft:    { bg: 'FAF5FF', panel: 'F3E8FF', band: 'FCE7F3', title: '1A0530', text: '4B345F', accent: '7B2FBE', rule: 'D8B4FE' },
+          Ocean:   { bg: '0C2B4E', panel: '0369A1', band: '0891B2', title: 'F0F9FF', text: 'DFF6FF', accent: '7DD3FC', rule: '38BDF8' },
+          Forest:  { bg: '022C22', panel: '065F46', band: '047857', title: 'ECFDF5', text: 'D1FAE5', accent: '6EE7B7', rule: '34D399' },
+          Sunset:  { bg: '431407', panel: '7C2D12', band: 'C2410C', title: 'FFF7ED', text: 'FFEDD5', accent: 'FED7AA', rule: 'FDBA74' },
+          Slate:   { bg: '0F172A', panel: '1E293B', band: '334155', title: 'F8FAFC', text: 'E2E8F0', accent: 'CBD5E1', rule: '94A3B8' },
+          Rose:    { bg: '4C0519', panel: '881337', band: 'BE123C', title: 'FFF1F2', text: 'FFE4E6', accent: 'FECACA', rule: 'FDA4AF' },
+        }[t.name];
+        if (byName) return byName;
+        const stops = gradientStops(t);
+        return {
+          bg: stops[0] || toPptHex(t.swatch, '1A0530'),
+          panel: stops[1] || stops[0] || toPptHex(t.swatch, '2D0F4E'),
+          band: stops[2] || stops[1] || toPptHex(t.swatch, '451B6E'),
+          title,
+          text: title === '1A0530' ? '4B345F' : 'E8DDF4',
+          accent,
+          rule: toPptHex(t.rule, title === '1A0530' ? 'D8B4FE' : 'B891DC'),
+        };
+      };
+      const addThemedBackground = (pSlide, t) => {
+        const p = pptPalette(t);
+        pSlide.background = { color: p.bg };
+        pSlide.addShape(pptx.ShapeType.rect, {
+          x: 0, y: 0, w: 13.333, h: 7.5,
+          fill: { color: p.bg },
+          line: { color: p.bg, transparency: 100 },
+        });
+        pSlide.addShape(pptx.ShapeType.rect, {
+          x: 7.55, y: 0, w: 5.783, h: 7.5,
+          fill: { color: p.panel },
+          line: { color: p.panel, transparency: 100 },
+        });
+        pSlide.addShape(pptx.ShapeType.rect, {
+          x: 12.86, y: 0, w: 0.47, h: 7.5,
+          fill: { color: p.band },
+          line: { color: p.band, transparency: 100 },
+        });
+        pSlide.addShape(pptx.ShapeType.ellipse, {
+          x: 9.5, y: -1.35, w: 4.7, h: 4.7,
+          fill: { color: p.band, transparency: 80 },
+          line: { color: p.band, transparency: 100 },
+        });
+      };
+      const addChrome = (pSlide, t, i) => {
+        const p = pptPalette(t);
+        pSlide.addText('QUIDAX', {
+          x: 0.42, y: 0.26, w: 1.2, h: 0.2,
+          fontFace: bodyFont,
+          fontSize: 8,
+          color: p.accent,
+          charSpace: 2,
+          bold: true,
+        });
+        pSlide.addText(String(i + 1).padStart(2, '0'), {
+          x: 12.25, y: 0.24, w: 0.45, h: 0.2,
+          fontFace: bodyFont,
+          fontSize: 8,
+          color: p.title,
+          align: 'right',
+        });
+        pSlide.addShape(pptx.ShapeType.line, {
+          x: 0.42, y: 0.58, w: 12.45, h: 0,
+          line: { color: p.rule, transparency: 35, width: 0.5 },
+        });
+        pSlide.addText('Internal · Confidential', {
+          x: 0.42, y: 6.95, w: 2.5, h: 0.18,
+          fontFace: bodyFont,
+          fontSize: 7,
+          color: p.text,
+          transparency: 25,
+        });
+      };
+      const addBullets = (pSlide, s, t, box) => {
+        if (!s.bullets?.length) return;
+        const textHex = pptPalette(t).text;
+        pSlide.addText(s.bullets.map(b => ({ text: b, options: { bullet: { type: 'ul' } } })), {
+          ...box,
+          fontSize: box.fontSize || 17,
+          color: textHex,
+          fontFace: bodyFont,
+          breakLine: false,
+          fit: 'shrink',
+          valign: 'mid',
+          paraSpaceAfterPt: 8,
+          margin: 0.08,
+        });
+      };
       localSlides.forEach((s, i) => {
         const t = getTheme(i);
+        const layoutKey = getLayout(i);
         const pSlide = pptx.addSlide();
-        const bg = t.swatch.replace('#', '');
-        pSlide.background = { color: bg };
-        pSlide.addText(s.title || '', {
-          x: 0.5, y: 1.0, w: '85%', h: 1.2,
-          fontSize: 36, bold: true,
-          color: (t.title || '#FFFFFF').replace('#', ''),
-          fontFace: 'Calibri',
-        });
-        if (s.bullets && s.bullets.length) {
-          pSlide.addText(s.bullets.map(b => ({ text: b, options: { bullet: { type: 'number' } } })), {
-            x: 0.5, y: 2.6, w: '85%', h: 3.8,
-            fontSize: 18,
-            color: 'FFFFFF',
-            fontFace: 'Calibri',
+        const p = pptPalette(t);
+        const titleHex = p.title;
+        const textHex = p.text;
+        const accentHex = p.accent;
+        const ruleHex = p.rule;
+        addThemedBackground(pSlide, t);
+        addChrome(pSlide, t, i);
+
+        if (layoutKey === 'bigTitle' || layoutKey === 'minimal' || layoutKey === 'centered') {
+          pSlide.addText(s.title || '', {
+            x: 0.65, y: layoutKey === 'minimal' ? 2.45 : 2.1, w: 11.8, h: 1.35,
+            fontSize: layoutKey === 'minimal' ? 44 : 48,
+            bold: true,
+            color: titleHex,
+            fontFace: displayFont,
+            fit: 'shrink',
+            align: layoutKey === 'centered' ? 'center' : 'left',
           });
+          if (s.bullets?.[0] && layoutKey !== 'minimal') {
+            pSlide.addText(s.bullets[0], {
+              x: 0.7, y: 3.65, w: 7.8, h: 0.75,
+              fontSize: 17,
+              color: textHex,
+              fontFace: bodyFont,
+              fit: 'shrink',
+              align: layoutKey === 'centered' ? 'center' : 'left',
+            });
+          }
+        } else if (layoutKey === 'split') {
+          pSlide.addText(s.title || '', {
+            x: 0.65, y: 1.75, w: 5.0, h: 1.4,
+            fontSize: 34,
+            bold: true,
+            color: titleHex,
+            fontFace: displayFont,
+            fit: 'shrink',
+          });
+          pSlide.addShape(pptx.ShapeType.line, {
+            x: 6.2, y: 1.25, w: 0, h: 4.75,
+            line: { color: ruleHex, transparency: 65, width: 0.8 },
+          });
+          addBullets(pSlide, s, t, { x: 6.65, y: 1.7, w: 5.7, h: 3.9, fontSize: 16 });
+        } else if (layoutKey === 'stat') {
+          const m = (s.bullets?.[0] || '').match(/(\d+(?:\.\d+)?)\s*(%|x|M|K|B|bn|m)?/i);
+          pSlide.addText(m ? `${m[1]}${m[2] || ''}` : s.title || '', {
+            x: 0.65, y: 1.35, w: 5.7, h: 2.2,
+            fontSize: m ? 82 : 34,
+            bold: true,
+            color: accentHex,
+            fontFace: displayFont,
+            fit: 'shrink',
+          });
+          pSlide.addText(s.title || '', {
+            x: 6.7, y: 1.65, w: 5.4, h: 0.8,
+            fontSize: 26,
+            bold: true,
+            color: titleHex,
+            fontFace: displayFont,
+            fit: 'shrink',
+          });
+          addBullets(pSlide, s, t, { x: 6.7, y: 2.75, w: 5.4, h: 2.5, fontSize: 15 });
+        } else if (layoutKey === 'quote') {
+          pSlide.addText(`"${s.bullets?.[0] || s.title || ''}"`, {
+            x: 1.25, y: 2.0, w: 10.8, h: 1.6,
+            fontSize: 30,
+            italic: true,
+            color: titleHex,
+            fontFace: displayFont,
+            fit: 'shrink',
+            align: 'center',
+          });
+          pSlide.addText(s.title || '', {
+            x: 3.4, y: 4.0, w: 6.5, h: 0.35,
+            fontSize: 11,
+            color: accentHex,
+            fontFace: bodyFont,
+            align: 'center',
+            charSpace: 1.5,
+          });
+        } else if (layoutKey === 'image') {
+          const img = slideImages[i];
+          if (img) {
+            pSlide.addImage({ path: img, x: 0.65, y: 1.1, w: 6.35, h: 4.85 });
+          } else {
+            pSlide.addShape(pptx.ShapeType.rect, {
+              x: 0.65, y: 1.1, w: 6.35, h: 4.85,
+              fill: { color: accentHex, transparency: 72 },
+              line: { color: ruleHex, transparency: 45, width: 0.6 },
+            });
+            pSlide.addText(s.imagePrompt || 'Image area', {
+              x: 1.0, y: 3.1, w: 5.65, h: 0.45,
+              fontFace: bodyFont,
+              fontSize: 13,
+              color: textHex,
+              align: 'center',
+              fit: 'shrink',
+            });
+          }
+          pSlide.addText(s.title || '', {
+            x: 7.35, y: 1.65, w: 5.1, h: 0.95,
+            fontSize: 28,
+            bold: true,
+            color: titleHex,
+            fontFace: displayFont,
+            fit: 'shrink',
+          });
+          addBullets(pSlide, s, t, { x: 7.35, y: 2.85, w: 5.05, h: 2.65, fontSize: 14 });
+        } else {
+          pSlide.addText(s.title || '', {
+            x: 0.65, y: 1.15, w: 11.6, h: 1.0,
+            fontSize: 34,
+            bold: true,
+            color: titleHex,
+            fontFace: displayFont,
+            fit: 'shrink',
+          });
+          addBullets(pSlide, s, t, { x: 0.8, y: 2.55, w: 10.9, h: 3.2, fontSize: 17 });
         }
+        if (s.speakerNotes && pSlide.addNotes) pSlide.addNotes(s.speakerNotes);
       });
       await pptx.writeFile({ fileName: `${deckTitle || 'AutoDeck'}.pptx` });
       showToast('✓ PPTX downloaded', 'success');

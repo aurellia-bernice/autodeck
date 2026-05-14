@@ -23,6 +23,7 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
     { id: 6, label: 'Light canvas',    role: 'App background',                  value: '#FAF8FC' },
   ]);
   const [nextId, setNextId] = React.useState(7);
+  const [voice, setVoice] = React.useState(brandConfig?.voice || 'professional');
   const [voiceDocs, setVoiceDocs] = React.useState({ professional: null, minimal: null, bold: null, fun: null });
   const voiceDocRefs = {
     professional: React.useRef(null),
@@ -64,16 +65,29 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
     { name: 'Verdana',        family: 'Verdana, sans-serif',             google: null },
   ];
 
-  const [templates, setTemplates] = React.useState([
-    { id: 1, name: 'Quidax Master v3.pptx', date: '12 Apr 2026', layouts: 4, active: true },
-  ]);
-  const [nextTplId, setNextTplId] = React.useState(2);
+  const [templates, setTemplates] = React.useState(() => {
+    const presets = window.AutoDeckTemplatePresets?.presets || {};
+    const entries = Object.values(presets);
+    if (!entries.length) {
+      return [{ id: 'preset-professional', name: 'Professional preset', date: 'Built-in', layouts: 4, active: true, locked: true }];
+    }
+    return entries.map((preset, index) => ({
+      id: `preset-${preset.id}`,
+      name: `${preset.label} preset`,
+      date: 'Built-in',
+      layouts: preset.layoutSet?.length || 0,
+      active: index === 0,
+      locked: true,
+      description: preset.description,
+    }));
+  });
+  const [nextTplId, setNextTplId] = React.useState(100);
   const tplInputRef = React.useRef(null);
 
   const handleTplUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const newTpl = { id: nextTplId, name: file.name, date: new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }), layouts: 0, active: false };
+    const newTpl = { id: nextTplId, name: file.name, date: new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }), layouts: 0, active: false, locked: false };
     setTemplates(p => [...p, newTpl]);
     setNextTplId(n => n + 1);
     e.target.value = '';
@@ -81,7 +95,7 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
 
   const setActiveTemplate = (id) => setTemplates(p => p.map(t => ({ ...t, active: t.id === id })));
   const deleteTemplate    = (id) => setTemplates(p => {
-    const remaining = p.filter(t => t.id !== id);
+    const remaining = p.filter(t => t.id !== id || t.locked);
     if (remaining.length && !remaining.some(t => t.active)) remaining[0].active = true;
     return remaining;
   });
@@ -118,6 +132,24 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
   const addColor = () => {
     setColorRows(p => [...p, { id: nextId, label: 'New colour', role: 'Custom role', value: '#888888' }]);
     setNextId(n => n + 1);
+  };
+  const colorsFromRows = (rows) => {
+    const find = (...needles) => {
+      const row = rows.find((r) => {
+        const haystack = `${r.label || ''} ${r.role || ''}`.toLowerCase();
+        return needles.some((needle) => haystack.includes(needle));
+      });
+      return row?.value;
+    };
+    const primary = find('primary') || rows[0]?.value || '#5F2A91';
+    return {
+      primary,
+      secondary: find('secondary') || rows[1]?.value || primary,
+      accent: find('accent', 'lime', 'cta') || '#D4FF3F',
+      lime: find('lime') || '#D4FF3F',
+      bgDark: find('dark canvas', 'dark') || '#0F031F',
+      bgLight: find('light canvas', 'light') || '#F6F1FB',
+    };
   };
 
   const Card = ({ children }) => (
@@ -218,7 +250,7 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
           <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12, marginTop: 20 }}>
             {saved && <span style={{ fontSize: 13, color: '#1F8A5B' }}>✓ Saved</span>}
             <button onClick={() => {
-              const cfg = { colorRows };
+              const cfg = { colorRows, colors: colorsFromRows(colorRows), voice };
               onBrandSave && onBrandSave(cfg);
               if (window.firebaseDb) window.firebaseDb.doc('config/brand').set(cfg, { merge: true }).catch(() => {});
               setSaved(true); setTimeout(() => setSaved(false), 2000);
@@ -310,6 +342,9 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
       {tab === 'tpl' && (
         <Card>
           <Eyebrow>Slide templates</Eyebrow>
+          <p style={{ fontSize: 14, color: T.inkDim, margin: '0 0 18px', lineHeight: 1.55, maxWidth: 680 }}>
+            Source template files can be added later. For now, AutoDeck uses built-in template presets as layout recipes for generation, preview, slideshow, and export.
+          </p>
 
           {/* Hidden file input */}
           <input ref={tplInputRef} type="file" accept=".pptx,.ppt,.key" style={{ display: 'none' }} onChange={handleTplUpload} />
@@ -330,8 +365,11 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 500, color: T.ink, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tpl.name}</div>
                   <div style={{ fontFamily: qxType.mono, fontSize: 10.5, color: T.inkMute, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                    Uploaded {tpl.date}{tpl.layouts > 0 ? ` · ${tpl.layouts} layouts` : ''}
+                    {tpl.locked ? tpl.date : `Uploaded ${tpl.date}`}{tpl.layouts > 0 ? ` · ${tpl.layouts} layouts` : ''}
                   </div>
+                  {tpl.description && (
+                    <div style={{ fontSize: 12.5, color: T.inkDim, marginTop: 3, whiteSpace: 'normal', lineHeight: 1.35 }}>{tpl.description}</div>
+                  )}
                 </div>
 
                 {/* Active badge / Set active button */}
@@ -346,12 +384,12 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
                 )}
 
                 {/* Delete */}
-                <button onClick={() => deleteTemplate(tpl.id)}
+                {!tpl.locked && <button onClick={() => deleteTemplate(tpl.id)}
                   style={{ width: 32, height: 32, borderRadius: qxRadius.sm, border: `1px solid ${T.border}`, background: 'transparent', color: T.inkDim, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: `all 140ms ${qxEase}` }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = '#E05A5A'; e.currentTarget.style.color = '#E05A5A'; e.currentTarget.style.background = 'rgba(224,90,90,0.07)'; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.inkDim; e.currentTarget.style.background = 'transparent'; }}>
                   <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 3h9M5 3V2h3v1M4 3l.5 8h4L9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                </button>
+                </button>}
               </div>
             ))}
           </div>
@@ -383,15 +421,27 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
             { id: 'fun',          label: 'Fun',          desc: 'Playful, warm, energetic. Human and upbeat.' },
           ].map(v => {
             const doc = voiceDocs[v.id];
+            const isActive = voice === v.id;
             return (
               <div key={v.id} style={{
                 borderRadius: qxRadius.lg,
-                border: `1px solid ${T.border}`,
-                background: T.surface,
+                border: `1px solid ${isActive ? T.primary : T.border}`,
+                background: isActive ? T.ghostBg : T.surface,
                 overflow: 'hidden',
+                transition: `all 140ms ${qxEase}`,
+                boxShadow: isActive ? qxShadow(tweaks?.darkMode).sm : 'none',
               }}>
-                {/* Header — info only, not selectable */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px' }}>
+                {/* Header row — click to select */}
+                <div onClick={() => setVoice(v.id)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', cursor: 'pointer' }}>
+                  <div style={{
+                    width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                    border: `1.5px solid ${isActive ? T.primary : T.borderHi}`,
+                    background: isActive ? T.primary : 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: `all 140ms ${qxEase}`,
+                  }}>
+                    {isActive && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#F6F1FB' }} />}
+                  </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: T.ink, marginBottom: 2 }}>{v.label}</div>
                     <div style={{ fontSize: 13, color: T.inkDim }}>{v.desc}</div>
@@ -447,7 +497,7 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
           <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12, marginTop: 4 }}>
             {saved && <span style={{ fontSize: 13, color: '#1F8A5B' }}>✓ Saved</span>}
             <button onClick={() => {
-              const cfg = { voiceDocs: Object.fromEntries(Object.entries(voiceDocs).map(([k, v]) => [k, v ? v.name : null])) };
+              const cfg = { colorRows, voice, voiceDocs: Object.fromEntries(Object.entries(voiceDocs).map(([k, v]) => [k, v ? v.name : null])) };
               onBrandSave && onBrandSave(cfg);
               if (window.firebaseDb) window.firebaseDb.doc('config/brand').set(cfg, { merge: true }).catch(() => {});
               setSaved(true); setTimeout(() => setSaved(false), 2000);

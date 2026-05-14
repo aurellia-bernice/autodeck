@@ -14,15 +14,25 @@ const isAdminUser = (user) => {
   return ADMIN_EMAILS.includes(email);
 };
 
-const normalizeDeckSlides = (slides) => {
+const normalizeDeckSlides = (slides, templateStyle = 'Professional') => {
   if (!Array.isArray(slides)) return [];
   return slides
-    .map((slide) => {
+    .map((slide, index) => {
       const title = String(slide?.title || '').trim();
       const bullets = Array.isArray(slide?.bullets)
         ? slide.bullets.map((b) => String(b || '').trim()).filter(Boolean)
         : [];
-      return { title, bullets: bullets.slice(0, 4) };
+      const normalized = {
+        ...slide,
+        title,
+        bullets: bullets.slice(0, 4),
+        contentType: String(slide?.contentType || slide?.kicker || 'section').trim(),
+        speakerNotes: String(slide?.speakerNotes || '').trim(),
+        imagePrompt: String(slide?.imagePrompt || '').trim(),
+      };
+      return window.AutoDeckTemplatePresets?.enhanceSlide
+        ? window.AutoDeckTemplatePresets.enhanceSlide(normalized, index, slide?.templateStyle || templateStyle)
+        : normalized;
     })
     .filter((slide) => slide.title || slide.bullets.length);
 };
@@ -67,7 +77,7 @@ const buildContextDraftSlides = (config = {}) => {
   const stop = new Set(['this', 'that', 'with', 'from', 'have', 'will', 'your', 'about', 'into', 'their', 'there', 'where', 'when', 'what', 'were', 'been', 'being', 'they', 'them', 'than', 'then', 'also', 'should', 'could']);
   const keywords = [...new Set(words.filter((w) => !stop.has(w)))].slice(0, 12);
 
-  return Array.from({ length: count }, (_, i) => {
+  const draftSlides = Array.from({ length: count }, (_, i) => {
     const start = Math.floor((i * sentences.length) / count);
     const end = Math.max(start + 1, Math.floor(((i + 1) * sentences.length) / count));
     const chunk = sentences.slice(start, end);
@@ -81,9 +91,16 @@ const buildContextDraftSlides = (config = {}) => {
 
     return {
       title: i === 0 ? titleFromText(compact, 'Presentation Overview') : titleFromText(focus, `Section ${i + 1}`),
+      contentType: i === 0 ? 'opening' : i === count - 1 ? 'next steps' : 'section',
+      kicker: i === 0 ? 'Opening' : i === count - 1 ? 'Next steps' : 'From your context',
       bullets,
+      speakerNotes: '',
+      imagePrompt: '',
     };
   });
+  return window.AutoDeckTemplatePresets?.enhanceSlides
+    ? window.AutoDeckTemplatePresets.enhanceSlides(draftSlides, config.templateStyle)
+    : draftSlides;
 };
 
 const App = () => {
@@ -183,7 +200,7 @@ const App = () => {
         clearTimeout(timeoutId);
         timeoutId = null;
       }
-      const normalized = normalizeDeckSlides(slides);
+      const normalized = normalizeDeckSlides(slides, config?.templateStyle);
       setSlideshowSlides(normalized.length ? normalized : fallbackSlides);
       setGenerationStatus(status);
       setGenerationError(message);
@@ -217,6 +234,7 @@ const App = () => {
         inputText: config.inputText || '',
         parsedFileText: config.parsedFileText || '',
         templateStyle: config.templateStyle || 'Professional',
+        templatePresetId: window.AutoDeckTemplatePresets?.normalizeTemplateStyle?.(config.templateStyle) || 'professional',
         slideCount: requestedSlideCount(config.slideCount, rawTitleSource),
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         status: 'processing',
@@ -231,10 +249,11 @@ const App = () => {
         parsedFileText: config.parsedFileText || '',
         slideCount: config.slideCount || 'Auto',
         templateStyle: config.templateStyle || 'Professional',
-        brandVoice: (config.templateStyle || 'Professional').toLowerCase(),
+        templatePreset: config.templatePreset || window.AutoDeckTemplatePresets?.summarizeForPrompt?.(config.templateStyle),
+        brandVoice: brandConfig?.voice || config.templatePreset?.id || window.AutoDeckTemplatePresets?.normalizeTemplateStyle?.(config.templateStyle) || 'professional',
       });
 
-      const generatedSlides = normalizeDeckSlides(data?.slides);
+      const generatedSlides = normalizeDeckSlides(data?.slides, config.templateStyle);
       if (!generatedSlides.length) {
         throw new Error('The AI service returned no slides.');
       }
@@ -311,7 +330,7 @@ const App = () => {
             generationError={generationError}
             onGenerateAgain={handleGenerateAgain}
             onViewSlideshow={async (slides) => {
-              const finalSlides = normalizeDeckSlides(slides);
+              const finalSlides = normalizeDeckSlides(slides, deckConfig?.templateStyle);
               setSlideshowSlides(finalSlides);
               setScreen('slideshow');
               if (window.firebaseDb && currentUser && deckConfig) {
@@ -319,6 +338,7 @@ const App = () => {
                   if (activeDeckId) {
                     await window.firebaseDb.collection('decks').doc(activeDeckId).update({
                       status: 'ready',
+                      templatePresetId: window.AutoDeckTemplatePresets?.normalizeTemplateStyle?.(deckConfig.templateStyle) || 'professional',
                       slideCount: finalSlides.length,
                       slides: finalSlides,
                     });
@@ -333,6 +353,7 @@ const App = () => {
                       inputText: deckConfig.inputText || '',
                       parsedFileText: deckConfig.parsedFileText || '',
                       templateStyle: deckConfig.templateStyle || 'Professional',
+                      templatePresetId: window.AutoDeckTemplatePresets?.normalizeTemplateStyle?.(deckConfig.templateStyle) || 'professional',
                       slideCount: finalSlides.length,
                       slides: finalSlides,
                       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -341,7 +362,16 @@ const App = () => {
                     const batch = window.firebaseDb.batch();
                     finalSlides.forEach((s, i) => {
                       const ref = deckRef.collection('slides').doc();
-                      batch.set(ref, { index: i, title: s.title || '', bullets: s.bullets || [] });
+                      batch.set(ref, {
+                        index: i,
+                        title: s.title || '',
+                        bullets: s.bullets || [],
+                        layout: s.layout || 'standard',
+                        theme: s.theme || null,
+                        contentType: s.contentType || null,
+                        speakerNotes: s.speakerNotes || '',
+                        imagePrompt: s.imagePrompt || '',
+                      });
                     });
                     await batch.commit();
                     uploadSourceFile(deckRef.id, deckConfig).catch(() => {});

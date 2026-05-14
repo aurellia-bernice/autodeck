@@ -88,11 +88,20 @@ test.describe('Gap 1 — Brand config wired to slides', () => {
   test('Changing theme updates the theme picker active label', async ({ page }) => {
     await loadApp(page);
     await goToSlideshow(page);
+    const slideCanvas = page.locator('#main-slide > div').first();
+    const before = await slideCanvas.evaluate(el =>
+      getComputedStyle(el).backgroundImage || getComputedStyle(el).background
+    );
     await page.getByRole('button', { name: /Theme/i }).click();
     // Theme grid is visible; clicking any swatch shouldn't crash
     const swatches = page.locator('[style*="aspect-ratio: 1"]');
     const count = await swatches.count();
     expect(count).toBeGreaterThanOrEqual(8); // 8 built-in themes
+    await page.locator('button[title="Ocean"]').click();
+    const after = await slideCanvas.evaluate(el =>
+      getComputedStyle(el).backgroundImage || getComputedStyle(el).background
+    );
+    expect(after).not.toBe(before);
   });
 });
 
