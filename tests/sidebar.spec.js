@@ -8,7 +8,7 @@ const { waitForApp, goToScreen } = require('./helpers');
 
 test.describe('Sidebar', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await waitForApp(page);
     await goToScreen(page, 'home');
   });
@@ -113,7 +113,7 @@ test.describe('Sidebar — admin role', () => {
         },
       });
     });
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('networkidle');
     // Admin users land on the admin screen; navigate to home to see sidebar clearly
     await page.waitForSelector('button', { timeout: 10000 });

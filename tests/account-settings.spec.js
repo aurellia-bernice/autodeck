@@ -3,7 +3,7 @@ const { goToScreen, waitForApp } = require('./helpers');
 
 test.describe('AccountSettingsScreen', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await waitForApp(page);
     await goToScreen(page, 'settings');
     await expect(page.getByRole('heading', { name: 'Account settings' })).toBeVisible({ timeout: 10000 });

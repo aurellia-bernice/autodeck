@@ -6,7 +6,7 @@ const { waitForApp, goToScreen } = require('./helpers');
 
 test.describe('HistoryScreen', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await waitForApp(page);
     await goToScreen(page, 'history');
   });

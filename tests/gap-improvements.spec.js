@@ -9,7 +9,7 @@ const { waitForApp, goToScreen } = require('./helpers');
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 async function loadApp(page) {
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForApp(page);
 }
 

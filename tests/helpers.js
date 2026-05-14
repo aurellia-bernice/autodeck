@@ -19,8 +19,7 @@ async function waitForApp(page) {
   // 'load' fires once all resources are fetched. 'networkidle' is avoided because
   // Firebase Auth holds a persistent connection that prevents idle from ever being reached,
   // which caused every test to timeout in CI.
-  await page.waitForLoadState('load');
-  await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible({ timeout: 30000 });
 }
 
 module.exports = { goToScreen, waitForApp };

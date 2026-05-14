@@ -7,7 +7,7 @@ const { waitForApp } = require('./helpers');
 
 test.describe('HomeScreenB', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await waitForApp(page);
     await page.evaluate(() => {
       const div = document.createElement('div');

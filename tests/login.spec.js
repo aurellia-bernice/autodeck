@@ -3,7 +3,7 @@ const { waitForApp } = require('./helpers');
 
 test.describe('LoginScreen', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await waitForApp(page);
   });
 

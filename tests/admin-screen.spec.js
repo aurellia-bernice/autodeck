@@ -42,7 +42,7 @@ async function waitForAdminScreen(page) {
 test.describe('AdminScreen — admin role', () => {
   test.beforeEach(async ({ page }) => {
     await injectAdminAuth(page);
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await waitForAdminScreen(page);
   });
 
@@ -134,7 +134,7 @@ test.describe('AdminScreen — admin role', () => {
 
 test.describe('AdminScreen — non-admin role', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await waitForApp(page);
     await goToScreen(page, 'admin');
   });

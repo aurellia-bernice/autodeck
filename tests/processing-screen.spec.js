@@ -3,7 +3,7 @@ const { waitForApp, goToScreen } = require('./helpers');
 
 test.describe('ProcessingScreen', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await waitForApp(page);
     // Navigating to 'processing' auto-injects demo config (inputText, slideCount=10, templateStyle=Professional)
     await goToScreen(page, 'processing');

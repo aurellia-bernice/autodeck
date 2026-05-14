@@ -7,7 +7,7 @@ const { goToScreen, waitForApp } = require('./helpers');
 
 test.describe('ChangePasswordScreen', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await waitForApp(page);
     await goToScreen(page, 'changePassword');
     await expect(page.getByRole('heading', { name: 'Change password' })).toBeVisible();
