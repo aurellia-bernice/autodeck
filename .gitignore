@@ -10,3 +10,12 @@ playwright-report/
 test-results/
 .firebase/
 firebase-debug.log
+
+# Root-level vendor artifacts are duplicates; keep vendored browser libs in AutoDeck AI/vendor/.
+/babel.min.js
+/firebase-*-compat.js
+/html2canvas.min.js
+/pdf.min.js
+/pptxgen*.bundle.js
+/react-dom.development.js
+/react.development.js
