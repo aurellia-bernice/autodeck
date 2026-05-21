@@ -13,6 +13,65 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
   const [dragOver, setDragOver] = React.useState(false);
   const [activePrompt, setActivePrompt] = React.useState(0);
 
+  const fileToBase64 = (file) => new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = e => res(String(e.target.result || '').split(',')[1] || '');
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+
+  const pdfTextItemsToLines = (items = []) => {
+    const rows = new Map();
+    items.forEach((item) => {
+      const text = String(item?.str || '').replace(/\s+/g, ' ').trim();
+      if (!text) return;
+      const transform = Array.isArray(item?.transform) ? item.transform : [];
+      const y = Number.isFinite(transform[5]) ? Math.round(transform[5]) : 0;
+      const x = Number.isFinite(transform[4]) ? transform[4] : 0;
+      const key = String(y);
+      if (!rows.has(key)) rows.set(key, []);
+      rows.get(key).push({ x, text });
+    });
+    return [...rows.entries()]
+      .sort((a, b) => Number(b[0]) - Number(a[0]))
+      .map(([, row]) => row
+        .sort((a, b) => a.x - b.x)
+        .map((part) => part.text)
+        .join(' '))
+      .join('\n');
+  };
+
+  const isParsedDocumentNoise = (value) => {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!text) return true;
+    const lower = text.toLowerCase();
+    if (/^[^\w]*\d{1,3}[^\w]*$/.test(text)) return true;
+    if (/^(page|slide)\s+\d+$/i.test(text)) return true;
+    if (/^(contents|table of contents|agenda)$/i.test(text)) return true;
+    if (/\bprepared for\b|\bprepared by\b/.test(lower)) return true;
+    if (/\bthis guide breaks down every concept\b/.test(lower)) return true;
+    const sectionRefs = (text.match(/\b\d{1,2}\s+[A-Z][A-Za-z]/g) || []).length;
+    const capitalizedWords = (text.match(/\b[A-Z][A-Za-z]{3,}\b/g) || []).length;
+    return sectionRefs >= 2 && capitalizedWords >= 4;
+  };
+
+  const cleanParsedDocumentText = (value) => {
+    const units = String(value || '')
+      .replace(/\u0000/g, '')
+      .split(/\n+/)
+      .flatMap((line) => {
+        const compact = line.replace(/\s+/g, ' ').trim();
+        if (!compact) return [];
+        return compact.length > 260
+          ? (compact.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [compact])
+          : [compact];
+      })
+      .map((line) => line.replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+    const cleaned = units.filter((line) => !isParsedDocumentNoise(line));
+    return (cleaned.length ? cleaned : units).join('\n').trim();
+  };
+
   const parseFile = async (file) => {
     if (!file) { setParsedFileText(''); return; }
     const ext = file.name.split('.').pop().toLowerCase();
@@ -25,7 +84,7 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
           r.onerror = rej;
           r.readAsText(file);
         });
-        setParsedFileText(text);
+        setParsedFileText(cleanParsedDocumentText(text));
       } else if (ext === 'pdf' && window.pdfjsLib) {
         window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
         const buf = await file.arrayBuffer();
@@ -34,19 +93,19 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
         for (let i = 1; i <= pdf.numPages; i++) {
           const page = await pdf.getPage(i);
           const content = await page.getTextContent();
-          pages.push(content.items.map(item => item.str).join(' '));
+          pages.push(pdfTextItemsToLines(content.items));
         }
-        setParsedFileText(pages.join('\n'));
+        setParsedFileText(cleanParsedDocumentText(pages.join('\n\n')));
       } else if (ext === 'docx' && window.firebase?.app) {
-        const base64 = await new Promise((res, rej) => {
-          const r = new FileReader();
-          r.onload = e => res(String(e.target.result || '').split(',')[1] || '');
-          r.onerror = rej;
-          r.readAsDataURL(file);
-        });
+        const base64 = await fileToBase64(file);
         const parseDocxFn = firebase.app().functions('us-central1').httpsCallable('parseDocx');
         const { data } = await parseDocxFn({ base64 });
-        setParsedFileText(data?.text || '');
+        setParsedFileText(cleanParsedDocumentText(data?.text || ''));
+      } else if (ext === 'pptx' && window.firebase?.app) {
+        const base64 = await fileToBase64(file);
+        const parsePptxFn = firebase.app().functions('us-central1').httpsCallable('parsePptx');
+        const { data } = await parsePptxFn({ base64 });
+        setParsedFileText(cleanParsedDocumentText(data?.text || ''));
       } else {
         setParsedFileText('');
       }

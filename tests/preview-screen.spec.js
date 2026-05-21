@@ -45,10 +45,10 @@ test.describe('PreviewScreen', () => {
   // ── Cover meta strip ──────────────────────────────────────────────────────
 
   test('cover meta strip shows Slides, Style, Created, and Read time', async ({ page }) => {
-    await expect(page.getByText('Slides')).toBeVisible();
-    await expect(page.getByText('Style')).toBeVisible();
-    await expect(page.getByText('Created')).toBeVisible();
-    await expect(page.getByText('Read time')).toBeVisible();
+    await expect(page.getByText('Slides', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Style', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Created', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Read time', { exact: true }).first()).toBeVisible();
   });
 
   // ── Outline section ───────────────────────────────────────────────────────
@@ -67,7 +67,7 @@ test.describe('PreviewScreen', () => {
   });
 
   test('first slide row is visible with index 01', async ({ page }) => {
-    await expect(page.getByText('01')).toBeVisible();
+    await expect(page.getByText('01', { exact: true }).first()).toBeVisible();
   });
 
   // ── Expand / collapse ─────────────────────────────────────────────────────
@@ -88,7 +88,7 @@ test.describe('PreviewScreen', () => {
     // Collapse all first, then click the first slide row to expand it
     await page.getByRole('button', { name: /Collapse all/i }).click();
     // Click on the slide row (the "01" index cell)
-    await page.getByText('01').click();
+    await page.getByText('01', { exact: true }).first().click();
     await expect(page.getByText('Edit').first()).toBeVisible();
   });
 

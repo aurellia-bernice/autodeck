@@ -12,7 +12,7 @@ test.describe('ProcessingScreen', () => {
   // ── Rendering ─────────────────────────────────────────────────────────────
 
   test('renders "your deck" italic text in the headline', async ({ page }) => {
-    await expect(page.getByText('your deck')).toBeVisible();
+    await expect(page.getByText('your deck', { exact: true })).toBeVisible();
   });
 
   test('renders a live status eyebrow with phase verb', async ({ page }) => {
@@ -38,10 +38,10 @@ test.describe('ProcessingScreen', () => {
   });
 
   test('renders all four phase labels', async ({ page }) => {
-    await expect(page.getByText('Parsing your content')).toBeVisible();
-    await expect(page.getByText('Structuring slides')).toBeVisible();
-    await expect(page.getByText('Applying brand formatting')).toBeVisible();
-    await expect(page.getByText('Finalising your deck')).toBeVisible();
+    await expect(page.getByText('Parsing your content', { exact: true })).toBeVisible();
+    await expect(page.getByText('Structuring slides', { exact: true })).toBeVisible();
+    await expect(page.getByText('Applying brand formatting', { exact: true })).toBeVisible();
+    await expect(page.getByText('Finalising your deck', { exact: true })).toBeVisible();
   });
 
   test('renders a progress bar element', async ({ page }) => {
@@ -68,7 +68,7 @@ test.describe('ProcessingScreen', () => {
   });
 
   test('footer strip shows the slide count', async ({ page }) => {
-    await expect(page.getByText(/10 slides/)).toBeVisible();
+    await expect(page.getByText('Professional · 10 slides')).toBeVisible();
   });
 
   test('footer strip shows the generation status message', async ({ page }) => {

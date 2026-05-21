@@ -46,7 +46,7 @@ const requestedSlideCount = (slideCount, sourceText = '') => {
 
 const cleanSlideText = (value, maxWords = 18) => {
   const words = String(value || '')
-    .replace(/^[\s\-*0-9.)]+/, '')
+    .replace(/^[^A-Za-z0-9$]+/, '')
     .replace(/\s+/g, ' ')
     .trim()
     .split(/\s+/)
@@ -60,47 +60,265 @@ const titleFromText = (text, fallback) => {
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 };
 
+const splitDraftSentences = (value) => String(value || '')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
+
+const DRAFT_STOP_WORDS = new Set([
+  'this', 'that', 'with', 'from', 'have', 'will', 'your', 'about', 'into', 'their', 'there', 'where',
+  'when', 'what', 'were', 'been', 'being', 'they', 'them', 'than', 'then', 'also', 'should', 'could',
+  'would', 'these', 'those', 'because', 'through', 'between', 'within', 'without', 'document', 'presentation',
+]);
+
+const draftKeywordsFrom = (value) => {
+  const words = String(value || '').toLowerCase().match(/[a-z0-9]{4,}/g) || [];
+  return [...new Set(words.filter((word) => !DRAFT_STOP_WORDS.has(word)))].slice(0, 18);
+};
+
+const hasDraftKeyword = (sentence, keywords = []) => {
+  const text = String(sentence || '').toLowerCase();
+  return keywords.some((keyword) => text.includes(keyword));
+};
+
+const draftKeywordOverlap = (brief, source) => {
+  const sourceKeywords = draftKeywordsFrom(source);
+  if (!sourceKeywords.length) return 0;
+  return draftKeywordsFrom(brief).filter((keyword) =>
+    sourceKeywords.some((sourceKeyword) => sourceKeyword.includes(keyword) || keyword.includes(sourceKeyword))
+  ).length;
+};
+
+const draftBriefMatchesSource = (brief, source) => {
+  if (!String(source || '').trim() || !String(brief || '').trim()) return true;
+  const briefKeywords = draftKeywordsFrom(brief);
+  if (briefKeywords.length < 3) return true;
+  return draftKeywordOverlap(brief, source) >= Math.min(3, Math.max(1, Math.floor(briefKeywords.length * 0.25)));
+};
+
+const isDraftSourceNoise = (value) => {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return true;
+  const lower = text.toLowerCase();
+  if (/^[^\w]*\d{1,3}[^\w]*$/.test(text)) return true;
+  if (/^(page|slide)\s+\d+$/i.test(text)) return true;
+  if (/^(contents|table of contents|agenda)$/i.test(text)) return true;
+  if (/\bprepared for\b|\bprepared by\b/.test(lower)) return true;
+  if (/\bthis guide breaks down every concept\b/.test(lower)) return true;
+  const sectionRefs = (text.match(/\b\d{1,2}\s+[A-Z][A-Za-z]/g) || []).length;
+  const capitalizedWords = (text.match(/\b[A-Z][A-Za-z]{3,}\b/g) || []).length;
+  return sectionRefs >= 2 && capitalizedWords >= 4;
+};
+
+const draftSentencesFromSource = (value) => {
+  const rawSentences = splitDraftSentences(value).length ? splitDraftSentences(value) : [value];
+  const filtered = rawSentences
+    .map((sentence) => String(sentence || '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .filter((sentence) => !isDraftSourceNoise(sentence));
+  return (filtered.length ? filtered : rawSentences)
+    .map((sentence) => cleanSlideText(sentence, 22))
+    .filter(Boolean);
+};
+
+const draftHasUsableMetric = (value) =>
+  /\b\d+(?:\.\d+)?\s*(%|x|×|m|k|b|bn|usd|\$|₦|days?|weeks?|months?|years?|users?|customers?|transactions?|revenue|growth|tickets?|hours?|mins?)\b/i.test(String(value || ''));
+
+const draftLayoutFor = (frame, bullets, index) => {
+  const text = [frame?.title, ...(bullets || [])].join(' ');
+  if (frame?.contentType === 'opening') return 'bigTitle';
+  if (frame?.contentType === 'evidence' && draftHasUsableMetric(text)) return 'stat';
+  if (['problem', 'plan', 'risk', 'decision'].includes(frame?.contentType)) return 'split';
+  if (frame?.contentType === 'next steps') return 'minimal';
+  return index % 2 ? 'standard' : 'split';
+};
+
+const draftTitleFor = (candidate, frame) => {
+  const title = String(candidate || '').trim();
+  if (!title || /^(when|instead|you|it|this|that|there|here)\b/i.test(title)) {
+    return frame.title;
+  }
+  return title;
+};
+
+const pickDraftSentences = (sentences, keywords, used, index, count) => {
+  const matched = [];
+  sentences.forEach((sentence, sentenceIndex) => {
+    if (matched.length >= 3 || used.has(sentenceIndex)) return;
+    if (hasDraftKeyword(sentence, keywords)) {
+      matched.push({ sentence, sentenceIndex });
+      used.add(sentenceIndex);
+    }
+  });
+  if (matched.length) return matched.map((item) => item.sentence);
+
+  const start = Math.floor((index * sentences.length) / Math.max(1, count));
+  const picked = [];
+  for (let offset = 0; picked.length < 3 && offset < sentences.length; offset++) {
+    const sentenceIndex = (start + offset) % sentences.length;
+    if (used.has(sentenceIndex)) continue;
+    picked.push(sentences[sentenceIndex]);
+    used.add(sentenceIndex);
+  }
+  return picked;
+};
+
+const draftStoryFrames = (count) => {
+  const frames = [
+    { title: 'Core message', kicker: 'Storyline', contentType: 'opening', keywords: ['summary', 'objective', 'goal', 'purpose', 'important', 'takeaway', 'overview'] },
+    { title: 'Context that matters', kicker: 'Context', contentType: 'context', keywords: ['context', 'market', 'customer', 'team', 'current', 'background', 'today'] },
+    { title: 'What the source shows', kicker: 'Evidence', contentType: 'evidence', keywords: ['data', 'metric', 'growth', 'revenue', 'result', 'performance', 'increase', 'decrease', 'users', 'volume', 'percent'] },
+    { title: 'Problem or opportunity', kicker: 'Tension', contentType: 'problem', keywords: ['problem', 'challenge', 'risk', 'gap', 'issue', 'opportunity', 'need', 'barrier'] },
+    { title: 'Recommended path forward', kicker: 'Plan', contentType: 'plan', keywords: ['plan', 'strategy', 'solution', 'roadmap', 'phase', 'initiative', 'launch', 'build', 'deliver'] },
+    { title: 'Risks and tradeoffs', kicker: 'Watchouts', contentType: 'risk', keywords: ['risk', 'dependency', 'constraint', 'concern', 'tradeoff', 'blocker', 'delay', 'compliance'] },
+    { title: 'Decisions and asks', kicker: 'Decision', contentType: 'decision', keywords: ['decision', 'approve', 'ask', 'request', 'recommend', 'owner', 'budget', 'signoff'] },
+    { title: 'Next steps', kicker: 'Next steps', contentType: 'next steps', keywords: ['next', 'action', 'timeline', 'owner', 'follow', 'complete', 'start', 'finish', 'due'] },
+  ];
+  if (count <= 5) return [frames[0], frames[1], frames[3], frames[4], frames[7]].slice(0, count);
+  if (count === 6) return [frames[0], frames[1], frames[2], frames[3], frames[4], frames[7]];
+  if (count === 7) return [frames[0], frames[1], frames[2], frames[3], frames[4], frames[6], frames[7]];
+  return [...frames, ...frames.slice(2)].slice(0, count);
+};
+
 const buildContextDraftSlides = (config = {}) => {
+  const userInstruction = String(config.inputText || '').trim();
+  const documentText = String(config.parsedFileText || '').trim();
+  const fileName = String(config.uploadedFile?.name || '').trim();
   const source = [
-    config.inputText,
-    config.parsedFileText,
-    config.uploadedFile?.name ? `Source document: ${config.uploadedFile.name}` : '',
+    documentText,
+    userInstruction,
+    fileName ? `Source document: ${fileName}` : '',
   ].filter(Boolean).join('\n\n').trim();
   if (!source) return [];
 
   const count = requestedSlideCount(config.slideCount, source);
-  const compact = source.replace(/\s+/g, ' ').trim();
-  const sentences = (compact.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [compact])
-    .map((s) => cleanSlideText(s, 22))
-    .filter(Boolean);
-  const words = compact.toLowerCase().match(/[a-z0-9]{4,}/g) || [];
-  const stop = new Set(['this', 'that', 'with', 'from', 'have', 'will', 'your', 'about', 'into', 'their', 'there', 'where', 'when', 'what', 'were', 'been', 'being', 'they', 'them', 'than', 'then', 'also', 'should', 'could']);
-  const keywords = [...new Set(words.filter((w) => !stop.has(w)))].slice(0, 12);
+  const sourceForSlides = documentText || userInstruction || source;
+  const sentences = draftSentencesFromSource(sourceForSlides);
+  const keywords = draftKeywordsFrom(`${userInstruction}\n${documentText}`);
+  const frames = draftStoryFrames(count);
+  const used = new Set();
+  const briefMatchesSource = draftBriefMatchesSource(userInstruction, documentText);
 
-  const draftSlides = Array.from({ length: count }, (_, i) => {
-    const start = Math.floor((i * sentences.length) / count);
-    const end = Math.max(start + 1, Math.floor(((i + 1) * sentences.length) / count));
-    const chunk = sentences.slice(start, end);
-    const focus = chunk[0] || sentences[i % sentences.length] || compact;
-    const bullets = chunk.slice(0, 4);
+  const draftSlides = frames.map((frame, i) => {
+    const frameKeywords = [...frame.keywords, ...keywords.slice(i, i + 4)];
+    let bullets = pickDraftSentences(sentences, frameKeywords, used, i, frames.length)
+      .map((sentence) => cleanSlideText(sentence, 26))
+      .filter(Boolean);
 
-    while (bullets.length < 2) {
-      const keyword = keywords[(i + bullets.length) % keywords.length];
-      bullets.push(keyword ? `Focus on ${keyword} as a key message` : 'Clarify the main takeaway for this section');
+    if (i === 0 && userInstruction) {
+      bullets.unshift(
+        briefMatchesSource
+          ? `Requested focus: ${cleanSlideText(userInstruction, 24)}`
+          : 'Source fit: uploaded document does not support the requested brief; this draft follows the document content'
+      );
     }
+    if (i === 0 && fileName && !documentText) {
+      bullets.push(`Source document attached: ${fileName}`);
+    }
+    while (bullets.length < 2) {
+      const keyword = keywords[(i + bullets.length) % Math.max(1, keywords.length)];
+      bullets.push(keyword ? `Clarify how ${keyword} shapes this part of the story` : 'Add a source-backed takeaway for this section');
+    }
+    bullets = [...new Set(bullets)].slice(0, 4);
 
     return {
-      title: i === 0 ? titleFromText(compact, 'Presentation Overview') : titleFromText(focus, `Section ${i + 1}`),
-      contentType: i === 0 ? 'opening' : i === count - 1 ? 'next steps' : 'section',
-      kicker: i === 0 ? 'Opening' : i === count - 1 ? 'Next steps' : 'From your context',
+      title: draftTitleFor(
+        titleFromText(bullets.find((b) => !b.startsWith('Requested focus:') && !b.startsWith('Source fit:')) || bullets[0], frame.title),
+        frame
+      ),
+      layout: draftLayoutFor(frame, bullets, i),
+      contentType: frame.contentType,
+      kicker: frame.kicker,
       bullets,
-      speakerNotes: '',
+      speakerNotes: userInstruction ? `User direction: ${cleanSlideText(userInstruction, 30)}` : '',
       imagePrompt: '',
     };
   });
   return window.AutoDeckTemplatePresets?.enhanceSlides
     ? window.AutoDeckTemplatePresets.enhanceSlides(draftSlides, config.templateStyle)
     : draftSlides;
+};
+
+Object.assign(window, { AutoDeckStoryDraft: { buildSlides: buildContextDraftSlides } });
+
+const deckTitleSource = (config = {}) => (
+  config.inputText ||
+  config.parsedFileText ||
+  config.uploadedFile?.name ||
+  'Untitled deck'
+).trim();
+
+const deckTitleFromConfig = (config = {}) => deckTitleSource(config)
+  .split(/\s+/)
+  .slice(0, 8)
+  .join(' ');
+
+const deckAuthorFromUser = (user = {}) => (
+  user.displayName ||
+  user.email?.split('@')[0] ||
+  'Unknown'
+);
+
+const templatePresetIdFromConfig = (config = {}) => (
+  window.AutoDeckTemplatePresets?.normalizeTemplateStyle?.(config.templateStyle) ||
+  'professional'
+);
+
+const buildDeckDocument = (config = {}, user = {}, options = {}) => {
+  const slides = Array.isArray(options.slides) ? options.slides : null;
+  const titleSource = deckTitleSource(config);
+  const doc = {
+    userId: user.uid,
+    author: deckAuthorFromUser(user),
+    title: deckTitleFromConfig(config),
+    inputText: config.inputText || '',
+    parsedFileText: config.parsedFileText || '',
+    templateStyle: config.templateStyle || 'Professional',
+    templatePresetId: templatePresetIdFromConfig(config),
+    slideCount: slides ? slides.length : requestedSlideCount(config.slideCount, titleSource),
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    status: options.status || 'processing',
+  };
+  if (slides) doc.slides = slides;
+  return doc;
+};
+
+const readyDeckUpdate = (config = {}, slides = []) => ({
+  status: 'ready',
+  templatePresetId: templatePresetIdFromConfig(config),
+  slideCount: slides.length,
+  slides,
+});
+
+const uploadSourceFile = async (deckId, config) => {
+  if (!window.firebaseStorage || !window.firebaseDb || !deckId || !config?.uploadedFile) return;
+  const file = config.uploadedFile;
+  const path = `uploads/${deckId}/${file.name}`;
+  const snap = await window.firebaseStorage.ref(path).put(file);
+  const url = await snap.ref.getDownloadURL();
+  await window.firebaseDb.collection('decks').doc(deckId).update({
+    uploadedFileUrl: url,
+    uploadedFileName: file.name,
+  });
+};
+
+const writeSlideDocuments = async (deckRef, slides = []) => {
+  if (!deckRef || !Array.isArray(slides) || !slides.length || !window.firebaseDb) return;
+  const batch = window.firebaseDb.batch();
+  slides.forEach((slide, index) => {
+    const ref = deckRef.collection('slides').doc();
+    batch.set(ref, {
+      index,
+      title: slide.title || '',
+      bullets: slide.bullets || [],
+      layout: slide.layout || 'standard',
+      theme: slide.theme || null,
+      contentType: slide.contentType || null,
+      speakerNotes: slide.speakerNotes || '',
+      imagePrompt: slide.imagePrompt || '',
+    });
+  });
+  await batch.commit();
 };
 
 const App = () => {
@@ -169,18 +387,6 @@ const App = () => {
     );
   }
 
-  const uploadSourceFile = async (deckId, config) => {
-    if (!window.firebaseStorage || !deckId || !config?.uploadedFile) return;
-    const file = config.uploadedFile;
-    const path = `uploads/${deckId}/${file.name}`;
-    const snap = await window.firebaseStorage.ref(path).put(file);
-    const url = await snap.ref.getDownloadURL();
-    await window.firebaseDb.collection('decks').doc(deckId).update({
-      uploadedFileUrl: url,
-      uploadedFileName: file.name,
-    });
-  };
-
   const handleGenerate = async (config) => {
     const runId = generationRunRef.current + 1;
     generationRunRef.current = runId;
@@ -225,20 +431,9 @@ const App = () => {
 
     let deckRef = null;
     try {
-      const rawTitleSource = (config.inputText || config.parsedFileText || config.uploadedFile?.name || 'Untitled deck').trim();
-      const title = rawTitleSource.split(/\s+/).slice(0, 8).join(' ');
-      deckRef = await window.firebaseDb.collection('decks').add({
-        userId: currentUser.uid,
-        author: currentUser.displayName || currentUser.email.split('@')[0],
-        title,
-        inputText: config.inputText || '',
-        parsedFileText: config.parsedFileText || '',
-        templateStyle: config.templateStyle || 'Professional',
-        templatePresetId: window.AutoDeckTemplatePresets?.normalizeTemplateStyle?.(config.templateStyle) || 'professional',
-        slideCount: requestedSlideCount(config.slideCount, rawTitleSource),
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        status: 'processing',
-      });
+      deckRef = await window.firebaseDb.collection('decks').add(
+        buildDeckDocument(config, currentUser, { status: 'processing' })
+      );
       setActiveDeckId(deckRef.id);
       uploadSourceFile(deckRef.id, config).catch(() => {});
 
@@ -247,6 +442,7 @@ const App = () => {
         deckId: deckRef.id,
         inputText: config.inputText || '',
         parsedFileText: config.parsedFileText || '',
+        sourceDocumentName: config.uploadedFile?.name || '',
         slideCount: config.slideCount || 'Auto',
         templateStyle: config.templateStyle || 'Professional',
         templatePreset: config.templatePreset || window.AutoDeckTemplatePresets?.summarizeForPrompt?.(config.templateStyle),
@@ -336,44 +532,15 @@ const App = () => {
               if (window.firebaseDb && currentUser && deckConfig) {
                 try {
                   if (activeDeckId) {
-                    await window.firebaseDb.collection('decks').doc(activeDeckId).update({
-                      status: 'ready',
-                      templatePresetId: window.AutoDeckTemplatePresets?.normalizeTemplateStyle?.(deckConfig.templateStyle) || 'professional',
-                      slideCount: finalSlides.length,
-                      slides: finalSlides,
-                    });
+                    await window.firebaseDb.collection('decks').doc(activeDeckId).update(
+                      readyDeckUpdate(deckConfig, finalSlides)
+                    );
                     uploadSourceFile(activeDeckId, deckConfig).catch(() => {});
                   } else {
-                    const rawTitleSource = (deckConfig.inputText || deckConfig.parsedFileText || deckConfig.uploadedFile?.name || 'Untitled deck').trim();
-                    const title = rawTitleSource.split(/\s+/).slice(0, 8).join(' ');
-                    const deckRef = await window.firebaseDb.collection('decks').add({
-                      userId: currentUser.uid,
-                      author: currentUser.displayName || currentUser.email.split('@')[0],
-                      title,
-                      inputText: deckConfig.inputText || '',
-                      parsedFileText: deckConfig.parsedFileText || '',
-                      templateStyle: deckConfig.templateStyle || 'Professional',
-                      templatePresetId: window.AutoDeckTemplatePresets?.normalizeTemplateStyle?.(deckConfig.templateStyle) || 'professional',
-                      slideCount: finalSlides.length,
-                      slides: finalSlides,
-                      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                      status: 'ready',
-                    });
-                    const batch = window.firebaseDb.batch();
-                    finalSlides.forEach((s, i) => {
-                      const ref = deckRef.collection('slides').doc();
-                      batch.set(ref, {
-                        index: i,
-                        title: s.title || '',
-                        bullets: s.bullets || [],
-                        layout: s.layout || 'standard',
-                        theme: s.theme || null,
-                        contentType: s.contentType || null,
-                        speakerNotes: s.speakerNotes || '',
-                        imagePrompt: s.imagePrompt || '',
-                      });
-                    });
-                    await batch.commit();
+                    const deckRef = await window.firebaseDb.collection('decks').add(
+                      buildDeckDocument(deckConfig, currentUser, { status: 'ready', slides: finalSlides })
+                    );
+                    await writeSlideDocuments(deckRef, finalSlides);
                     uploadSourceFile(deckRef.id, deckConfig).catch(() => {});
                   }
                 } catch (_) {}

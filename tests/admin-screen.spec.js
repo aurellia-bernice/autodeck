@@ -91,8 +91,9 @@ test.describe('AdminScreen — admin role', () => {
   // ── Brand colours tab ─────────────────────────────────────────────────────
 
   test('colour palette shows the default 6 colour rows', async ({ page }) => {
-    await expect(page.getByText('Primary purple')).toBeVisible();
-    await expect(page.getByText('Lime accent')).toBeVisible();
+    await expect(page.locator('input[type="color"]')).toHaveCount(6);
+    await expect(page.locator('input:not([type])').first()).toHaveValue('Primary purple');
+    await expect(page.locator('input:not([type])').nth(3)).toHaveValue('Lime accent');
   });
 
   test('clicking "Add colour" button adds a new colour row', async ({ page }) => {
@@ -126,7 +127,7 @@ test.describe('AdminScreen — admin role', () => {
   test('Typography tab shows font family name for Display font', async ({ page }) => {
     await page.getByRole('button', { name: 'Typography' }).click();
     // Default display font is Space Grotesk
-    await expect(page.getByText(/Space Grotesk/)).toBeVisible();
+    await expect(page.getByText(/Display font · Space Grotesk/)).toBeVisible();
   });
 });
 

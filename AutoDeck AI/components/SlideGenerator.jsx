@@ -781,9 +781,9 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
 
     if (layout === 'stat') {
       const m   = (slide.bullets[0] || '').match(/(\d+(?:\.\d+)?)\s*(%|x|×|M|K|B|bn|m)?/i);
-      const num = m ? m[1] : '34';
-      const suf = m ? (m[2] || '%') : '%';
-      const ctx = (slide.bullets[0] || 'Year-on-year growth').replace(/(\d+(?:\.\d+)?)\s*(%|x|×|M|K|B|bn|m)?/i, '').replace(/^[^\w]+|[^\w]+$/g, '').trim() || 'Year-on-year growth';
+      const num = m ? m[1] : 'TBD';
+      const suf = m ? (m[2] || '') : '';
+      const ctx = (slide.bullets[0] || slide.title || 'Metric needs source confirmation').replace(/(\d+(?:\.\d+)?)\s*(%|x|×|M|K|B|bn|m)?/i, '').replace(/^[^\w]+|[^\w]+$/g, '').trim() || 'Metric needs source confirmation';
       return (
         <div style={container}>
           {hasImg && <div style={{ position: 'absolute', inset: 0, background: overlay, zIndex: 1 }} />}

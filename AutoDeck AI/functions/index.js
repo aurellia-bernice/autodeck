@@ -2,6 +2,7 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const admin    = require('firebase-admin');
 const Anthropic = require('@anthropic-ai/sdk');
 const mammoth  = require('mammoth');
+const JSZip    = require('jszip');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -21,10 +22,76 @@ const compactText = (value, limit) => String(value || '')
   .trim()
   .slice(0, limit);
 
+const isNoisySourceUnit = (value) => {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return true;
+  const lower = text.toLowerCase();
+  if (/^[^\w]*\d{1,3}[^\w]*$/.test(text)) return true;
+  if (/^(page|slide)\s+\d+$/i.test(text)) return true;
+  if (/^(contents|table of contents|agenda)$/i.test(text)) return true;
+  if (/\bprepared for\b|\bprepared by\b/.test(lower)) return true;
+  if (/\bthis guide breaks down every concept\b/.test(lower)) return true;
+  const sectionRefs = (text.match(/\b\d{1,2}\s+[A-Z][A-Za-z]/g) || []).length;
+  const capitalizedWords = (text.match(/\b[A-Z][A-Za-z]{3,}\b/g) || []).length;
+  return sectionRefs >= 2 && capitalizedWords >= 4;
+};
+
+const cleanSourceMaterial = (value, limit) => {
+  const compact = compactText(value, limit);
+  const units = compact
+    .split(/\n+/)
+    .flatMap((line) => {
+      const normalized = line.replace(/\s+/g, ' ').trim();
+      if (!normalized) return [];
+      return normalized.length > 260
+        ? (normalized.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [normalized])
+        : [normalized];
+    })
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  const cleaned = units.filter((unit) => !isNoisySourceUnit(unit));
+  return compactText((cleaned.length ? cleaned : units).join('\n'), limit);
+};
+
 const wordCount = (value) => compactText(value, Number.MAX_SAFE_INTEGER)
   .split(/\s+/)
   .filter(Boolean)
   .length;
+
+const KEYWORD_STOP_WORDS = new Set([
+  'this', 'that', 'with', 'from', 'have', 'will', 'your', 'about', 'into', 'their', 'there', 'where',
+  'when', 'what', 'were', 'been', 'being', 'they', 'them', 'than', 'then', 'also', 'should', 'could',
+  'would', 'these', 'those', 'because', 'through', 'between', 'within', 'without', 'document', 'presentation',
+  'slide', 'slides', 'deck', 'cover',
+]);
+
+const keywordsFrom = (value) => {
+  const words = String(value || '').toLowerCase().match(/[a-z0-9]{4,}/g) || [];
+  return [...new Set(words.filter((word) => !KEYWORD_STOP_WORDS.has(word)))].slice(0, 40);
+};
+
+const keywordOverlap = (brief, source) => {
+  const sourceKeywords = keywordsFrom(source);
+  return keywordsFrom(brief).filter((keyword) =>
+    sourceKeywords.some((sourceKeyword) => sourceKeyword.includes(keyword) || keyword.includes(sourceKeyword))
+  );
+};
+
+const sourceFitGuide = (brief, source) => {
+  if (!brief || !source) return 'No source-fit warning.';
+  const briefKeywords = keywordsFrom(brief);
+  if (briefKeywords.length < 3) return 'No source-fit warning.';
+  const overlap = keywordOverlap(brief, source);
+  if (overlap.length >= Math.min(3, Math.max(1, Math.floor(briefKeywords.length * 0.25)))) {
+    return `The brief appears supported by the source. Shared anchors: ${overlap.slice(0, 8).join(', ')}.`;
+  }
+  return [
+    'The brief appears weakly supported by the uploaded source.',
+    'Use the brief only as audience/framing intent.',
+    'Do not force unsupported investor, metric, runway, funding, product, or decision claims into the deck.',
+    'If necessary, state missing source evidence concretely instead of pretending the document contains it.',
+  ].join(' ');
+};
 
 const resolveSlideCount = (slideCount, content) => {
   const explicit = parseInt(slideCount, 10);
@@ -62,36 +129,83 @@ const normalizeLayout = (value, fallback = 'standard') => {
   return allowed.has(layout) ? layout : fallback;
 };
 
+const hasUsableMetric = (value) =>
+  /\b\d+(?:\.\d+)?\s*(%|x|×|m|k|b|bn|usd|\$|₦|days?|weeks?|months?|years?|users?|customers?|transactions?|revenue|growth|tickets?|hours?|mins?)\b/i.test(String(value || ''));
+
 const normalizeSlides = (slides, count) => {
   if (!Array.isArray(slides)) return [];
   return slides
     .map((slide) => {
-      const title = trimWords(slide?.title, 12).replace(/[.!?]+$/, '');
+      const title = trimWords(slide?.title, 12).replace(/^[^A-Za-z0-9$]+/, '').replace(/[.!?]+$/, '');
       const bullets = Array.isArray(slide?.bullets)
         ? slide.bullets
-            .map((bullet) => trimWords(bullet, 26).replace(/^[\s\-*]+/, '').trim())
+            .map((bullet) => trimWords(bullet, 26).replace(/^[^A-Za-z0-9$]+/, '').trim())
+            .filter((bullet) => !isNoisySourceUnit(bullet))
             .filter(Boolean)
             .slice(0, 4)
         : [];
+      let layout = normalizeLayout(slide?.layout);
+      if (layout === 'stat' && !hasUsableMetric([title, ...bullets].join(' '))) {
+        layout = 'standard';
+      }
       return {
         title,
         bullets,
-        layout: normalizeLayout(slide?.layout),
+        layout,
         contentType: trimWords(slide?.contentType || slide?.kicker || 'section', 4).toLowerCase(),
         kicker: trimWords(slide?.kicker || slide?.contentType || 'Section', 4),
         speakerNotes: trimWords(slide?.speakerNotes, 60),
         imagePrompt: trimWords(slide?.imagePrompt, 24),
       };
     })
-    .filter((slide) => slide.title && slide.bullets.length >= 2)
+    .filter((slide) => slide.title && !isNoisySourceUnit(slide.title) && slide.bullets.length >= 2)
     .slice(0, count);
 };
 
-const buildDeckPrompt = ({ userInstruction, sourceMaterial, count, templateStyle, voiceGuide, templatePreset }) => `Create exactly ${count} presentation slides from the user's context.
+const decodeXmlEntities = (value) => String(value || '')
+  .replace(/&amp;/g, '&')
+  .replace(/&lt;/g, '<')
+  .replace(/&gt;/g, '>')
+  .replace(/&quot;/g, '"')
+  .replace(/&apos;/g, "'");
+
+const slideNumberFromPath = (path) => {
+  const match = String(path || '').match(/slide(\d+)\.xml$/);
+  return match ? parseInt(match[1], 10) : 0;
+};
+
+const extractPptxText = async (buffer) => {
+  const zip = await JSZip.loadAsync(buffer);
+  const slidePaths = Object.keys(zip.files)
+    .filter((path) => /^ppt\/slides\/slide\d+\.xml$/.test(path))
+    .sort((a, b) => slideNumberFromPath(a) - slideNumberFromPath(b));
+
+  const slides = [];
+  for (const path of slidePaths) {
+    const xml = await zip.file(path).async('text');
+    const textRuns = [...xml.matchAll(/<a:t[^>]*>([\s\S]*?)<\/a:t>/g)]
+      .map((match) => decodeXmlEntities(match[1]).replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+    if (textRuns.length) {
+      slides.push(`Slide ${slideNumberFromPath(path)}\n${textRuns.join('\n')}`);
+    }
+  }
+  return slides.join('\n\n');
+};
+
+const buildDeckPrompt = ({ userInstruction, sourceMaterial, sourceDocumentName, sourceFit, count, templateStyle, voiceGuide, templatePreset }) => `Create exactly ${count} presentation slides from the user's context.
 
 This is for an internal Quidax deck. The output must feel like a thoughtful first draft from a senior presentation strategist, not a generic summary.
 
 Deck requirements:
+- Treat "User instruction or pasted notes" as the brief: audience, goal, emphasis, missing context, and what story the user wants told.
+- Treat "Parsed source material" as the evidence: the facts, details, sections, and language to synthesize into the deck.
+- Factual content comes from the parsed source material first. The brief can frame the deck, but it cannot create facts that the document does not contain.
+- Merge the brief and the source material into one coherent story. Do not make separate "prompt" and "document" sections.
+- Do not mirror the original document/page/slide breaks mechanically; reorganize around the best narrative arc.
+- Ignore cover-page boilerplate, table of contents, repeated headers/footers, page numbers, "prepared for" metadata, and lists of section titles. Use them only to infer structure; do not turn them into slide content.
+- Do not copy phrases like "Requested focus" or "Source document" into slide bullets.
+- If the brief asks for a different story than the source supports, make that mismatch explicit with "Needs source confirmation" or reframe the deck around the actual source topic.
 - Use the user's supplied context as the source of truth.
 - Preserve specific names, products, metrics, dates, markets, phases, risks, asks, owners, and decisions when they appear in the context.
 - Every bullet must be directly supported by the context. Do not invent facts, numbers, customers, locations, or timelines.
@@ -102,7 +216,9 @@ Deck requirements:
 - Bullets should state the point and the implication. Prefer concrete claims over vague phrases.
 - Every slide must include a layout from the template preset's allowedLayouts list.
 - Use "stat" only when there is a real number or metric in the source.
+- Never create placeholder/default metrics.
 - Use "image" only when you can provide a concrete imagePrompt.
+- Before writing JSON, silently identify the source thesis, 5-8 evidence clusters, conflicts/missing information, and the cleanest narrative arc. Use that plan to produce the slides.
 
 Voice: ${voiceGuide}
 Template style: ${templateStyle || 'Professional'}
@@ -134,6 +250,12 @@ Slide structure guidance:
 4. Keep each bullet under 26 words.
 5. Make the final slide a concrete decision, recommendation, or next-step slide when the context supports it.
 
+Source document name:
+${sourceDocumentName || '(none)'}
+
+Brief/source fit guidance:
+${sourceFit || 'No source-fit warning.'}
+
 User instruction or pasted notes:
 ${userInstruction || '(none)'}
 
@@ -146,9 +268,9 @@ exports.generateDeck = onCall(
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
 
-    const { deckId, inputText, parsedFileText, slideCount, templateStyle, brandVoice, templatePreset } = request.data;
+    const { deckId, inputText, parsedFileText, sourceDocumentName, slideCount, templateStyle, brandVoice, templatePreset } = request.data;
     const userInstruction = compactText(inputText, MAX_INPUT_CHARS);
-    const sourceMaterial = compactText(parsedFileText, MAX_SOURCE_CHARS);
+    const sourceMaterial = cleanSourceMaterial(parsedFileText, MAX_SOURCE_CHARS);
     const content = [userInstruction, sourceMaterial].filter(Boolean).join('\n\n');
     if (!content) throw new HttpsError('invalid-argument', 'No content was provided for deck generation.');
     const count = resolveSlideCount(slideCount, content);
@@ -169,6 +291,8 @@ You must be faithful to the source. If a fact is not in the source, do not add i
     const prompt = buildDeckPrompt({
       userInstruction,
       sourceMaterial,
+      sourceDocumentName: compactText(sourceDocumentName, 300),
+      sourceFit: sourceFitGuide(userInstruction, sourceMaterial),
       count,
       templateStyle,
       voiceGuide,
@@ -190,7 +314,7 @@ You must be faithful to the source. If a fact is not in the source, do not add i
         .join('\n')
         .trim();
       slides = normalizeSlides(extractJsonArray(raw), count);
-      if (slides.length < Math.min(count, 3)) {
+      if (slides.length < Math.min(count, 5)) {
         throw new Error('Model returned too few usable slides');
       }
     } catch (e) {
@@ -270,5 +394,17 @@ exports.parseDocx = onCall(
     const buf = Buffer.from(base64, 'base64');
     const { value } = await mammoth.extractRawText({ buffer: buf });
     return { text: value };
+  }
+);
+
+// ── parsePptx ─────────────────────────────────────────────────
+exports.parsePptx = onCall(
+  { timeoutSeconds: 30, memory: '256MiB', region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
+    const { base64 } = request.data;
+    const buf = Buffer.from(base64, 'base64');
+    const text = await extractPptxText(buf);
+    return { text };
   }
 );

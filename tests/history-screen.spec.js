@@ -25,19 +25,19 @@ test.describe('HistoryScreen', () => {
   // ── Stats strip ───────────────────────────────────────────────────────────
 
   test('renders Decks, Slides, and Favourites stat labels', async ({ page }) => {
-    await expect(page.getByText('Decks')).toBeVisible();
-    await expect(page.getByText('Slides')).toBeVisible();
-    await expect(page.getByText('Favourites')).toBeVisible();
+    await expect(page.getByText('Decks', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Slides', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Favourites', { exact: true }).first()).toBeVisible();
   });
 
   test('shows 8 decks in the stats strip', async ({ page }) => {
     // Decks stat value is "08" (padded)
-    await expect(page.getByText('08')).toBeVisible();
+    await expect(page.getByText('08', { exact: true }).first()).toBeVisible();
   });
 
   test('shows 3 favourites in the stats strip', async ({ page }) => {
     // Favourites stat value is "03" (padded)
-    await expect(page.getByText('03')).toBeVisible();
+    await expect(page.getByText('03', { exact: true }).first()).toBeVisible();
   });
 
   // ── Featured / Most recent ────────────────────────────────────────────────
@@ -59,7 +59,7 @@ test.describe('HistoryScreen', () => {
     await expect(page.getByText('Author')).toBeVisible();
     await expect(page.getByText('Size')).toBeVisible();
     // Slides label appears in meta strip (distinct from the stats strip)
-    await expect(page.getByText('Slides').first()).toBeVisible();
+    await expect(page.getByText('Slides', { exact: true }).first()).toBeVisible();
   });
 
   // ── Toolbar ───────────────────────────────────────────────────────────────
@@ -83,7 +83,7 @@ test.describe('HistoryScreen', () => {
 
   test('searching filters decks to matching titles', async ({ page }) => {
     await page.getByPlaceholder('Search the library…').fill('Investor');
-    await expect(page.getByText('Investor Update — Series B')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Investor Update — Series B' })).toBeVisible();
     // Non-matching deck should not appear
     await expect(page.getByText('Q2 Sales Strategy Overview')).not.toBeVisible();
   });
@@ -98,7 +98,7 @@ test.describe('HistoryScreen', () => {
   test('filtering by "Bold" template shows only Bold decks', async ({ page }) => {
     await page.getByRole('button', { name: 'Bold', exact: true }).click();
     // "Product Roadmap H2 2026" and "Brand Guidelines 2026" are Bold
-    await expect(page.getByText('Product Roadmap H2 2026')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Product Roadmap H2 2026' }).first()).toBeVisible();
     // "Q2 Sales Strategy Overview" is Professional — should be hidden
     await expect(page.getByText('Q2 Sales Strategy Overview')).not.toBeVisible();
   });
@@ -132,7 +132,7 @@ test.describe('HistoryScreen', () => {
     const favBtn = page.locator('button').filter({ has: page.locator('svg path[d*="7 1l1.8"]') }).first();
     await favBtn.click();
     // Count drops from 3 to 2 — stat should now show "02"
-    await expect(page.getByText('02')).toBeVisible();
+    await expect(page.getByText('02', { exact: true }).first()).toBeVisible();
   });
 
   // ── Delete ────────────────────────────────────────────────────────────────
@@ -144,6 +144,6 @@ test.describe('HistoryScreen', () => {
     const deleteBtn = page.locator('button').filter({ has: page.locator('svg path[d*="M2 3h10"]') }).first();
     await deleteBtn.click();
     // Decks count drops from 8 to 7 — stat should show "07"
-    await expect(page.getByText('07')).toBeVisible();
+    await expect(page.getByText('07', { exact: true }).first()).toBeVisible();
   });
 });

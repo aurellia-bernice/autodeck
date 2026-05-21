@@ -90,12 +90,34 @@ const AutoDeckTemplatePresets = (() => {
   const getTemplateOptions = () => Object.values(presets).map((preset) => preset.label);
   const isAllowedLayout = (layout) => allowedLayouts.includes(layout);
 
+  const hasUsableMetric = (slide) => {
+    const text = [
+      slide?.title,
+      ...(Array.isArray(slide?.bullets) ? slide.bullets : []),
+    ].filter(Boolean).join(' ');
+    return /\b\d+(?:\.\d+)?\s*(%|x|×|m|k|b|bn|usd|\$|₦|days?|weeks?|months?|years?|users?|customers?|transactions?|revenue|growth|tickets?|hours?|mins?)\b/i.test(text);
+  };
+
+  const fallbackLayout = (preset, index, blockedLayout) => {
+    const sequence = preset.layoutSequence?.length ? preset.layoutSequence : preset.layoutSet;
+    for (let offset = 0; offset < sequence.length; offset += 1) {
+      const candidate = sequence[(index + offset) % sequence.length];
+      if (candidate !== blockedLayout && isAllowedLayout(candidate) && preset.layoutSet.includes(candidate)) {
+        return candidate;
+      }
+    }
+    return preset.defaultLayout === blockedLayout ? 'standard' : preset.defaultLayout;
+  };
+
   const resolveTemplateLayout = (slide, index, templateStyle) => {
     const preset = getTemplatePreset(templateStyle);
     const requested = String(slide?.layout || '').trim();
+    if (requested === 'stat' && !hasUsableMetric(slide)) return fallbackLayout(preset, index, 'stat');
     if (isAllowedLayout(requested) && preset.layoutSet.includes(requested)) return requested;
     if (isAllowedLayout(requested)) return requested;
-    return preset.layoutSequence[index % preset.layoutSequence.length] || preset.defaultLayout;
+    const sequenced = preset.layoutSequence[index % preset.layoutSequence.length] || preset.defaultLayout;
+    if (sequenced === 'stat' && !hasUsableMetric(slide)) return fallbackLayout(preset, index + 1, 'stat');
+    return sequenced;
   };
 
   const resolveTemplateTheme = (slide, templateStyle) => {

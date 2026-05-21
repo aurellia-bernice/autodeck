@@ -35,8 +35,8 @@ autodeck/
 ├── firebase.json                   # Hosting public dir = "AutoDeck AI", Functions source
 ├── package.json                    # Playwright tests only
 └── AutoDeck AI/
-    ├── AutoDeck AI.html            # Entry point — loads all scripts in order
-    ├── index.html                  # Alias entry point (same app)
+    ├── index.html                  # Primary entry point — loads all scripts in order
+    ├── AutoDeck AI.html            # Compatibility redirect to index.html
     ├── app.jsx                     # Root: routing, auth state, generation logic, brandConfig
     ├── tokens.jsx                  # Design tokens: qxTheme, qxRadius, qxType, qxEase, qxShadow, QX
     ├── template-presets.jsx        # Built-in template recipes until source PPTX/templates are available
@@ -49,9 +49,7 @@ autodeck/
         ├── tweaks-panel.jsx        # Dev overlay: dark mode toggle, screen jump (localStorage)
         ├── Sidebar.jsx             # Left nav — links, user badge, logout, admin-gated Admin link
         ├── LoginScreen.jsx         # Sign in / Sign up / Forgot password / Google SSO
-        ├── HomeScreen.jsx          # Re-exports HomeScreenA (legacy full impl commented out)
-        ├── HomeScreenA.jsx         # ✅ Active generate form
-        ├── HomeScreenB.jsx         # Alternate generate form (unused)
+        ├── HomeScreenA.jsx         # Active generate form
         ├── ProcessingScreen.jsx    # Animated generation progress, syncs to real generationStatus
         ├── PreviewScreen.jsx       # Slide outline — inline edit, delete, add, reorder
         ├── SlideGenerator.jsx      # Full slideshow: themes, layouts, alignment, image search, agent
@@ -62,7 +60,7 @@ autodeck/
         └── ResetPasswordScreen.jsx     # Standalone password reset (linked from email)
 ```
 
-**Loading order matters.** `tokens.jsx` → `motion.jsx` → components → `app.jsx`. Each file ends with `Object.assign(window, { ComponentName })` to expose itself globally (no ES modules).
+**Loading order matters.** `tokens.jsx` → `template-presets.jsx` → `motion.jsx` → components → `app.jsx`. Each component file exposes itself globally with `Object.assign(window, { ComponentName })` because the app runs without ES modules.
 
 ---
 

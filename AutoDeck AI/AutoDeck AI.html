@@ -4,69 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AutoDeck AI — Quidax Internal Tool</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <script src="vendor/react.development.js"></script>
-  <script src="vendor/react-dom.development.js"></script>
-  <script src="vendor/babel.min.js"></script>
-  <!-- Firebase compat SDK -->
-  <script src="vendor/firebase-app-compat.js"></script>
-  <script src="vendor/firebase-auth-compat.js"></script>
-  <script src="vendor/firebase-firestore-compat.js"></script>
-  <script src="vendor/firebase-storage-compat.js"></script>
-  <script src="vendor/firebase-functions-compat.js"></script>
-  <script src="firebase-config.js"></script>
-  <!-- Export libraries -->
-  <script src="vendor/pptxgen.bundle.js"></script>
-  <script src="vendor/html2canvas.min.js"></script>
-  <!-- File parsing -->
-  <script src="vendor/pdf.min.js"></script>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; overflow: hidden; }
-    body { font-family: "Inter", system-ui, sans-serif; background: #FAF8FC; color: #1A0530; -webkit-font-smoothing: antialiased; }
-    textarea, input, button { font-family: inherit; }
-    textarea::placeholder, input::placeholder { color: #B8AAC8; }
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(95,42,145,0.20); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(95,42,145,0.40); }
-    * { scrollbar-width: thin; scrollbar-color: rgba(95,42,145,0.20) transparent; }
-  </style>
 </head>
 <body>
-  <template id="__bundler_thumbnail">
-    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-      <rect width="100" height="100" rx="14" fill="#2D0F4E"/>
-      <circle cx="50" cy="50" r="22" fill="none" stroke="#D4FF3F" stroke-width="2.4"/>
-      <path d="M40 60 L50 38 L60 60" fill="none" stroke="#F6F1FB" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M44 53 L56 53" stroke="#F6F1FB" stroke-width="2.4" stroke-linecap="round"/>
-    </svg>
-  </template>
-  <div id="root"></div>
-
-  <!-- Tokens & shared design primitives -->
-  <script type="text/babel" src="tokens.jsx"></script>
-  <script type="text/babel" src="template-presets.jsx"></script>
-  <script type="text/babel" src="components/motion.jsx"></script>
-
-  <!-- Components -->
-  <script type="text/babel" src="components/tweaks-panel.jsx"></script>
-  <script type="text/babel" src="components/Sidebar.jsx"></script>
-  <script type="text/babel" src="components/HomeScreenA.jsx"></script>
-  <script type="text/babel" src="components/HomeScreenB.jsx"></script>
-  <script type="text/babel" src="components/HomeScreen.jsx"></script>
-  <script type="text/babel" src="components/ProcessingScreen.jsx"></script>
-  <script type="text/babel" src="components/PreviewScreen.jsx"></script>
-  <script type="text/babel" src="components/SlideGenerator.jsx"></script>
-  <script type="text/babel" src="components/HistoryScreen.jsx"></script>
-  <script type="text/babel" src="components/AdminScreen.jsx"></script>
-  <script type="text/babel" src="components/LoginScreen.jsx"></script>
-  <script type="text/babel" src="components/ChangePasswordScreen.jsx"></script>
-  <script type="text/babel" src="components/AccountSettingsScreen.jsx"></script>
-
-  <!-- App -->
-  <script type="text/babel" src="app.jsx"></script>
+  <a id="open-autodeck-link" href="index.html">Open AutoDeck AI</a>
+  <script>
+    const redirectUrl = `index.html${window.location.search}${window.location.hash}`;
+    document.getElementById('open-autodeck-link').href = redirectUrl;
+    window.location.replace(redirectUrl);
+  </script>
 </body>
 </html>

@@ -20,6 +20,9 @@ const normalizePreviewSlides = (slides, templateStyle = 'Professional') => {
 };
 
 const makePreviewDraftSlides = (config, count) => {
+  if (window.AutoDeckStoryDraft?.buildSlides) {
+    return window.AutoDeckStoryDraft.buildSlides({ ...config, slideCount: config?.slideCount || count });
+  }
   const source = [
     config?.inputText,
     config?.parsedFileText,

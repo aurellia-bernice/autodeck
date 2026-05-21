@@ -1,4 +1,8 @@
 # Firebase config contains API keys — never commit this
+.DS_Store
+**/.DS_Store
+.claude/
+**/.claude/
 AutoDeck AI/firebase-config.js
 AutoDeck AI/functions/.env
 node_modules/

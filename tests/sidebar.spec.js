@@ -16,8 +16,7 @@ test.describe('Sidebar', () => {
   // ── Brand identity ────────────────────────────────────────────────────────
 
   test('renders the AutoDeck AI brand name', async ({ page }) => {
-    await expect(page.getByText('AutoDeck')).toBeVisible();
-    await expect(page.getByText('AI')).toBeVisible();
+    await expect(page.getByText('AutoDeckAI', { exact: true })).toBeVisible();
   });
 
   test('renders the "Quidax · Internal" subtitle', async ({ page }) => {
