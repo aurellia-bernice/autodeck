@@ -37,6 +37,40 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
 
+      - name: Create Firebase stub for tests
+        run: |
+          cat > "AutoDeck AI/firebase-config.js" << 'EOF'
+          // CI stub — mocks Firebase so the app reaches the login screen without real credentials.
+          (function () {
+            const mockAuth = {
+              onAuthStateChanged(cb) { setTimeout(() => cb(null), 0); return () => {}; },
+              signInWithEmailAndPassword() { return Promise.reject(new Error('not available in tests')); },
+              signOut() { return Promise.resolve(); },
+              currentUser: null,
+            };
+            const mockDoc = () => ({
+              get: () => Promise.resolve({ exists: false, data: () => ({}) }),
+              set: () => Promise.resolve(),
+              update: () => Promise.resolve(),
+            });
+            const mockCollection = () => ({
+              doc: mockDoc,
+              add: () => Promise.resolve({ id: 'stub-id' }),
+              where: () => ({ get: () => Promise.resolve({ docs: [] }) }),
+            });
+            const mockDb = {
+              collection: mockCollection,
+              doc: mockDoc,
+              batch: () => ({ set: () => {}, update: () => {}, delete: () => {}, commit: () => Promise.resolve() }),
+            };
+            window.firebaseAuth = mockAuth;
+            window.firebaseDb = mockDb;
+            window.firebaseStorage = { ref: () => ({ put: () => Promise.resolve({ ref: { getDownloadURL: () => Promise.resolve('') } }) }) };
+            window.firebaseFunctions = { httpsCallable: () => () => Promise.reject(new Error('not available in tests')) };
+            window.firebase = { app: () => ({}) };
+          })();
+          EOF
+
       - name: Run tests
         run: npm test
 
