@@ -143,6 +143,20 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
       <svg {...common}><text x="2" y="16" fontSize="14" fontWeight="600" fontFamily="serif" fill={fg}>34</text><text x="14" y="16" fontSize="14" fontWeight="600" fontFamily="serif" fill={acc}>%</text><rect x="22" y="6" width="14" height=".7" fill={fg} opacity=".5" /><rect x="22" y="8.5" width="12" height=".7" fill={fg} opacity=".5" /><rect x="22" y="11" width="14" height=".7" fill={fg} opacity=".5" /></svg>);
     if (variant === 'image') return (
       <svg {...common}><rect x="2" y="3" width="17" height="17" rx="1" fill={fg} opacity=".18" /><line x1="3" y1="4" x2="18" y2="19" stroke={fg} strokeWidth=".4" opacity=".4" /><circle cx="14" cy="7" r="1.2" fill={fg} opacity=".5" /><rect x="22" y="6" width="14" height="1.2" rx=".5" fill={fg} opacity=".9" /><rect x="22" y="9" width="6" height=".7" rx=".3" fill={acc} /><rect x="22" y="12" width="14" height=".7" fill={fg} opacity=".5" /><rect x="22" y="14.5" width="11" height=".7" fill={fg} opacity=".5" /></svg>);
+    if (variant === 'process_flow') return (
+      <svg {...common}><circle cx="7" cy="11" r="3" fill={acc} opacity=".9" /><circle cx="20" cy="11" r="3" fill={fg} opacity=".32" /><circle cx="33" cy="11" r="3" fill={fg} opacity=".32" /><path d="M10.5 11h5.5M23.5 11h5.5" stroke={fg} strokeWidth=".8" opacity=".6" /><path d="M15 9.5l1.5 1.5-1.5 1.5M28 9.5l1.5 1.5-1.5 1.5" stroke={fg} strokeWidth=".8" strokeLinecap="round" strokeLinejoin="round" opacity=".7" /></svg>);
+    if (variant === 'comparison' || variant === 'problem_solution') return (
+      <svg {...common}><rect x="3" y="5" width="14" height="13" rx="1.2" fill={fg} opacity=".18" /><rect x="23" y="5" width="14" height="13" rx="1.2" fill={acc} opacity=".30" /><path d="M18.5 11.5h3M20.5 9.5l2 2-2 2" stroke={fg} strokeWidth=".8" strokeLinecap="round" strokeLinejoin="round" opacity=".7" /><rect x="6" y="8" width="8" height=".7" fill={fg} opacity=".55" /><rect x="26" y="8" width="8" height=".7" fill={fg} opacity=".55" /></svg>);
+    if (variant === 'timeline' || variant === 'roadmap') return (
+      <svg {...common}><path d="M5 12h30" stroke={fg} strokeWidth=".8" opacity=".45" /><circle cx="8" cy="12" r="2" fill={acc} /><circle cx="20" cy="12" r="2" fill={fg} opacity=".45" /><circle cx="32" cy="12" r="2" fill={fg} opacity=".45" /><rect x="5" y="6" width="8" height=".8" fill={fg} opacity=".55" /><rect x="17" y="16" width="8" height=".8" fill={fg} opacity=".55" /><rect x="29" y="6" width="8" height=".8" fill={fg} opacity=".55" /></svg>);
+    if (variant === 'statistics') return (
+      <svg {...common}><rect x="3" y="5" width="10" height="13" rx="1.2" fill={fg} opacity=".16" /><rect x="15" y="5" width="10" height="13" rx="1.2" fill={fg} opacity=".16" /><rect x="27" y="5" width="10" height="13" rx="1.2" fill={fg} opacity=".16" /><text x="5" y="14" fontSize="6" fontWeight="700" fontFamily="sans-serif" fill={acc}>72</text><text x="17" y="14" fontSize="6" fontWeight="700" fontFamily="sans-serif" fill={fg}>34</text><text x="29" y="14" fontSize="6" fontWeight="700" fontFamily="sans-serif" fill={fg}>2M</text></svg>);
+    if (variant === 'hierarchy') return (
+      <svg {...common}><rect x="14" y="4" width="12" height="4" rx="1" fill={acc} opacity=".8" /><path d="M20 8v3M9 11h22M9 11v3M20 11v3M31 11v3" stroke={fg} strokeWidth=".6" opacity=".6" /><rect x="4" y="14" width="10" height="4" rx="1" fill={fg} opacity=".22" /><rect x="15" y="14" width="10" height="4" rx="1" fill={fg} opacity=".22" /><rect x="26" y="14" width="10" height="4" rx="1" fill={fg} opacity=".22" /></svg>);
+    if (variant === 'feature_breakdown' || variant === 'summary') return (
+      <svg {...common}><rect x="4" y="5" width="14" height="6" rx="1.2" fill={fg} opacity=".18" /><rect x="22" y="5" width="14" height="6" rx="1.2" fill={fg} opacity=".18" /><rect x="4" y="13" width="14" height="6" rx="1.2" fill={fg} opacity=".18" /><rect x="22" y="13" width="14" height="6" rx="1.2" fill={acc} opacity=".28" /><circle cx="8" cy="8" r="1.3" fill={acc} /></svg>);
+    if (variant === 'image_focus') return (
+      <svg {...common}><rect x="2" y="3" width="36" height="17" rx="1.2" fill={fg} opacity=".18" /><path d="M5 17l8-7 5 4 4-3 11 6" stroke={fg} strokeWidth=".6" opacity=".55" fill="none" /><circle cx="30" cy="8" r="2" fill={acc} opacity=".8" /><rect x="5" y="6" width="14" height="1.1" rx=".4" fill={fg} opacity=".75" /></svg>);
     return null;
   };
 
@@ -155,11 +169,21 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     { key: 'image',    name: 'Image-led',  desc: 'Photo + text panel' },
     { key: 'minimal',  name: 'Minimal',    desc: 'Title alone' },
     { key: 'centered', name: 'Centered',   desc: 'Centered title + points' },
+    { key: 'process_flow', name: 'Flow', desc: 'Steps + arrows' },
+    { key: 'comparison', name: 'Compare', desc: 'Two sides' },
+    { key: 'timeline', name: 'Timeline', desc: 'Chronology' },
+    { key: 'statistics', name: 'KPI cards', desc: 'Numbers' },
+    { key: 'hierarchy', name: 'Hierarchy', desc: 'Levels' },
+    { key: 'roadmap', name: 'Roadmap', desc: 'Phases' },
+    { key: 'problem_solution', name: 'Problem/Solution', desc: 'Tension + answer' },
+    { key: 'feature_breakdown', name: 'Features', desc: 'Icon cards' },
+    { key: 'summary', name: 'Summary', desc: 'Takeaways' },
+    { key: 'image_focus', name: 'Image focus', desc: 'Visual anchor' },
   ];
 
   // ─── derived ─────────────────────────────────────────────
   const getTheme  = (i) => THEMES[slideThemeOverrides[i] || globalTheme || localSlides[i]?.theme] || THEMES[localSlides[i]?.theme] || THEMES.purple;
-  const getLayout = (i) => slideLayoutOverrides[i] || localSlides[i]?.layout || window.AutoDeckTemplatePresets?.resolveTemplateLayout?.(localSlides[i], i, config?.templateStyle) || 'standard';
+  const getLayout = (i) => slideLayoutOverrides[i] || window.AutoDeckTemplatePresets?.resolveTemplateLayout?.(localSlides[i], i, config?.templateStyle) || localSlides[i]?.renderLayout || localSlides[i]?.layout || 'standard';
   const getAlign  = (i) => slideAlignments[i] || 'left';
   const theme  = getTheme(currentIndex);
   const layout = getLayout(currentIndex);
@@ -332,6 +356,53 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
           margin: 0.08,
         });
       };
+      const visualItemsFor = (s) => {
+        const fromComponents = Array.isArray(s.components) ? s.components.filter((item) => item && (item.label || item.value || item.items?.length)) : [];
+        if (fromComponents.length) return fromComponents.slice(0, 6);
+        return (s.bullets || []).map((bullet, idx) => ({
+          type: 'card',
+          label: bullet,
+          icon: window.AutoDeckSlideIntelligence?.iconFor?.(bullet) || 'circle-dot',
+          level: idx + 1,
+        })).slice(0, 6);
+      };
+      const componentLabel = (item, fallback = '') => String(item?.label || item?.title || item?.name || fallback || '').trim();
+      const componentDetail = (item) => String(item?.detail || item?.description || '').trim();
+      const componentMetric = (item) => String(item?.value || componentLabel(item).match(/(?:[$#])?\d+(?:\.\d+)?\s*(?:%|x|M|K|B|bn|m)?/i)?.[0] || '').trim();
+      const addVisualHeading = (pSlide, s, p, label = 'Visual story') => {
+        pSlide.addText(label.toUpperCase(), {
+          x: 0.65, y: 0.86, w: 4.2, h: 0.22,
+          fontFace: bodyFont,
+          fontSize: 7.5,
+          bold: true,
+          charSpace: 1.8,
+          color: p.accent,
+        });
+        pSlide.addText(s.title || '', {
+          x: 0.65, y: 1.18, w: 8.8, h: 0.82,
+          fontSize: 27,
+          bold: true,
+          color: p.title,
+          fontFace: displayFont,
+          fit: 'shrink',
+        });
+      };
+      const addIconBadge = (pSlide, text, x, y, p, active = false) => {
+        pSlide.addShape(pptx.ShapeType.ellipse, {
+          x, y, w: 0.45, h: 0.45,
+          fill: { color: active ? p.accent : p.panel, transparency: active ? 0 : 15 },
+          line: { color: active ? p.accent : p.rule, transparency: active ? 0 : 30, width: 0.6 },
+        });
+        pSlide.addText(String(text || '').slice(0, 2).toUpperCase(), {
+          x: x + 0.08, y: y + 0.13, w: 0.3, h: 0.12,
+          fontFace: bodyFont,
+          fontSize: 6,
+          bold: true,
+          color: active ? '1A0530' : p.accent,
+          align: 'center',
+          fit: 'shrink',
+        });
+      };
       localSlides.forEach((s, i) => {
         const t = getTheme(i);
         const layoutKey = getLayout(i);
@@ -344,7 +415,264 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
         addThemedBackground(pSlide, t);
         addChrome(pSlide, t, i);
 
-        if (layoutKey === 'bigTitle' || layoutKey === 'minimal' || layoutKey === 'centered') {
+        if (layoutKey === 'process_flow') {
+          const items = visualItemsFor(s).slice(0, 5);
+          addVisualHeading(pSlide, s, p, 'Process flow');
+          const gap = 0.18;
+          const cardW = (11.7 - gap * Math.max(0, items.length - 1)) / Math.max(1, items.length);
+          items.forEach((item, idx) => {
+            const x = 0.65 + idx * (cardW + gap);
+            const active = idx === 0;
+            pSlide.addShape(pptx.ShapeType.rect, {
+              x, y: 2.55, w: cardW, h: 2.25,
+              fill: { color: active ? p.accent : p.panel, transparency: active ? 4 : 10 },
+              line: { color: active ? p.accent : p.rule, transparency: active ? 0 : 35, width: 0.7 },
+              radius: 0.08,
+            });
+            addIconBadge(pSlide, idx + 1, x + 0.18, 2.78, p, active);
+            pSlide.addText(componentLabel(item, `Step ${idx + 1}`), {
+              x: x + 0.2, y: 3.35, w: cardW - 0.35, h: 0.45,
+              fontFace: displayFont,
+              fontSize: 15,
+              bold: true,
+              color: active ? '1A0530' : titleHex,
+              fit: 'shrink',
+            });
+            if (componentDetail(item)) {
+              pSlide.addText(componentDetail(item), {
+                x: x + 0.2, y: 3.9, w: cardW - 0.35, h: 0.42,
+                fontFace: bodyFont,
+                fontSize: 9,
+                color: active ? '1A0530' : textHex,
+                fit: 'shrink',
+              });
+            }
+            if (idx < items.length - 1) {
+              pSlide.addShape(pptx.ShapeType.line, {
+                x: x + cardW + 0.03, y: 3.66, w: gap - 0.06, h: 0,
+                line: { color: p.accent, width: 1.2, endArrowType: 'triangle' },
+              });
+            }
+          });
+        } else if (layoutKey === 'comparison' || layoutKey === 'problem_solution') {
+          const items = visualItemsFor(s);
+          const columns = layoutKey === 'problem_solution'
+            ? [
+                items.find((item) => item.type === 'problem') || { label: s.bullets?.[0] || 'Problem', type: 'problem', icon: 'alert' },
+                items.find((item) => item.type === 'solution') || { label: s.bullets?.[1] || 'Solution', type: 'solution', icon: 'check' },
+              ]
+            : (items.filter((item) => item.type === 'comparison_column').length
+                ? items.filter((item) => item.type === 'comparison_column').slice(0, 2)
+                : [
+                    { label: 'Current', type: 'comparison_column', items: (s.bullets || []).slice(0, Math.ceil((s.bullets || []).length / 2)) },
+                    { label: 'Future', type: 'comparison_column', items: (s.bullets || []).slice(Math.ceil((s.bullets || []).length / 2)) },
+                  ]);
+          addVisualHeading(pSlide, s, p, layoutKey === 'problem_solution' ? 'Problem / Solution' : 'Comparison');
+          columns.forEach((item, idx) => {
+            const x = idx === 0 ? 0.75 : 7.0;
+            const active = idx === 1;
+            pSlide.addShape(pptx.ShapeType.rect, {
+              x, y: 2.35, w: 5.45, h: 3.35,
+              fill: { color: active ? p.accent : p.panel, transparency: active ? 7 : 8 },
+              line: { color: active ? p.accent : p.rule, transparency: active ? 0 : 35, width: 0.7 },
+            });
+            addIconBadge(pSlide, item.icon || item.type, x + 0.25, 2.65, p, active);
+            pSlide.addText(componentLabel(item), {
+              x: x + 0.85, y: 2.68, w: 4.25, h: 0.32,
+              fontFace: displayFont,
+              fontSize: 16,
+              bold: true,
+              color: active ? '1A0530' : titleHex,
+              fit: 'shrink',
+            });
+            const points = (Array.isArray(item.items) && item.items.length ? item.items : [componentDetail(item) || componentLabel(item)]).filter(Boolean).slice(0, 4);
+            pSlide.addText(points.map((point) => ({ text: point, options: { bullet: { type: 'ul' } } })), {
+              x: x + 0.35, y: 3.35, w: 4.85, h: 1.75,
+              fontFace: bodyFont,
+              fontSize: 10.5,
+              color: active ? '1A0530' : textHex,
+              fit: 'shrink',
+              paraSpaceAfterPt: 5,
+            });
+          });
+          pSlide.addText('>', {
+            x: 6.28, y: 3.55, w: 0.4, h: 0.3,
+            fontFace: displayFont,
+            fontSize: 22,
+            bold: true,
+            color: accentHex,
+            align: 'center',
+          });
+        } else if (layoutKey === 'timeline' || layoutKey === 'roadmap') {
+          const items = visualItemsFor(s).slice(0, 5);
+          addVisualHeading(pSlide, s, p, layoutKey === 'roadmap' ? 'Roadmap' : 'Timeline');
+          pSlide.addShape(pptx.ShapeType.line, {
+            x: 0.95, y: 3.35, w: 11.25, h: 0,
+            line: { color: ruleHex, transparency: 35, width: 1 },
+          });
+          const stepW = 11.25 / Math.max(1, items.length - 1 || 1);
+          items.forEach((item, idx) => {
+            const x = items.length === 1 ? 6.0 : 0.95 + idx * stepW;
+            addIconBadge(pSlide, idx + 1, x - 0.2, 3.12, p, idx === 0);
+            pSlide.addText(componentLabel(item, `${layoutKey === 'roadmap' ? 'Phase' : 'Moment'} ${idx + 1}`), {
+              x: Math.max(0.65, x - 0.75), y: idx % 2 ? 3.78 : 2.45, w: 1.55, h: 0.26,
+              fontFace: bodyFont,
+              fontSize: 8,
+              bold: true,
+              color: accentHex,
+              align: 'center',
+              fit: 'shrink',
+            });
+            pSlide.addText(componentDetail(item) || s.bullets?.[idx] || '', {
+              x: Math.max(0.45, x - 0.95), y: idx % 2 ? 4.12 : 2.78, w: 1.95, h: 0.72,
+              fontFace: bodyFont,
+              fontSize: 8,
+              color: textHex,
+              align: 'center',
+              fit: 'shrink',
+            });
+          });
+        } else if (layoutKey === 'statistics') {
+          const items = visualItemsFor(s).slice(0, 4);
+          addVisualHeading(pSlide, s, p, 'By the numbers');
+          items.forEach((item, idx) => {
+            const x = 0.75 + idx * 3.05;
+            const active = idx === 0;
+            const value = componentMetric(item) || String(idx + 1).padStart(2, '0');
+            pSlide.addShape(pptx.ShapeType.rect, {
+              x, y: 2.45, w: 2.65, h: 2.6,
+              fill: { color: active ? p.accent : p.panel, transparency: active ? 5 : 8 },
+              line: { color: active ? p.accent : p.rule, transparency: active ? 0 : 35, width: 0.7 },
+            });
+            pSlide.addText(value, {
+              x: x + 0.18, y: 2.88, w: 2.25, h: 0.65,
+              fontFace: displayFont,
+              fontSize: 32,
+              bold: true,
+              color: active ? '1A0530' : accentHex,
+              fit: 'shrink',
+            });
+            pSlide.addText(componentLabel(item).replace(value, '').trim() || s.bullets?.[idx] || 'Metric', {
+              x: x + 0.22, y: 3.78, w: 2.18, h: 0.72,
+              fontFace: bodyFont,
+              fontSize: 9.5,
+              color: active ? '1A0530' : textHex,
+              fit: 'shrink',
+            });
+          });
+        } else if (layoutKey === 'hierarchy') {
+          const items = visualItemsFor(s);
+          addVisualHeading(pSlide, s, p, 'Hierarchy');
+          const top = items[0] || { label: s.title };
+          pSlide.addShape(pptx.ShapeType.rect, {
+            x: 4.35, y: 2.25, w: 4.65, h: 0.85,
+            fill: { color: p.accent, transparency: 5 },
+            line: { color: p.accent, width: 0.7 },
+          });
+          pSlide.addText(componentLabel(top), {
+            x: 4.55, y: 2.48, w: 4.25, h: 0.25,
+            fontFace: displayFont,
+            fontSize: 15,
+            bold: true,
+            color: '1A0530',
+            fit: 'shrink',
+            align: 'center',
+          });
+          pSlide.addShape(pptx.ShapeType.line, { x: 6.68, y: 3.1, w: 0, h: 0.55, line: { color: ruleHex, width: 0.8 } });
+          const children = (items.slice(1, 5).length ? items.slice(1, 5) : visualItemsFor({ bullets: s.bullets || [] }).slice(0, 3));
+          children.forEach((item, idx) => {
+            const w = 2.65;
+            const x = 0.8 + idx * 3.05;
+            pSlide.addShape(pptx.ShapeType.rect, {
+              x, y: 3.85, w, h: 1.4,
+              fill: { color: p.panel, transparency: 9 },
+              line: { color: p.rule, transparency: 35, width: 0.7 },
+            });
+            pSlide.addText(componentLabel(item), {
+              x: x + 0.16, y: 4.2, w: w - 0.32, h: 0.35,
+              fontFace: bodyFont,
+              fontSize: 10.5,
+              bold: true,
+              color: titleHex,
+              fit: 'shrink',
+              align: 'center',
+            });
+          });
+        } else if (layoutKey === 'feature_breakdown' || layoutKey === 'summary') {
+          const items = visualItemsFor(s).slice(0, 6);
+          addVisualHeading(pSlide, s, p, layoutKey === 'summary' ? 'Key takeaways' : 'Feature breakdown');
+          items.forEach((item, idx) => {
+            const col = idx % 3;
+            const row = Math.floor(idx / 3);
+            const x = 0.75 + col * 4.05;
+            const y = 2.35 + row * 1.68;
+            const active = idx === 0;
+            pSlide.addShape(pptx.ShapeType.rect, {
+              x, y, w: 3.55, h: 1.35,
+              fill: { color: active ? p.accent : p.panel, transparency: active ? 7 : 8 },
+              line: { color: active ? p.accent : p.rule, transparency: active ? 0 : 35, width: 0.7 },
+            });
+            addIconBadge(pSlide, item.icon || idx + 1, x + 0.18, y + 0.18, p, active);
+            pSlide.addText(componentLabel(item), {
+              x: x + 0.75, y: y + 0.23, w: 2.55, h: 0.42,
+              fontFace: bodyFont,
+              fontSize: 10.5,
+              bold: true,
+              color: active ? '1A0530' : titleHex,
+              fit: 'shrink',
+            });
+            if (componentDetail(item)) {
+              pSlide.addText(componentDetail(item), {
+                x: x + 0.75, y: y + 0.73, w: 2.55, h: 0.28,
+                fontFace: bodyFont,
+                fontSize: 7.8,
+                color: active ? '1A0530' : textHex,
+                fit: 'shrink',
+              });
+            }
+          });
+        } else if (layoutKey === 'image_focus') {
+          const img = slideImages[i];
+          if (img) {
+            pSlide.addImage({ path: img, x: 0, y: 0, w: 13.333, h: 7.5 });
+            pSlide.addShape(pptx.ShapeType.rect, {
+              x: 0, y: 0, w: 7.2, h: 7.5,
+              fill: { color: '000000', transparency: 25 },
+              line: { color: '000000', transparency: 100 },
+            });
+          } else {
+            pSlide.addShape(pptx.ShapeType.rect, {
+              x: 6.75, y: 0.9, w: 5.6, h: 5.35,
+              fill: { color: p.accent, transparency: 70 },
+              line: { color: p.rule, transparency: 35, width: 0.7 },
+            });
+            pSlide.addText(s.imagePrompt || 'Image focus', {
+              x: 7.05, y: 3.18, w: 5.0, h: 0.35,
+              fontFace: bodyFont,
+              fontSize: 12,
+              color: textHex,
+              align: 'center',
+              fit: 'shrink',
+            });
+          }
+          pSlide.addText((s.kicker || 'Image focus').toUpperCase(), {
+            x: 0.65, y: 1.5, w: 3.8, h: 0.22,
+            fontFace: bodyFont,
+            fontSize: 7.5,
+            bold: true,
+            charSpace: 1.8,
+            color: accentHex,
+          });
+          pSlide.addText(s.title || '', {
+            x: 0.65, y: 1.9, w: 5.6, h: 1.35,
+            fontSize: 34,
+            bold: true,
+            color: titleHex,
+            fontFace: displayFont,
+            fit: 'shrink',
+          });
+          addBullets(pSlide, s, t, { x: 0.78, y: 3.55, w: 5.1, h: 1.6, fontSize: 13 });
+        } else if (layoutKey === 'bigTitle' || layoutKey === 'minimal' || layoutKey === 'centered') {
           pSlide.addText(s.title || '', {
             x: 0.65, y: layoutKey === 'minimal' ? 2.45 : 2.1, w: 11.8, h: 1.35,
             fontSize: layoutKey === 'minimal' ? 44 : 48,
@@ -765,6 +1093,264 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
         <EditableText tag="span" field="eyebrow" style={{ fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.30em', textTransform: 'uppercase', color: color || ac, opacity: 0.95 }}>{children}</EditableText>
       </div>
     );
+
+    const fallbackComponents = () => (slide.bullets || []).map((bullet, i) => ({
+      type: 'card',
+      label: bullet,
+      icon: window.AutoDeckSlideIntelligence?.iconFor?.(bullet) || 'circle-dot',
+      value: undefined,
+      detail: undefined,
+      level: i + 1,
+    }));
+    const visualItems = (Array.isArray(slide.components) && slide.components.length ? slide.components : fallbackComponents())
+      .filter((item) => item && (item.label || item.value || item.items?.length))
+      .slice(0, 6);
+    const itemLabel = (item, fallback = '') => String(item?.label || item?.title || item?.name || fallback || '').trim();
+    const itemDetail = (item) => String(item?.detail || item?.description || '').trim();
+    const metricValue = (item) => String(item?.value || itemLabel(item).match(/(?:[$#])?\d+(?:\.\d+)?\s*(?:%|x|M|K|B|bn|m)?/i)?.[0] || '').trim();
+
+    const IconMark = ({ icon, color = ac, size = 34 }) => {
+      const name = String(icon || 'circle-dot').toLowerCase();
+      const stroke = color;
+      const commonSvg = { width: size * 0.58, height: size * 0.58, viewBox: '0 0 24 24', fill: 'none' };
+      let mark = <circle cx="12" cy="12" r="4" stroke={stroke} strokeWidth="2" />;
+      if (name.includes('user')) mark = <><circle cx="10" cy="8" r="3" stroke={stroke} strokeWidth="2" /><path d="M4 20c1.2-4 10.8-4 12 0M18 8v6M15 11h6" stroke={stroke} strokeWidth="2" strokeLinecap="round" /></>;
+      if (name.includes('shield')) mark = <path d="M12 3l7 3v5c0 4.2-2.5 7.4-7 10-4.5-2.6-7-5.8-7-10V6l7-3zM8.5 12l2.2 2.2L16 9" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />;
+      if (name.includes('wallet')) mark = <><rect x="3" y="6" width="18" height="13" rx="3" stroke={stroke} strokeWidth="2" /><path d="M16 12h5v4h-5a2 2 0 010-4z" stroke={stroke} strokeWidth="2" /></>;
+      if (name.includes('trend')) mark = <path d="M4 16l5-5 4 4 7-8M15 7h5v5" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />;
+      if (name.includes('calendar')) mark = <><rect x="4" y="5" width="16" height="15" rx="2" stroke={stroke} strokeWidth="2" /><path d="M8 3v4M16 3v4M4 10h16" stroke={stroke} strokeWidth="2" strokeLinecap="round" /></>;
+      if (name.includes('alert')) mark = <path d="M12 4l9 16H3L12 4zM12 9v5M12 17h.01" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />;
+      if (name.includes('check')) mark = <path d="M20 7L10 17l-5-5" stroke={stroke} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />;
+      if (name.includes('chart')) mark = <><path d="M4 20V4M4 20h17" stroke={stroke} strokeWidth="2" strokeLinecap="round" /><rect x="7" y="11" width="3" height="6" fill={stroke} /><rect x="12" y="7" width="3" height="10" fill={stroke} /><rect x="17" y="9" width="3" height="8" fill={stroke} /></>;
+      if (name.includes('image')) mark = <><rect x="4" y="5" width="16" height="14" rx="2" stroke={stroke} strokeWidth="2" /><path d="M7 16l4-4 3 3 2-2 3 3" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><circle cx="15" cy="9" r="1.5" fill={stroke} /></>;
+      return (
+        <div style={{ width: size, height: size, borderRadius: 10, border: `1px solid ${t.rule}`, background: isLight ? 'rgba(26,5,48,0.04)' : 'rgba(246,241,251,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <svg {...commonSvg}>{mark}</svg>
+        </div>
+      );
+    };
+
+    const VisualTitle = ({ eyebrow, maxWidth = '78%' }) => (
+      <div style={{ marginBottom: 24, maxWidth }}>
+        <Eyebrow>{eyebrow || slide.kicker || slide.slideType || 'Visual story'}</Eyebrow>
+        <EditableText tag="h2" field="title" style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(24px,3.2vw,38px)', color: fg, lineHeight: 1.08, letterSpacing: '-0.024em', margin: 0 }}>{slide.title}</EditableText>
+      </div>
+    );
+
+    const VisualCard = ({ item, children, tone = 'default', style = {} }) => (
+      <div style={{
+        border: `1px solid ${tone === 'accent' ? ac : t.rule}`,
+        background: tone === 'accent'
+          ? (isLight ? 'rgba(123,47,190,0.10)' : 'rgba(212,255,63,0.10)')
+          : (isLight ? 'rgba(255,255,255,0.52)' : 'rgba(246,241,251,0.055)'),
+        borderRadius: 8,
+        padding: 16,
+        minWidth: 0,
+        ...style,
+      }}>
+        {item && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: children ? 12 : 0 }}>
+            <IconMark icon={item.icon} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.22em', textTransform: 'uppercase', color: ac, marginBottom: 4 }}>{item.type || 'item'}</div>
+              <div style={{ fontFamily: dFont, fontSize: 'clamp(14px,1.55vw,18px)', fontWeight: 600, color: fg, lineHeight: 1.18 }}>{itemLabel(item)}</div>
+            </div>
+          </div>
+        )}
+        {children}
+      </div>
+    );
+
+    if (layout === 'process_flow') {
+      const steps = visualItems.length ? visualItems : fallbackComponents();
+      return (
+        <div style={container}>
+          {hasImg && <div style={{ position: 'absolute', inset: 0, background: overlay, zIndex: 1 }} />}
+          <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
+          <GridOverlay visible={gridOn} color={gridColor} />
+          <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'center' }}>
+            <VisualTitle eyebrow="Process flow" maxWidth="72%" />
+            <div style={{ display: 'flex', alignItems: 'stretch', gap: 10, width: '100%' }}>
+              {steps.map((item, j) => (
+                <React.Fragment key={j}>
+                  <VisualCard item={{ ...item, type: `Step ${j + 1}` }} tone={j === 0 ? 'accent' : 'default'} style={{ flex: 1, minHeight: 150, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    {itemDetail(item) && <div style={{ fontFamily: bFont, fontSize: 12, lineHeight: 1.45, color: tx }}>{itemDetail(item)}</div>}
+                  </VisualCard>
+                  {j < steps.length - 1 && (
+                    <div style={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ac, opacity: 0.9 }}>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 12h14M13 7l5 5-5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    </div>
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (layout === 'comparison' || layout === 'problem_solution') {
+      const columns = layout === 'problem_solution'
+        ? [
+            visualItems.find((item) => item.type === 'problem') || { type: 'problem', label: slide.bullets?.[0] || 'Problem', icon: 'alert-triangle' },
+            visualItems.find((item) => item.type === 'solution') || { type: 'solution', label: slide.bullets?.[1] || 'Solution', icon: 'check-circle' },
+          ]
+        : (visualItems.filter((item) => item.type === 'comparison_column').length
+            ? visualItems.filter((item) => item.type === 'comparison_column').slice(0, 2)
+            : [
+                { type: 'comparison_column', label: 'Current', icon: 'alert-triangle', items: slide.bullets?.slice(0, Math.ceil((slide.bullets?.length || 0) / 2)) || [] },
+                { type: 'comparison_column', label: 'Future', icon: 'check-circle', items: slide.bullets?.slice(Math.ceil((slide.bullets?.length || 0) / 2)) || [] },
+              ]);
+      return (
+        <div style={container}>
+          {hasImg && <div style={{ position: 'absolute', inset: 0, background: overlay, zIndex: 1 }} />}
+          <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
+          <GridOverlay visible={gridOn} color={gridColor} />
+          <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'center' }}>
+            <VisualTitle eyebrow={layout === 'problem_solution' ? 'Problem / Solution' : 'Comparison'} maxWidth="76%" />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 56px 1fr', gap: 18, alignItems: 'stretch' }}>
+              {columns.map((item, j) => (
+                <React.Fragment key={j}>
+                  {j === 1 && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: ac }}>
+                      <svg width="38" height="38" viewBox="0 0 38 38" fill="none"><circle cx="19" cy="19" r="18" stroke="currentColor" opacity=".45" /><path d="M12 19h13M21 14l5 5-5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    </div>
+                  )}
+                  <VisualCard item={item} tone={j === 1 ? 'accent' : 'default'} style={{ minHeight: 210 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                      {(Array.isArray(item.items) && item.items.length ? item.items : [itemDetail(item) || itemLabel(item)]).filter(Boolean).slice(0, 4).map((point, pi) => (
+                        <div key={pi} style={{ display: 'flex', gap: 9, color: tx, fontFamily: bFont, fontSize: 13.5, lineHeight: 1.42 }}>
+                          <span style={{ color: ac, fontFamily: qxType.mono, fontSize: 10, marginTop: 2 }}>{String(pi + 1).padStart(2, '0')}</span>
+                          <span>{point}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </VisualCard>
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (layout === 'timeline' || layout === 'roadmap') {
+      const items = visualItems.length ? visualItems : fallbackComponents();
+      return (
+        <div style={container}>
+          {hasImg && <div style={{ position: 'absolute', inset: 0, background: overlay, zIndex: 1 }} />}
+          <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
+          <GridOverlay visible={gridOn} color={gridColor} />
+          <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'center' }}>
+            <VisualTitle eyebrow={layout === 'roadmap' ? 'Roadmap' : 'Timeline'} maxWidth="72%" />
+            <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, items.length)}, 1fr)`, gap: 14, paddingTop: 34 }}>
+              <div style={{ position: 'absolute', left: 12, right: 12, top: 49, height: 1, background: t.rule }} />
+              {items.map((item, j) => (
+                <div key={j} style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: j === 0 ? ac : (isLight ? '#F6F1FB' : '#1A0530'), border: `1px solid ${j === 0 ? ac : t.rule}`, color: j === 0 ? '#1A0530' : ac, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: qxType.mono, fontSize: 11, fontWeight: 700, zIndex: 2 }}>{String(j + 1).padStart(2, '0')}</div>
+                  <div style={{ paddingTop: 6 }}>
+                    <div style={{ fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: ac, marginBottom: 8 }}>{itemLabel(item, layout === 'roadmap' ? `Phase ${j + 1}` : `Moment ${j + 1}`)}</div>
+                    <div style={{ fontFamily: bFont, fontSize: 13.5, lineHeight: 1.45, color: tx }}>{itemDetail(item) || (slide.bullets?.[j] || itemLabel(item))}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (layout === 'statistics') {
+      const items = (visualItems.length ? visualItems : fallbackComponents()).slice(0, 4);
+      return (
+        <div style={container}>
+          {hasImg && <div style={{ position: 'absolute', inset: 0, background: overlay, zIndex: 1 }} />}
+          <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
+          <GridOverlay visible={gridOn} color={gridColor} />
+          <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'center' }}>
+            <VisualTitle eyebrow="By the numbers" maxWidth="70%" />
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${items.length > 2 ? 4 : Math.max(1, items.length)}, 1fr)`, gap: 14 }}>
+              {items.map((item, j) => {
+                const value = metricValue(item) || String(j + 1).padStart(2, '0');
+                const label = itemLabel(item).replace(value, '').trim() || slide.bullets?.[j] || 'Metric';
+                return (
+                  <div key={j} style={{ minHeight: 168, borderRadius: 8, border: `1px solid ${j === 0 ? ac : t.rule}`, background: j === 0 ? 'rgba(212,255,63,0.10)' : (isLight ? 'rgba(255,255,255,0.55)' : 'rgba(246,241,251,0.055)'), padding: 18, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(34px,5vw,58px)', color: j === 0 ? ac : fg, lineHeight: 0.95, letterSpacing: '-0.04em' }}>{value}</div>
+                    <div style={{ fontFamily: bFont, fontSize: 13.5, color: tx, lineHeight: 1.4 }}>{label}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (layout === 'hierarchy') {
+      const nodes = visualItems.length ? visualItems : fallbackComponents();
+      const topNode = nodes[0] || { label: slide.title, icon: 'box' };
+      const childNodes = nodes.slice(1, 5);
+      return (
+        <div style={container}>
+          {hasImg && <div style={{ position: 'absolute', inset: 0, background: overlay, zIndex: 1 }} />}
+          <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
+          <GridOverlay visible={gridOn} color={gridColor} />
+          <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
+            <VisualTitle eyebrow="Hierarchy" maxWidth="76%" />
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+              <VisualCard item={{ ...topNode, type: 'top level' }} tone="accent" style={{ width: '46%', textAlign: 'left' }} />
+              <div style={{ width: 1, height: 28, background: t.rule }} />
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, childNodes.length)}, 1fr)`, gap: 14, width: '100%' }}>
+                {(childNodes.length ? childNodes : fallbackComponents().slice(0, 3)).map((item, j) => (
+                  <VisualCard key={j} item={{ ...item, type: `Level ${item.level || j + 2}` }} style={{ textAlign: 'left', minHeight: 128 }} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (layout === 'feature_breakdown' || layout === 'summary') {
+      const items = visualItems.length ? visualItems : fallbackComponents();
+      return (
+        <div style={container}>
+          {hasImg && <div style={{ position: 'absolute', inset: 0, background: overlay, zIndex: 1 }} />}
+          <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
+          <GridOverlay visible={gridOn} color={gridColor} />
+          <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'center' }}>
+            <VisualTitle eyebrow={layout === 'summary' ? 'Key takeaways' : 'Feature breakdown'} maxWidth="72%" />
+            <div style={{ display: 'grid', gridTemplateColumns: items.length > 3 ? 'repeat(3, 1fr)' : `repeat(${Math.max(1, items.length)}, 1fr)`, gap: 14 }}>
+              {items.map((item, j) => (
+                <VisualCard key={j} item={{ ...item, type: layout === 'summary' ? `Takeaway ${j + 1}` : `Feature ${j + 1}` }} tone={j === 0 ? 'accent' : 'default'} style={{ minHeight: 138 }}>
+                  {itemDetail(item) && <div style={{ fontFamily: bFont, fontSize: 12.5, lineHeight: 1.45, color: tx }}>{itemDetail(item)}</div>}
+                </VisualCard>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (layout === 'image_focus') {
+      const img = bgImg || `https://picsum.photos/seed/${encodeURIComponent(slide.imagePrompt || slide.title)}/1600/900`;
+      return (
+        <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: `url(${img}) center/cover no-repeat` }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg,rgba(0,0,0,0.72) 0%,rgba(0,0,0,0.42) 48%,rgba(0,0,0,0.10) 100%)', zIndex: 1 }} />
+          <SlideFrame t={t} hasImg={true} index={index} total={total} isLight={false} />
+          <GridOverlay visible={gridOn} color="rgba(255,255,255,0.08)" />
+          <div style={{ ...bodyInset, zIndex: 2, flexDirection: 'column', justifyContent: 'flex-end', maxWidth: '58%' }}>
+            <Eyebrow color={ac}>{slide.kicker || 'Image focus'}</Eyebrow>
+            <EditableText tag="h2" field="title" style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(34px,5.2vw,68px)', color: '#fff', lineHeight: 1.0, letterSpacing: '-0.036em', margin: 0 }}>{slide.title}</EditableText>
+            <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {(slide.bullets || []).slice(0, 2).map((b, j) => (
+                <EditableText key={j} tag="div" field="bullet" bi={j} style={{ color: 'rgba(255,255,255,0.84)', fontFamily: bFont, fontSize: 'clamp(13px,1.45vw,16px)', lineHeight: 1.5 }}>{b}</EditableText>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     if (layout === 'centered') return (
       <div style={container}>

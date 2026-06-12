@@ -6,7 +6,20 @@
 // ============================================================
 
 const AutoDeckTemplatePresets = (() => {
-  const allowedLayouts = ['standard', 'split', 'bigTitle', 'stat', 'quote', 'image', 'minimal', 'centered'];
+  const legacyLayouts = ['standard', 'split', 'bigTitle', 'stat', 'quote', 'image', 'minimal', 'centered'];
+  const intelligentLayouts = [
+    'process_flow',
+    'comparison',
+    'timeline',
+    'statistics',
+    'hierarchy',
+    'image_focus',
+    'roadmap',
+    'problem_solution',
+    'feature_breakdown',
+    'summary',
+  ];
+  const allowedLayouts = [...legacyLayouts, ...intelligentLayouts];
 
   const presets = {
     professional: {
@@ -88,6 +101,8 @@ const AutoDeckTemplatePresets = (() => {
 
   const getTemplatePreset = (value) => presets[normalizeTemplateStyle(value)];
   const getTemplateOptions = () => Object.values(presets).map((preset) => preset.label);
+  const visualLayoutToRender = () => window.AutoDeckSlideIntelligence?.VISUAL_LAYOUT_TO_RENDER || {};
+  const typeConfig = () => window.AutoDeckSlideIntelligence?.TYPE_CONFIG || {};
   const isAllowedLayout = (layout) => allowedLayouts.includes(layout);
 
   const hasUsableMetric = (slide) => {
@@ -112,6 +127,14 @@ const AutoDeckTemplatePresets = (() => {
   const resolveTemplateLayout = (slide, index, templateStyle) => {
     const preset = getTemplatePreset(templateStyle);
     const requested = String(slide?.layout || '').trim();
+    const mappedVisualLayout = visualLayoutToRender()[requested];
+    if (isAllowedLayout(mappedVisualLayout)) return mappedVisualLayout;
+    const typeRenderLayout = typeConfig()[slide?.slideType]?.renderLayout;
+    if (isAllowedLayout(typeRenderLayout)) return typeRenderLayout;
+
+    const explicitRender = String(slide?.renderLayout || slide?.visualTemplate || '').trim();
+    if (isAllowedLayout(explicitRender)) return explicitRender;
+
     if (requested === 'stat' && !hasUsableMetric(slide)) return fallbackLayout(preset, index, 'stat');
     if (isAllowedLayout(requested) && preset.layoutSet.includes(requested)) return requested;
     if (isAllowedLayout(requested)) return requested;
@@ -133,14 +156,20 @@ const AutoDeckTemplatePresets = (() => {
 
   const enhanceSlide = (slide, index, templateStyle) => {
     const preset = getTemplatePreset(templateStyle);
+    const intelligentSlide = window.AutoDeckSlideIntelligence?.enhanceSlide
+      ? window.AutoDeckSlideIntelligence.enhanceSlide(slide, index)
+      : slide;
+    const renderLayout = resolveTemplateLayout(intelligentSlide, index, preset.id);
     return {
-      ...slide,
+      ...intelligentSlide,
       templatePresetId: preset.id,
       templateStyle: preset.label,
-      layout: resolveTemplateLayout(slide, index, preset.id),
-      theme: resolveTemplateTheme(slide, preset.id),
-      contentType: slide?.contentType || 'section',
-      kicker: slide?.kicker || contentTypeToKicker(slide?.contentType) || (index === 0 ? 'Opening' : 'Section'),
+      layout: intelligentSlide?.layout || intelligentSlide?.visualLayout || renderLayout,
+      visualLayout: intelligentSlide?.visualLayout || intelligentSlide?.layout || renderLayout,
+      renderLayout,
+      theme: resolveTemplateTheme(intelligentSlide, preset.id),
+      contentType: intelligentSlide?.contentType || 'section',
+      kicker: intelligentSlide?.kicker || contentTypeToKicker(intelligentSlide?.contentType) || (index === 0 ? 'Opening' : 'Section'),
     };
   };
 
@@ -158,6 +187,13 @@ const AutoDeckTemplatePresets = (() => {
       slideDensity: preset.slideDensity,
       imageStyle: preset.imageStyle,
       allowedLayouts: preset.layoutSet,
+      visualSlideTypes: window.AutoDeckSlideIntelligence?.SLIDE_TYPES || [],
+      visualLayouts: Object.fromEntries(
+        Object.entries(window.AutoDeckSlideIntelligence?.TYPE_CONFIG || {}).map(([type, config]) => [type, config.layout])
+      ),
+      rendererMappings: Object.fromEntries(
+        Object.entries(window.AutoDeckSlideIntelligence?.TYPE_CONFIG || {}).map(([type, config]) => [type, config.renderLayout])
+      ),
       layoutSequence: preset.layoutSequence,
       titleRule: preset.titleRule,
       closingRule: preset.closingRule,

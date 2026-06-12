@@ -4,6 +4,7 @@ const admin    = require('firebase-admin');
 const Anthropic = require('@anthropic-ai/sdk');
 const mammoth  = require('mammoth');
 const JSZip    = require('jszip');
+const SlideIntelligence = require('./slide-intelligence');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -173,6 +174,40 @@ const normalizeLayout = (value, fallback = 'standard') => {
   return allowed.has(layout) ? layout : fallback;
 };
 
+const normalizeBoolean = (value, fallback = false) => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    if (/^(true|yes|1)$/i.test(value.trim())) return true;
+    if (/^(false|no|0)$/i.test(value.trim())) return false;
+  }
+  return fallback;
+};
+
+const normalizeVisualString = (value, maxWords = 8) => trimWords(value, maxWords)
+  .toLowerCase()
+  .replace(/[^a-z0-9_ -]+/g, '')
+  .replace(/[\s-]+/g, '_');
+
+const normalizeComponents = (components) => {
+  if (!Array.isArray(components)) return [];
+  return components
+    .filter((component) => component && typeof component === 'object')
+    .slice(0, 8)
+    .map((component) => ({
+      ...component,
+      type: normalizeVisualString(component.type || 'card', 4) || 'card',
+      label: trimWords(component.label || component.title || component.name || component.value, 12),
+      icon: normalizeVisualString(component.icon || '', 4),
+      value: component.value === undefined ? undefined : trimWords(component.value, 6),
+      detail: component.detail === undefined ? undefined : trimWords(component.detail, 18),
+      items: Array.isArray(component.items)
+        ? component.items.map((item) => trimWords(item, 14)).filter(Boolean).slice(0, 5)
+        : undefined,
+      level: component.level === undefined ? undefined : Math.max(1, Math.min(4, parseInt(component.level, 10) || 1)),
+    }))
+    .filter((component) => component.label || component.value || component.items?.length);
+};
+
 const hasUsableMetric = (value) =>
   /\b\d+(?:\.\d+)?\s*(%|x|×|m|k|b|bn|usd|\$|₦|days?|weeks?|months?|years?|users?|customers?|transactions?|revenue|growth|tickets?|hours?|mins?)\b/i.test(String(value || ''));
 
@@ -188,14 +223,22 @@ const normalizeSlides = (slides, count) => {
             .filter(Boolean)
             .slice(0, 4)
         : [];
-      let layout = normalizeLayout(slide?.layout);
-      if (layout === 'stat' && !hasUsableMetric([title, ...bullets].join(' '))) {
-        layout = 'standard';
-      }
+      const rawLayout = String(slide?.layout || slide?.visualLayout || '').trim();
+      const legacyRenderLayout = normalizeLayout(slide?.renderLayout || slide?.visualTemplate, '');
+      let renderLayout = legacyRenderLayout;
+      if (renderLayout === 'stat' && !hasUsableMetric([title, ...bullets].join(' '))) renderLayout = 'standard';
       return {
         title,
         bullets,
-        layout,
+        layout: rawLayout || renderLayout || 'standard',
+        renderLayout,
+        slideType: normalizeVisualString(slide?.slideType, 3),
+        visualization: normalizeVisualString(slide?.visualization, 4),
+        needsIcons: normalizeBoolean(slide?.needsIcons, false),
+        needsChart: normalizeBoolean(slide?.needsChart, false),
+        needsImage: normalizeBoolean(slide?.needsImage, false),
+        components: normalizeComponents(slide?.components),
+        storytellingNote: trimWords(slide?.storytellingNote, 28),
         contentType: trimWords(slide?.contentType || slide?.kicker || 'section', 4).toLowerCase(),
         kicker: trimWords(slide?.kicker || slide?.contentType || 'Section', 4),
         speakerNotes: trimWords(slide?.speakerNotes, 60),
@@ -226,9 +269,9 @@ const normalizeSlides = (slides, count) => {
     uniqueSlides.push(nextSlide);
   });
 
-  return uniqueSlides
+  return SlideIntelligence.enhanceSlides(uniqueSlides
     .map(({ index, ...slide }) => slide)
-    .slice(0, count);
+    .slice(0, count));
 };
 
 const slideDocumentId = (index) => `slide-${String(index + 1).padStart(2, '0')}`;
@@ -254,6 +297,15 @@ const persistGeneratedSlides = async ({ deckId, uid, slides }) => {
         title: s.title || '',
         bullets: s.bullets || [],
         layout: s.layout || 'standard',
+        visualLayout: s.visualLayout || s.layout || null,
+        renderLayout: s.renderLayout || null,
+        slideType: s.slideType || null,
+        visualization: s.visualization || null,
+        needsIcons: s.needsIcons === true,
+        needsChart: s.needsChart === true,
+        needsImage: s.needsImage === true,
+        components: Array.isArray(s.components) ? s.components : [],
+        storytellingNote: s.storytellingNote || '',
         contentType: s.contentType || null,
         kicker: s.kicker || null,
         speakerNotes: s.speakerNotes || '',
@@ -334,10 +386,12 @@ Deck requirements:
 - Synthesize titles as takeaways from the evidence. Do not start multiple titles with the same person, event, institution, source name, or uploaded file name.
 - If the source is a transcript, lecture, report, article, or PDF export, identify the thesis and argument beats; do not copy source headings as the slide outline.
 - Bullets should state the point and the implication. Prefer concrete claims over vague phrases.
-- Every slide must include a layout from the template preset's allowedLayouts list.
-- Use "stat" only when there is a real number or metric in the source.
+- Every slide must include Slide Intelligence fields: slideType, layout, visualization, needsIcons, needsChart, needsImage, components, and storytellingNote.
+- The slideType must be one of: title_slide, section_break, process_flow, comparison, timeline, statistics, hierarchy, image_focus, roadmap, problem_solution, feature_breakdown, summary.
+- Choose the visual treatment that best tells the story. Prefer transforming content into flows, timelines, comparisons, KPI cards, roadmaps, hierarchies, problem/solution splits, feature cards, or summary cards when the content supports it.
+- Use "statistics" only when there is a real number or metric in the source.
 - Never create placeholder/default metrics.
-- Use "image" only when you can provide a concrete imagePrompt.
+- Use "image_focus" only when you can provide a concrete imagePrompt.
 - Before writing JSON, silently identify the source thesis, 5-8 evidence clusters, conflicts/missing information, and the cleanest narrative arc. Use that plan to produce the slides.
 
 Voice: ${voiceGuide}
@@ -350,7 +404,12 @@ JSON shape:
 [
   {
     "title": "Specific slide title",
-    "layout": "standard|split|bigTitle|stat|quote|image|minimal|centered",
+    "slideType": "title_slide|section_break|process_flow|comparison|timeline|statistics|hierarchy|image_focus|roadmap|problem_solution|feature_breakdown|summary",
+    "layout": "hero_title|section_divider|horizontal_step_flow|two_column_comparison|chronological_timeline|kpi_card_grid|layered_hierarchy|full_bleed_image_with_caption|phased_roadmap|problem_vs_solution_split|icon_card_grid|key_takeaway_cards",
+    "visualization": "flowchart|comparison_table|timeline|kpi_cards|hierarchy_diagram|image_story|roadmap|split_story|feature_cards|takeaway_cards|title_hero|section_marker",
+    "needsIcons": true,
+    "needsChart": false,
+    "needsImage": false,
     "contentType": "opening|context|problem|evidence|plan|risk|decision|next steps",
     "kicker": "Short section label",
     "bullets": [
@@ -358,10 +417,28 @@ JSON shape:
       "Context-grounded point with a clear implication",
       "Context-grounded point with a clear implication"
     ],
+    "components": [
+      { "type": "step|kpi|phase|milestone|problem|solution|feature|takeaway|node|comparison_column", "label": "Short component label", "icon": "semantic-icon-name" }
+    ],
+    "storytellingNote": "Short instruction for why this visual treatment helps the slide",
     "speakerNotes": "Optional short presenter guidance grounded in the source",
-    "imagePrompt": "Optional concrete visual prompt if layout is image"
+    "imagePrompt": "Optional concrete visual prompt if slideType is image_focus"
   }
 ]
+
+Slide Intelligence mapping:
+- title_slide -> hero_title -> title_hero
+- section_break -> section_divider -> section_marker
+- process_flow -> horizontal_step_flow -> flowchart. Components should be ordered steps with icons.
+- comparison -> two_column_comparison -> comparison_table. Components should be two comparison_column objects with item lists.
+- timeline -> chronological_timeline -> timeline. Components should be dated milestones.
+- statistics -> kpi_card_grid -> kpi_cards. Components should be KPI objects with value and label.
+- hierarchy -> layered_hierarchy -> hierarchy_diagram. Components should be nodes with level values when useful.
+- image_focus -> full_bleed_image_with_caption -> image_story.
+- roadmap -> phased_roadmap -> roadmap. Components should be phases.
+- problem_solution -> problem_vs_solution_split -> split_story. Components should include one problem and one solution.
+- feature_breakdown -> icon_card_grid -> feature_cards. Components should be feature cards with icons.
+- summary -> key_takeaway_cards -> takeaway_cards. Components should be key takeaways or actions.
 
 Slide structure guidance:
 1. Start with the most important takeaway from the context, not a generic agenda.
