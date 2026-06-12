@@ -547,6 +547,115 @@ Current slide: title="${slideTitle}", bullets=${JSON.stringify(bullets)}`;
   }
 );
 
+// ── geminiGenerate ─────────────────────────────────────────────
+exports.geminiGenerate = onCall(
+  { timeoutSeconds: 60, memory: '256MiB', region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
+
+    const { prompt, slideCount = 8 } = request.data;
+    if (!prompt || !String(prompt).trim()) throw new HttpsError('invalid-argument', 'Prompt is required');
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new HttpsError('internal', 'Gemini API key not configured. Set GEMINI_API_KEY secret: firebase functions:secrets:set GEMINI_API_KEY');
+
+    const count = Math.max(3, Math.min(20, parseInt(slideCount, 10) || 8));
+
+    const systemInstruction = `You are an expert presentation strategist. Generate exactly ${count} professional presentation slides.
+
+Return ONLY a valid JSON array — no markdown fences, no explanation, no text before or after.
+JSON shape:
+[
+  {
+    "title": "Specific slide title (max 12 words)",
+    "layout": "standard|split|bigTitle|stat|quote|image|minimal|centered",
+    "bullets": ["Concrete point one", "Concrete point two", "Concrete point three"]
+  }
+]
+
+Rules:
+- 2–4 bullets per slide, each under 22 words
+- Use "stat" layout only when the prompt contains a real metric or number
+- Use "bigTitle" for the opening/closing impact slide
+- First slide: strong opening statement
+- Last slide: clear next step or recommendation
+- Titles must be specific — avoid generic labels like "Overview" or "Key Points"`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: `${systemInstruction}\n\nUser prompt: ${compactText(prompt, 2000)}` }] }],
+          generationConfig: { temperature: 0.4, maxOutputTokens: 4096 },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new HttpsError('internal', 'Gemini API error: ' + errText.slice(0, 300));
+    }
+
+    const body = await response.json();
+    const raw = body.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    let slides;
+    try {
+      slides = extractJsonArray(raw);
+    } catch (e) {
+      throw new HttpsError('internal', 'Failed to parse Gemini response as JSON: ' + e.message);
+    }
+
+    const normalized = normalizeSlides(slides, count);
+    if (normalized.length < 2) throw new HttpsError('internal', 'Gemini returned too few usable slides');
+
+    return { slides: normalized };
+  }
+);
+
+// ── geminiGenerateImage ────────────────────────────────────────
+exports.geminiGenerateImage = onCall(
+  { timeoutSeconds: 60, memory: '512MiB', region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
+
+    const { prompt } = request.data;
+    if (!prompt || !String(prompt).trim()) throw new HttpsError('invalid-argument', 'Prompt is required');
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new HttpsError('internal', 'Gemini API key not configured. Set it with: firebase functions:secrets:set GEMINI_API_KEY');
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instances: [{ prompt: compactText(prompt, 500) }],
+          parameters: { sampleCount: 4, aspectRatio: '16:9' },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new HttpsError('internal', 'Imagen API error: ' + errText.slice(0, 300));
+    }
+
+    const body = await response.json();
+    const images = (body.predictions || [])
+      .map((p) => p.bytesBase64Encoded)
+      .filter(Boolean)
+      .map((b64) => `data:image/png;base64,${b64}`);
+
+    if (!images.length) throw new HttpsError('internal', 'No images were generated — try a different prompt');
+
+    return { images };
+  }
+);
+
 // ── parseDocx ─────────────────────────────────────────────────
 exports.parseDocx = onCall(
   callableOptions({ timeoutSeconds: 30, memory: '256MiB' }),

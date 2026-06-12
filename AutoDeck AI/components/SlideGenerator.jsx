@@ -62,6 +62,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
   const [editTab, setEditTab] = React.useState('layout');
   const [imgQuery, setImgQuery] = React.useState('');
   const [imgResults, setImgResults] = React.useState([]);
+  const [imgGenerating, setImgGenerating] = React.useState(false);
   const [showMenu, setShowMenu] = React.useState(false);
   const [showThemePop, setShowThemePop] = React.useState(false);
   const [showGrid, setShowGrid] = React.useState(false);
@@ -95,6 +96,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
   const [agentThinking, setAgentThinking] = React.useState(false);
   const agentScrollRef = React.useRef(null);
   const agentInputRef = React.useRef(null);
+
 
   // ─── theme palette (per-slide) ───────────────────────────
   const customTheme = brandColors ? {
@@ -180,15 +182,6 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     setTransitionKey((k) => k + 1);
   };
 
-  const handleImgSearch = (q) => {
-    setImgQuery(q);
-    if (!q.trim()) { setImgResults([]); return; }
-    setImgResults(Array.from({ length: 6 }, (_, i) => ({
-      id: i,
-      src:   `https://picsum.photos/seed/${encodeURIComponent(q)}${i + 1}/1600/900`,
-      thumb: `https://picsum.photos/seed/${encodeURIComponent(q)}${i + 1}/280/158`,
-    })));
-  };
 
   // keyboard
   React.useEffect(() => {
@@ -498,6 +491,70 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     if (n[currentIndex] === key) delete n[currentIndex]; else n[currentIndex] = key;
     return n;
   });
+
+  // ─── gemini image logic ───────────────────────────────────────
+  // Step 1: gemini-2.0-flash refines the prompt into search keywords (optional, free tier)
+  // Step 2: Unsplash returns real 16:9 photos matching those keywords
+  // To switch to Imagen 3 on go-live, replace this function body with the
+  // firebase geminiGenerateImage call in functions/index.js
+  const handleGeminiImageGenerate = async () => {
+    const q = imgQuery.trim();
+    if (!q || imgGenerating) return;
+    setImgGenerating(true);
+    setImgResults([]);
+
+    try {
+      // ── Step 1: refine prompt into keywords via Gemini (optional) ──
+      let searchQuery = q;
+      const geminiKey = window.GEMINI_API_KEY;
+      if (geminiKey) {
+        try {
+          const gRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: `Convert this into 3 short stock-photo search keywords. Return ONLY the keywords as a comma-separated list, nothing else.\n\n"${q}"` }] }],
+                generationConfig: { temperature: 0.1, maxOutputTokens: 30 },
+              }),
+            }
+          );
+          if (gRes.ok) {
+            const gData = await gRes.json();
+            const kw = gData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+            if (kw) searchQuery = kw;
+          }
+        } catch (_) { /* fall through to raw query */ }
+      }
+
+      // ── Step 2: fetch real photos from Unsplash ──
+      const unsplashKey = window.UNSPLASH_ACCESS_KEY;
+      if (!unsplashKey) {
+        showToast('Add your Unsplash key to api-config.js', 'info');
+        return;
+      }
+      const uRes = await fetch(
+        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(searchQuery)}&orientation=landscape&per_page=6&client_id=${unsplashKey}`
+      );
+      if (!uRes.ok) throw new Error(`Unsplash error ${uRes.status}`);
+      const uData = await uRes.json();
+      const photos = (uData.results || []).map((p, i) => ({
+        id: i,
+        src: p.urls.full,
+        thumb: p.urls.small,
+      }));
+      if (photos.length) {
+        setImgResults(photos);
+      } else {
+        showToast('No photos found — try a different prompt', 'info');
+      }
+    } catch (err) {
+      showToast(err.message || 'Image search failed', 'info');
+    } finally {
+      setImgGenerating(false);
+    }
+  };
 
   // ─── agent logic ─────────────────────────────────────────
   const openAgent = (idx) => {
@@ -1151,14 +1208,40 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
                   {/* Divider */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0' }}>
                     <div style={{ flex: 1, height: 1, background: 'rgba(246,241,251,0.08)' }} />
-                    <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.24em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.28)' }}>or search</span>
+                    <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.24em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.28)' }}>or generate</span>
                     <div style={{ flex: 1, height: 1, background: 'rgba(246,241,251,0.08)' }} />
                   </div>
 
-                  {/* AI image search */}
-                  <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)' }}>Search photos</div>
-                  <input value={imgQuery} onChange={(e) => handleImgSearch(e.target.value)} placeholder="business, finance, city…"
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(246,241,251,0.10)', background: 'rgba(246,241,251,0.04)', color: '#F6F1FB', fontFamily: qxType.body, fontSize: 12.5, outline: 'none', boxSizing: 'border-box' }} />
+                  {/* Gemini image generation */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                    <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" fill="url(#gImg)" /><defs><radialGradient id="gImg" cx="30%" cy="30%"><stop offset="0%" stopColor="#4285F4"/><stop offset="60%" stopColor="#0F9D58"/><stop offset="100%" stopColor="#F4B400"/></radialGradient></defs></svg>
+                    <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)' }}>Generate with Gemini</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      value={imgQuery}
+                      onChange={(e) => setImgQuery(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleGeminiImageGenerate(); }}
+                      placeholder="modern office, city skyline, data visualization…"
+                      disabled={imgGenerating}
+                      style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(66,133,244,0.18)', background: 'rgba(66,133,244,0.05)', color: '#F6F1FB', fontFamily: qxType.body, fontSize: 12.5, outline: 'none', boxSizing: 'border-box', opacity: imgGenerating ? 0.55 : 1 }}
+                    />
+                    <button
+                      onClick={handleGeminiImageGenerate}
+                      disabled={!imgQuery.trim() || imgGenerating}
+                      style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 8, border: 'none', background: imgQuery.trim() && !imgGenerating ? 'linear-gradient(135deg,#4285F4,#0F9D58)' : 'rgba(246,241,251,0.06)', color: imgQuery.trim() && !imgGenerating ? '#fff' : 'rgba(246,241,251,0.25)', cursor: imgQuery.trim() && !imgGenerating ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: `all 140ms ${qxEase}` }}>
+                      {imgGenerating
+                        ? <div style={{ width: 12, height: 12, border: '1.5px solid rgba(255,255,255,0.25)', borderTopColor: '#fff', borderRadius: '50%', animation: 'sgSpin 0.7s linear infinite' }} />
+                        : <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1l1.1 3L11 5.5 7.6 6.9 6.5 10 5.4 6.9 2 5.5l3.4-1.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" fill="currentColor" fillOpacity="0.15" /></svg>
+                      }
+                    </button>
+                  </div>
+                  {imgGenerating && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 2px' }}>
+                      <div style={{ width: 10, height: 10, border: '1.5px solid rgba(66,133,244,0.25)', borderTopColor: '#4285F4', borderRadius: '50%', animation: 'sgSpin 0.7s linear infinite', flexShrink: 0 }} />
+                      <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.38)' }}>Finding photos…</span>
+                    </div>
+                  )}
                   {imgResults.length > 0 && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                       {imgResults.map((img) => (
@@ -1253,6 +1336,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
         </div>
       )}
 
+      {/* ══════════ GEMINI MODAL ══════════ */}
       {/* ══════════ AGENT MODAL ══════════ */}
       {agentOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)', zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: `sgFadeIn 200ms ${qxEase}` }}
