@@ -492,11 +492,9 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     return n;
   });
 
-  // ─── gemini image logic ───────────────────────────────────────
-  // Step 1: gemini-2.0-flash refines the prompt into search keywords (optional, free tier)
-  // Step 2: Unsplash returns real 16:9 photos matching those keywords
-  // To switch to Imagen 3 on go-live, replace this function body with the
-  // firebase geminiGenerateImage call in functions/index.js
+  // ─── image generation logic ──────────────────────────────────
+  // Mode A (UNSPLASH_ACCESS_KEY set):   Gemini refines prompt → Unsplash real photos
+  // Mode B (UNSPLASH_ACCESS_KEY empty): Imagen 3 AI generation via GEMINI_API_KEY
   const handleGeminiImageGenerate = async () => {
     const q = imgQuery.trim();
     if (!q || imgGenerating) return;
@@ -504,53 +502,69 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     setImgResults([]);
 
     try {
-      // ── Step 1: refine prompt into keywords via Gemini (optional) ──
-      let searchQuery = q;
-      const geminiKey = window.GEMINI_API_KEY;
-      if (geminiKey) {
-        try {
-          const gRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: `Convert this into 3 short stock-photo search keywords. Return ONLY the keywords as a comma-separated list, nothing else.\n\n"${q}"` }] }],
-                generationConfig: { temperature: 0.1, maxOutputTokens: 30 },
-              }),
-            }
-          );
-          if (gRes.ok) {
-            const gData = await gRes.json();
-            const kw = gData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-            if (kw) searchQuery = kw;
-          }
-        } catch (_) { /* fall through to raw query */ }
-      }
-
-      // ── Step 2: fetch real photos from Unsplash ──
+      const geminiKey   = window.GEMINI_API_KEY;
       const unsplashKey = window.UNSPLASH_ACCESS_KEY;
-      if (!unsplashKey) {
-        showToast('Add your Unsplash key to api-config.js', 'info');
-        return;
-      }
-      const uRes = await fetch(
-        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(searchQuery)}&orientation=landscape&per_page=6&client_id=${unsplashKey}`
-      );
-      if (!uRes.ok) throw new Error(`Unsplash error ${uRes.status}`);
-      const uData = await uRes.json();
-      const photos = (uData.results || []).map((p, i) => ({
-        id: i,
-        src: p.urls.full,
-        thumb: p.urls.small,
-      }));
-      if (photos.length) {
-        setImgResults(photos);
+
+      if (unsplashKey) {
+        // ── Mode A: Gemini keywords → Unsplash photos ──
+        let searchQuery = q;
+        if (geminiKey) {
+          try {
+            const gRes = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  contents: [{ parts: [{ text: `Convert this into 3 short stock-photo search keywords. Return ONLY the keywords as a comma-separated list, nothing else.\n\n"${q}"` }] }],
+                  generationConfig: { temperature: 0.1, maxOutputTokens: 30 },
+                }),
+              }
+            );
+            if (gRes.ok) {
+              const gData = await gRes.json();
+              const kw = gData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+              if (kw) searchQuery = kw;
+            }
+          } catch (_) {}
+        }
+        const uRes = await fetch(
+          `https://api.unsplash.com/search/photos?query=${encodeURIComponent(searchQuery)}&orientation=landscape&per_page=6&client_id=${unsplashKey}`
+        );
+        if (!uRes.ok) throw new Error(`Unsplash error ${uRes.status}`);
+        const uData = await uRes.json();
+        const photos = (uData.results || []).map((p, i) => ({ id: i, src: p.urls.full, thumb: p.urls.small }));
+        if (photos.length) { setImgResults(photos); } else { showToast('No photos found — try a different prompt', 'info'); }
+
+      } else if (geminiKey) {
+        // ── Mode B: Imagen 3 direct generation ──
+        const iRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${geminiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              instances: [{ prompt: q }],
+              parameters: { sampleCount: 4, aspectRatio: '16:9' },
+            }),
+          }
+        );
+        if (!iRes.ok) {
+          const errText = await iRes.text();
+          throw new Error('Imagen error — ' + errText.slice(0, 120));
+        }
+        const iData = await iRes.json();
+        const images = (iData.predictions || [])
+          .map((p) => p.bytesBase64Encoded)
+          .filter(Boolean)
+          .map((b64, i) => ({ id: i, src: `data:image/png;base64,${b64}`, thumb: `data:image/png;base64,${b64}` }));
+        if (images.length) { setImgResults(images); } else { showToast('No images generated — try a different prompt', 'info'); }
+
       } else {
-        showToast('No photos found — try a different prompt', 'info');
+        showToast('Add API keys to api-config.js', 'info');
       }
     } catch (err) {
-      showToast(err.message || 'Image search failed', 'info');
+      showToast(err.message || 'Image generation failed', 'info');
     } finally {
       setImgGenerating(false);
     }
