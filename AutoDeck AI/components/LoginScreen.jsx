@@ -1,6 +1,68 @@
 // ============================================================
 // LoginScreen — split screen, lime CTA, brand quiet
 // ============================================================
+const QUIDAX_EMAIL_DOMAIN = '@quidax.com';
+
+const isQuidaxEmail = (value = '') => value.toLowerCase().endsWith(QUIDAX_EMAIL_DOMAIN);
+
+const createGoogleProvider = () => {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  provider.addScope('email');
+  provider.addScope('profile');
+  provider.setCustomParameters({ hd: 'quidax.com', prompt: 'select_account' });
+  return provider;
+};
+
+const getFirebaseErrorCode = (err) => err?.code || '';
+const getFirebaseErrorEmail = (err) => err?.email || err?.customData?.email || '';
+const getGoogleCredentialFromError = (err) => {
+  try {
+    return firebase.auth.GoogleAuthProvider.credentialFromError(err);
+  } catch {
+    return null;
+  }
+};
+
+const shouldFallbackToGoogleRedirect = (err) => [
+  'auth/popup-blocked',
+  'auth/operation-not-supported-in-this-environment',
+].includes(getFirebaseErrorCode(err));
+
+const localGoogleSignInMessage = () => {
+  const { hostname = '', port = '' } = window.location || {};
+  if (hostname === '127.0.0.1' || hostname === '::1') {
+    const localUrl = `http://localhost${port ? `:${port}` : ''}/`;
+    return `Local Google sign-in uses localhost. Open ${localUrl} instead of ${hostname}, or add ${hostname} in Firebase Auth settings.`;
+  }
+  return `Google sign-in is not authorized for ${hostname || 'this domain'}. Add this domain in Firebase Auth settings.`;
+};
+
+const googleSignInErrorMessage = (err) => {
+  const code = getFirebaseErrorCode(err);
+  const email = getFirebaseErrorEmail(err);
+  const emailSuffix = email ? ` for ${email}` : '';
+  const messages = {
+    'auth/account-exists-with-different-credential': `A password account already exists${emailSuffix}. Sign in with your password, or reset it if needed.`,
+    'auth/credential-already-in-use': 'That Google account is already connected to another AutoDeck account.',
+    'auth/email-already-in-use': `An account already exists${emailSuffix}. Sign in with your password, or reset it if needed.`,
+    'auth/operation-not-allowed': 'Google sign-in is not enabled in Firebase Auth.',
+    'auth/popup-blocked': 'Your browser blocked the Google sign-in popup. Allow popups and try again.',
+    'auth/unauthorized-domain': localGoogleSignInMessage(),
+    'auth/network-request-failed': 'Network error during Google sign-in. Check your connection and try again.',
+    'auth/web-storage-unsupported': 'Your browser is blocking storage needed for Google sign-in.',
+  };
+  return messages[code] || 'Google sign-in failed. Try again or use email and password.';
+};
+
+const logGoogleSignInError = (err, context = 'popup') => {
+  console.warn('Google sign-in failed', {
+    context,
+    code: getFirebaseErrorCode(err),
+    email: getFirebaseErrorEmail(err),
+    message: err?.message,
+  });
+};
+
 const LoginScreen = ({ onLogin, authError, onClearAuthError }) => {
   const [mode, setMode] = React.useState('signin');
   const [fullName, setFullName] = React.useState('');
@@ -12,19 +74,58 @@ const LoginScreen = ({ onLogin, authError, onClearAuthError }) => {
   const [error, setError] = React.useState('');
   const [success, setSuccess] = React.useState('');
   const [focused, setFocused] = React.useState(null);
+  const [pendingGoogleCredential, setPendingGoogleCredential] = React.useState(null);
+  const [pendingGoogleEmail, setPendingGoogleEmail] = React.useState('');
 
   React.useEffect(() => { if (authError) { setError(authError); setLoading(false); onClearAuthError && onClearAuthError(); } }, [authError]);
 
-  const isQuidax = (e) => e.toLowerCase().endsWith('@quidax.com');
+  React.useEffect(() => {
+    let active = true;
+    if (!window.firebaseAuth?.getRedirectResult) return () => { active = false; };
+    window.firebaseAuth.getRedirectResult()
+      .then(async (result) => {
+        if (!active || !result?.user) return;
+        const signedInUser = result.user;
+        if (!isQuidaxEmail(signedInUser.email || '')) {
+          await window.firebaseAuth.signOut();
+          if (active) setError('Only @quidax.com accounts are allowed.');
+          return;
+        }
+        onLogin && onLogin({
+          email: signedInUser.email,
+          uid: signedInUser.uid,
+          displayName: signedInUser.displayName,
+        });
+      })
+      .catch((err) => {
+        if (!active || getFirebaseErrorCode(err) === 'auth/no-auth-event') return;
+        logGoogleSignInError(err, 'redirect');
+        setLoading(false);
+        setError(googleSignInErrorMessage(err));
+      });
+    return () => { active = false; };
+  }, []);
 
   const handleSignIn = async (e) => {
     e.preventDefault();
     setError(''); setSuccess('');
     if (!email || !password) return setError('Enter your email and password.');
-    if (!isQuidax(email))     return setError('Only @quidax.com emails are allowed.');
+    if (!isQuidaxEmail(email))     return setError('Only @quidax.com emails are allowed.');
     setLoading(true);
     try {
       const r = await window.firebaseAuth.signInWithEmailAndPassword(email, password);
+      if (
+        pendingGoogleCredential &&
+        (!pendingGoogleEmail || r.user.email?.toLowerCase() === pendingGoogleEmail.toLowerCase())
+      ) {
+        try {
+          await r.user.linkWithCredential(pendingGoogleCredential);
+          setPendingGoogleCredential(null);
+          setPendingGoogleEmail('');
+        } catch (linkErr) {
+          logGoogleSignInError(linkErr, 'link-after-password');
+        }
+      }
       onLogin && onLogin({ email: r.user.email, uid: r.user.uid, displayName: r.user.displayName });
     } catch (err) {
       setLoading(false);
@@ -36,7 +137,7 @@ const LoginScreen = ({ onLogin, authError, onClearAuthError }) => {
     e.preventDefault();
     setError(''); setSuccess('');
     if (!fullName.trim()) return setError('Enter your name.');
-    if (!isQuidax(email))  return setError('Only @quidax.com emails are allowed.');
+    if (!isQuidaxEmail(email))  return setError('Only @quidax.com emails are allowed.');
     if (password.length < 8) return setError('Password must be 8+ characters.');
     if (password !== confirmPassword) return setError('Passwords do not match.');
     setLoading(true);
@@ -51,17 +152,64 @@ const LoginScreen = ({ onLogin, authError, onClearAuthError }) => {
   };
   const handleForgot = async (e) => {
     e.preventDefault();
-    if (!email || !isQuidax(email)) return setError('Enter your @quidax.com email above first.');
+    if (!email || !isQuidaxEmail(email)) return setError('Enter your @quidax.com email above first.');
     try { await window.firebaseAuth.sendPasswordResetEmail(email); setSuccess(`Reset email sent to ${email}`); }
     catch { setError('Could not send reset email.'); }
   };
   const handleGoogle = async () => {
-    setError(''); setLoading(true);
+    setError(''); setSuccess(''); setLoading(true);
+    const provider = createGoogleProvider();
     try {
-      const provider = new firebase.auth.GoogleAuthProvider();
-      provider.setCustomParameters({ hd: 'quidax.com' });
-      await window.firebaseAuth.signInWithPopup(provider);
-    } catch (err) { setLoading(false); if (err.code !== 'auth/popup-closed-by-user') setError('Google sign-in failed.'); }
+      const result = await window.firebaseAuth.signInWithPopup(provider);
+      const signedInUser = result?.user;
+      if (!signedInUser) return;
+      if (!isQuidaxEmail(signedInUser.email || '')) {
+        await window.firebaseAuth.signOut();
+        setLoading(false);
+        setError('Only @quidax.com accounts are allowed.');
+        return;
+      }
+      onLogin && onLogin({
+        email: signedInUser.email,
+        uid: signedInUser.uid,
+        displayName: signedInUser.displayName,
+      });
+    } catch (err) {
+      if (getFirebaseErrorCode(err) === 'auth/popup-closed-by-user' || getFirebaseErrorCode(err) === 'auth/cancelled-popup-request') {
+        setLoading(false);
+        return;
+      }
+      logGoogleSignInError(err);
+      if (getFirebaseErrorCode(err) === 'auth/account-exists-with-different-credential') {
+        const credential = getGoogleCredentialFromError(err);
+        const credentialEmail = getFirebaseErrorEmail(err);
+        if (credential) {
+          setPendingGoogleCredential(credential);
+          setPendingGoogleEmail(credentialEmail);
+        }
+        if (credentialEmail) setEmail(credentialEmail);
+        setLoading(false);
+        setError(
+          credential
+            ? 'A password account already exists for this email. Enter your password and sign in once to connect Google.'
+            : googleSignInErrorMessage(err)
+        );
+        return;
+      }
+      if (shouldFallbackToGoogleRedirect(err) && window.firebaseAuth?.signInWithRedirect) {
+        try {
+          await window.firebaseAuth.signInWithRedirect(provider);
+          return;
+        } catch (redirectErr) {
+          logGoogleSignInError(redirectErr, 'redirect-start');
+          setLoading(false);
+          setError(googleSignInErrorMessage(redirectErr));
+          return;
+        }
+      }
+      setLoading(false);
+      setError(googleSignInErrorMessage(err));
+    }
   };
 
   const inputStyle = (id) => ({

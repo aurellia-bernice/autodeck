@@ -1,0 +1,27 @@
+[
+  {
+    "origin": [
+      "http://127.0.0.1:8083",
+      "http://localhost:8083",
+      "http://127.0.0.1:8081",
+      "http://localhost:8081",
+      "http://127.0.0.1:8080",
+      "http://localhost:8080",
+      "https://autodeck-ai.web.app",
+      "https://autodeck-ai.firebaseapp.com"
+    ],
+    "method": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    "responseHeader": [
+      "Authorization",
+      "Content-Type",
+      "X-Firebase-Storage-Version",
+      "X-Goog-Upload-Command",
+      "X-Goog-Upload-Header-Content-Length",
+      "X-Goog-Upload-Header-Content-Type",
+      "X-Goog-Upload-Protocol",
+      "X-Goog-Upload-Status",
+      "X-Goog-Upload-URL"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]

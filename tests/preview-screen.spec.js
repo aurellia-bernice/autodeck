@@ -144,6 +144,7 @@ test.describe('PreviewScreen', () => {
 
   test('error message banner is not visible in normal state', async ({ page }) => {
     // Default navigation via tweaks sets generationStatus to 'idle', not 'error'
-    await expect(page.getByText(/Using a draft from your content/)).not.toBeVisible();
+    await expect(page.getByText(/No local draft was used/)).not.toBeVisible();
+    await expect(page.getByText(/Showing a draft from your content/)).not.toBeVisible();
   });
 });

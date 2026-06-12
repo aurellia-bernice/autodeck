@@ -117,6 +117,76 @@ test.describe('LoginScreen', () => {
     await expect(page.getByText('Enter your @quidax.com email above first.')).toBeVisible();
   });
 
+  // ── Google sign-in errors ────────────────────────────────────────────────
+
+  test('google sign-in: existing password account gets actionable error', async ({ page }) => {
+    await page.evaluate(() => {
+      window.firebaseAuth.signInWithPopup = () =>
+        Promise.reject({ code: 'auth/account-exists-with-different-credential', email: 'test@quidax.com' });
+    });
+
+    await page.getByRole('button', { name: 'Continue with Google' }).click();
+
+    await expect(page.getByText('A password account already exists for test@quidax.com. Sign in with your password, or reset it if needed.')).toBeVisible();
+  });
+
+  test('google sign-in: password sign-in links pending Google credential', async ({ page }) => {
+    await page.evaluate(() => {
+      const credential = { providerId: 'google.com' };
+      window.__linkedGoogleCredential = false;
+      firebase.auth.GoogleAuthProvider.credentialFromError = () => credential;
+      window.firebaseAuth.signInWithPopup = () =>
+        Promise.reject({ code: 'auth/account-exists-with-different-credential', email: 'test@quidax.com' });
+      window.firebaseAuth.signInWithEmailAndPassword = () => Promise.resolve({
+        user: {
+          email: 'test@quidax.com',
+          uid: 'linked-user',
+          displayName: 'Linked User',
+          linkWithCredential: (receivedCredential) => {
+            window.__linkedGoogleCredential = receivedCredential === credential;
+            return Promise.resolve();
+          },
+        },
+      });
+    });
+
+    await page.getByRole('button', { name: 'Continue with Google' }).click();
+    await expect(page.getByText('A password account already exists for this email. Enter your password and sign in once to connect Google.')).toBeVisible();
+    await expect(page.getByPlaceholder('you@quidax.com')).toHaveValue('test@quidax.com');
+
+    await page.getByPlaceholder('Enter your password').fill('password123');
+    await page.locator('button[type="submit"]').click();
+
+    await expect.poll(() => page.evaluate(() => window.__linkedGoogleCredential)).toBe(true);
+  });
+
+  test('google sign-in: popup blocked falls back to redirect', async ({ page }) => {
+    await page.evaluate(() => {
+      window.__googleRedirectStarted = false;
+      window.firebaseAuth.signInWithPopup = () => Promise.reject({ code: 'auth/popup-blocked' });
+      window.firebaseAuth.signInWithRedirect = () => {
+        window.__googleRedirectStarted = true;
+        return new Promise(() => {});
+      };
+    });
+
+    await page.getByRole('button', { name: 'Continue with Google' }).click();
+
+    await expect.poll(() => page.evaluate(() => window.__googleRedirectStarted)).toBe(true);
+  });
+
+  test('google sign-in: 127 local host points users to localhost', async ({ page }) => {
+    await page.goto('http://127.0.0.1:8081/', { waitUntil: 'domcontentloaded' });
+    await waitForApp(page);
+    await page.evaluate(() => {
+      window.firebaseAuth.signInWithPopup = () => Promise.reject({ code: 'auth/unauthorized-domain' });
+    });
+
+    await page.getByRole('button', { name: 'Continue with Google' }).click();
+
+    await expect(page.getByText('Local Google sign-in uses localhost. Open http://localhost:8081/ instead of 127.0.0.1, or add 127.0.0.1 in Firebase Auth settings.')).toBeVisible();
+  });
+
   // ── Password visibility toggle ────────────────────────────────────────────
 
   test('password toggle changes input type', async ({ page }) => {

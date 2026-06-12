@@ -22,4 +22,10 @@ async function waitForApp(page) {
   await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible({ timeout: 30000 });
 }
 
-module.exports = { goToScreen, waitForApp };
+async function setGenerationState(page, state) {
+  await page.evaluate((payload) => {
+    window.postMessage({ type: '__autodeck_debug_generation_state', ...payload }, '*');
+  }, state);
+}
+
+module.exports = { goToScreen, waitForApp, setGenerationState };

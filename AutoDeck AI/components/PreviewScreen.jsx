@@ -66,7 +66,17 @@ const makePreviewDraftSlides = (config, count) => {
     : draftSlides;
 };
 
-const PreviewScreen = ({ config, slides: generatedSlides = [], generationStatus = 'idle', generationError, onGenerateAgain, onViewSlideshow, tweaks }) => {
+const PreviewScreen = ({
+  config,
+  slides: generatedSlides = [],
+  generationStatus = 'idle',
+  generationError,
+  activeDeckId,
+  generationTrace,
+  onGenerateAgain,
+  onViewSlideshow,
+  tweaks,
+}) => {
   const T = qxTheme(tweaks?.darkMode);
   const dark = tweaks?.darkMode;
   const [editingIndex, setEditingIndex] = React.useState(null);
@@ -91,9 +101,10 @@ const PreviewScreen = ({ config, slides: generatedSlides = [], generationStatus 
     { title: 'Partnerships',          kicker: 'Who we built with',   bullets: ['MTN Mobile Money integration live', 'Flutterwave API partnership signed', 'Binance liquidity pool access'] },
     { title: 'Next Steps & Asks',     kicker: 'Calls to action',     bullets: ['Board approval for Series B extension', 'Regulatory counsel in 3 new markets', 'Marketing budget increase for Q3'] },
   ];
-  const initialSlides = incomingSlides.length
-    ? incomingSlides
-    : (makePreviewDraftSlides(config, slideCount).length ? makePreviewDraftSlides(config, slideCount) : normalizePreviewSlides(seed.slice(0, slideCount), config?.templateStyle));
+  const previewFallbackSlides = generationStatus === 'idle'
+    ? (makePreviewDraftSlides(config, slideCount).length ? makePreviewDraftSlides(config, slideCount) : normalizePreviewSlides(seed.slice(0, slideCount), config?.templateStyle))
+    : [];
+  const initialSlides = incomingSlides.length ? incomingSlides : previewFallbackSlides;
   const [slides, setSlides] = React.useState(initialSlides);
 
   React.useEffect(() => {
@@ -135,6 +146,90 @@ const PreviewScreen = ({ config, slides: generatedSlides = [], generationStatus 
     rose:     { name: 'Rose',     c1: '#4C0519', c2: '#BE123C', c3: '#FECACA' },
   };
   const tc = themes[theme] || themes.purple;
+  const generationFailedWithoutSlides = generationStatus === 'error' && !incomingSlides.length;
+  const readyWithoutSlides = generationStatus === 'ready' && !incomingSlides.length;
+  const statusEyebrow = generationStatus === 'ready'
+    ? 'Ready · Firebase generated'
+    : generationStatus === 'idle'
+      ? 'Ready · Demo preview'
+      : 'Ready · Generated slides';
+
+  if (generationFailedWithoutSlides || readyWithoutSlides) {
+    const traceDeckId = activeDeckId || generationTrace?.deckId || '';
+    const traceStage = generationTrace?.stage || generationStatus;
+    return (
+      <div style={{ minHeight: '100vh', background: T.bg, fontFamily: qxType.body, color: T.ink, padding: '32px 40px 80px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div style={{ fontFamily: qxType.mono, fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.inkMute, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#E03E6B', boxShadow: '0 0 12px rgba(224,62,107,0.4)' }} />
+            Generation needs attention
+          </div>
+          <div style={{ fontFamily: qxType.mono, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.inkMute }}>
+            AutoDeck AI · Preview
+          </div>
+        </div>
+
+        <div style={{
+          minHeight: 460,
+          borderRadius: qxRadius.xl,
+          border: `1px solid ${T.border}`,
+          background: T.surface,
+          boxShadow: qxShadow(dark).md,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 40,
+          textAlign: 'center',
+        }}>
+          <div style={{ maxWidth: 560 }}>
+            <div style={{ fontFamily: qxType.mono, fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.inkMute, marginBottom: 14 }}>
+              No local draft was used
+            </div>
+            <h1 style={{ fontFamily: qxType.display, fontSize: 42, fontWeight: 500, letterSpacing: '-0.025em', margin: '0 0 12px', color: T.ink }}>
+              Generated slides were not returned.
+            </h1>
+            <p style={{ margin: '0 0 24px', color: T.inkDim, lineHeight: 1.6, fontSize: 15 }}>
+              {generationError || 'Firebase finished without readable generated slides. Please try again with a shorter source or fewer requested slides.'}
+            </p>
+            {(traceDeckId || traceStage) && (
+              <div style={{
+                margin: '0 auto 24px',
+                padding: '10px 14px',
+                borderRadius: qxRadius.lg,
+                border: `1px solid ${T.border}`,
+                background: dark ? 'rgba(255,255,255,0.05)' : '#FAF8FC',
+                color: T.inkMute,
+                fontFamily: qxType.mono,
+                fontSize: 11,
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                display: 'inline-flex',
+                gap: 12,
+                flexWrap: 'wrap',
+                justifyContent: 'center',
+              }}>
+                {traceDeckId && <span>Deck {traceDeckId}</span>}
+                {traceStage && <span>Stage {traceStage}</span>}
+              </div>
+            )}
+            <button onClick={onGenerateAgain} style={{
+              padding: '12px 20px',
+              borderRadius: qxRadius.full,
+              border: 'none',
+              background: QX.lime,
+              color: QX.limeInk,
+              fontFamily: qxType.body,
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}>
+              Back to generator
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ── COVER (editorial, full-bleed, unmistakable) ──────────
   const Cover = () => (
@@ -279,7 +374,7 @@ const PreviewScreen = ({ config, slides: generatedSlides = [], generationStatus 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div style={{ fontFamily: qxType.mono, fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.inkMute, display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: QX.lime, boxShadow: `0 0 12px ${QX.lime}`, animation: 'qxBreathe 2.4s ease-in-out infinite' }} />
-          {generationStatus === 'error' ? 'Ready · Context draft' : 'Ready · Just generated'}
+          {statusEyebrow}
         </div>
         <div style={{ fontFamily: qxType.mono, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.inkMute }}>
           AutoDeck AI · Preview

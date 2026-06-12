@@ -5,6 +5,7 @@
 **/.claude/
 AutoDeck AI/firebase-config.js
 AutoDeck AI/functions/.env
+AutoDeck AI/functions/.env.local
 node_modules/
 playwright-report/
 test-results/

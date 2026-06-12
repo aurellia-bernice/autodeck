@@ -1,7 +1,7 @@
 // ============================================================
 // Sidebar — quiet purple rail, single lime dot for active item
 // ============================================================
-const Sidebar = ({ currentScreen, onNavigate, currentUser, userRole, onLogout, onChangePassword, onSettings, darkMode, onToggleDark, tweaks }) => {
+const Sidebar = ({ currentScreen, onNavigate, currentUser, userRole, onLogout, onChangePassword, onSettings, darkMode, onToggleDark, tweaks, buildId }) => {
   const T = qxTheme(true); // sidebar is always dark — anchors the layout
   const items = [
     { id: 'home',    label: 'Generate', icon: (
@@ -111,6 +111,11 @@ const Sidebar = ({ currentScreen, onNavigate, currentUser, userRole, onLogout, o
             <div style={{ fontFamily: qxType.mono, fontSize: 10, color: 'rgba(246,241,251,0.40)', textTransform: 'capitalize', letterSpacing: '0.06em' }}>
               {userRole || 'employee'}
             </div>
+            {buildId && (
+              <div data-testid="build-id" title="Frontend build" style={{ fontFamily: qxType.mono, fontSize: 8.5, color: 'rgba(246,241,251,0.28)', letterSpacing: '0.08em', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                Build {buildId}
+              </div>
+            )}
           </div>
           {onToggleDark && (
             <button onClick={e => { e.stopPropagation(); onToggleDark(); }} title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'} style={{

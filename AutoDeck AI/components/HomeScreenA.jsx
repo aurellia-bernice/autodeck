@@ -55,6 +55,39 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
     return sectionRefs >= 2 && capitalizedWords >= 4;
   };
 
+  const sourceUnitKey = (value) => String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+  const isLikelyRepeatedHeader = (value) => {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    const words = text.split(/\s+/).filter(Boolean);
+    const letters = text.replace(/[^A-Za-z]/g, '');
+    const upper = text.replace(/[^A-Z]/g, '');
+    const upperRatio = letters.length ? upper.length / letters.length : 0;
+    return words.length <= 14 && (upperRatio > 0.72 || /[@|]\s*\b/.test(text));
+  };
+
+  const dedupeParsedUnits = (units) => {
+    const counts = new Map();
+    units.forEach((unit) => {
+      const key = sourceUnitKey(unit);
+      if (!key) return;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+
+    const seen = new Map();
+    return units.filter((unit) => {
+      const key = sourceUnitKey(unit);
+      if (!key) return false;
+      const nextSeen = (seen.get(key) || 0) + 1;
+      seen.set(key, nextSeen);
+      if (nextSeen === 1) return true;
+      return !(counts.get(key) > 1 || isLikelyRepeatedHeader(unit));
+    });
+  };
+
   const cleanParsedDocumentText = (value) => {
     const units = String(value || '')
       .replace(/\u0000/g, '')
@@ -69,7 +102,7 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
       .map((line) => line.replace(/\s+/g, ' ').trim())
       .filter(Boolean);
     const cleaned = units.filter((line) => !isParsedDocumentNoise(line));
-    return (cleaned.length ? cleaned : units).join('\n').trim();
+    return dedupeParsedUnits(cleaned.length ? cleaned : units).join('\n').trim();
   };
 
   const parseFile = async (file) => {

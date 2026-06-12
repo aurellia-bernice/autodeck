@@ -4,7 +4,7 @@
  */
 
 const { test, expect } = require('@playwright/test');
-const { waitForApp, goToScreen } = require('./helpers');
+const { waitForApp, goToScreen, setGenerationState } = require('./helpers');
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -365,20 +365,25 @@ test.describe('Gap 7 — Real slide generation (Cloud Function)', () => {
     expect(result).toMatch(/unauthenticated|auth|internal|permission/i);
   });
 
-  test.skip(!!process.env.CI, 'requires live authenticated Firebase session');
-  test('Preview uses the submitted context instead of the old seed deck', async ({ page }) => {
+  test('Preview does not use the old seed deck when Firebase returns no slides', async ({ page }) => {
     await loadApp(page);
-    await goToScreen(page, 'home');
+    await setGenerationState(page, {
+      screen: 'preview',
+      status: 'error',
+      error: 'Generation failed in Firebase.',
+      deckId: 'deckgap7001',
+      trace: { stage: 'firestore-error', deckId: 'deckgap7001' },
+      config: {
+        inputText: 'Nimbus merchant settlement rollout requires three phases.',
+        parsedFileText: '',
+        slideCount: '5',
+        templateStyle: 'Professional',
+      },
+      slides: [],
+    });
 
-    await page.locator('textarea').fill([
-      'Nimbus merchant settlement rollout requires three phases.',
-      'Phase one pilots instant settlement with Lagos merchants.',
-      'Phase two adds risk controls and daily reconciliation.',
-      'Phase three trains support teams and measures dispute reduction.',
-    ].join(' '));
-    await page.getByRole('button', { name: /Generate deck/i }).click();
-
-    await expect(page.getByText(/Nimbus merchant settlement/i).first()).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText('No local draft was used')).toBeVisible();
+    await expect(page.getByText('Generated slides were not returned.')).toBeVisible();
     await expect(page.getByText('Executive Summary').first()).not.toBeVisible();
   });
 });

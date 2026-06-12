@@ -7,7 +7,28 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
 }/*EDITMODE-END*/;
 
 const ADMIN_EMAILS = ['admin@quidax.com'];
-const GENERATION_TIMEOUT_MS = 105000;
+const GENERATION_DELAY_NOTICE_MS = 45000;
+const GENERATION_FUNCTION_TIMEOUT_MS = 290000;
+const GENERATION_CLIENT_DEADLINE_MS = 300000;
+const GENERATION_STORE_READ_TIMEOUT_MS = 10000;
+const AUTODECK_BUILD_ID = 'gen-auth-2026-06-12';
+const SOURCE_UPLOAD_STORAGE_KEY = 'autodeck:sourceUploads';
+
+const isSourceFileUploadEnabled = () => {
+  if (typeof window === 'undefined') return false;
+  return window.AutoDeckSourceUploadsEnabled === true
+    || window.localStorage?.getItem(SOURCE_UPLOAD_STORAGE_KEY) === 'enabled';
+};
+
+if (typeof window !== 'undefined') {
+  Object.assign(window, {
+    AutoDeckBuild: {
+      id: AUTODECK_BUILD_ID,
+      sourceUploadStorageKey: SOURCE_UPLOAD_STORAGE_KEY,
+      sourceUploadsEnabled: isSourceFileUploadEnabled(),
+    },
+  });
+}
 
 const isAdminUser = (user) => {
   const email = user?.email?.toLowerCase();
@@ -288,10 +309,16 @@ const readyDeckUpdate = (config = {}, slides = []) => ({
   templatePresetId: templatePresetIdFromConfig(config),
   slideCount: slides.length,
   slides,
+  completedAt: firebase.firestore.FieldValue.serverTimestamp(),
 });
 
 const uploadSourceFile = async (deckId, config) => {
   if (!window.firebaseStorage || !window.firebaseDb || !deckId || !config?.uploadedFile) return;
+  if (!isSourceFileUploadEnabled()) {
+    if (window.AutoDeckBuild) window.AutoDeckBuild.sourceUploadsEnabled = false;
+    return;
+  }
+  if (window.AutoDeckBuild) window.AutoDeckBuild.sourceUploadsEnabled = true;
   const file = config.uploadedFile;
   const path = `uploads/${deckId}/${file.name}`;
   const snap = await window.firebaseStorage.ref(path).put(file);
@@ -306,7 +333,7 @@ const writeSlideDocuments = async (deckRef, slides = []) => {
   if (!deckRef || !Array.isArray(slides) || !slides.length || !window.firebaseDb) return;
   const batch = window.firebaseDb.batch();
   slides.forEach((slide, index) => {
-    const ref = deckRef.collection('slides').doc();
+    const ref = deckRef.collection('slides').doc(`slide-${String(index + 1).padStart(2, '0')}`);
     batch.set(ref, {
       index,
       title: slide.title || '',
@@ -321,6 +348,32 @@ const writeSlideDocuments = async (deckRef, slides = []) => {
   await batch.commit();
 };
 
+const persistGeneratedDeckFromClient = async (deckRef, config, slides = []) => {
+  if (!deckRef || !Array.isArray(slides) || !slides.length) return;
+  await deckRef.set({
+    ...readyDeckUpdate(config, slides),
+    stage: 'ready',
+  }, { merge: true });
+  await writeSlideDocuments(deckRef, slides);
+};
+
+const readGeneratedSlides = async (deckRef, templateStyle = 'Professional') => {
+  if (!deckRef) return [];
+  const deckSnap = await deckRef.get();
+  const deckSlides = normalizeDeckSlides(deckSnap.data()?.slides, templateStyle);
+  if (deckSlides.length) return deckSlides;
+
+  const slideSnap = await deckRef.collection('slides').orderBy('index').get();
+  return normalizeDeckSlides(slideSnap.docs.map((doc) => doc.data()), templateStyle);
+};
+
+const withDeadline = (promise, timeoutMs, message) => new Promise((resolve, reject) => {
+  const id = setTimeout(() => reject(new Error(message)), timeoutMs);
+  Promise.resolve(promise)
+    .then(resolve, reject)
+    .finally(() => clearTimeout(id));
+});
+
 const App = () => {
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [screen, setScreen] = React.useState('login');
@@ -333,9 +386,69 @@ const App = () => {
   const [generationStatus, setGenerationStatus] = React.useState('idle');
   const [generationError, setGenerationError] = React.useState('');
   const [activeDeckId, setActiveDeckId] = React.useState(null);
+  const [generationTrace, setGenerationTrace] = React.useState({ stage: 'idle', deckId: null });
   const generationRunRef = React.useRef(0);
+  const generationDeckUnsubRef = React.useRef(null);
+  const activeDeckIdRef = React.useRef(null);
 
   const userRole = isAdminUser(currentUser) ? 'admin' : 'employee';
+
+  React.useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.dataset.autodeckBuild = AUTODECK_BUILD_ID;
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const isLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+    if (!isLocalhost) return undefined;
+
+    const handleDebugGenerationState = (event) => {
+      const data = event?.data || {};
+      if (data.type !== '__autodeck_debug_generation_state') return;
+
+      setDeckConfig(data.config || {
+        inputText: 'Debug deck source content',
+        slideCount: '5',
+        templateStyle: 'Professional',
+      });
+      setSlideshowSlides(Array.isArray(data.slides) ? data.slides : null);
+      setGenerationStatus(data.status || 'idle');
+      setGenerationError(data.error || '');
+      activeDeckIdRef.current = data.deckId || null;
+      setActiveDeckId(data.deckId || null);
+      setGenerationTrace(data.trace || { stage: data.status || 'idle', deckId: data.deckId || null });
+      if (data.currentUser) setCurrentUser(data.currentUser);
+      setScreen(data.screen || 'preview');
+    };
+
+    window.addEventListener('message', handleDebugGenerationState);
+    return () => window.removeEventListener('message', handleDebugGenerationState);
+  }, []);
+
+  React.useEffect(() => {
+    const isLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+    if (!isLocalhost) return undefined;
+
+    window.__autodeck_generation_debug = () => ({
+      buildId: AUTODECK_BUILD_ID,
+      screen,
+      generationStatus,
+      generationError,
+      activeDeckId: activeDeckId || activeDeckIdRef.current || generationTrace?.deckId || null,
+      generationTrace,
+      requestedSlides: deckConfig?.slideCount || null,
+      templateStyle: deckConfig?.templateStyle || null,
+      sourceDocumentName: deckConfig?.uploadedFile?.name || '',
+      sourceUploadsEnabled: isSourceFileUploadEnabled(),
+      generatedSlideCount: Array.isArray(slideshowSlides) ? slideshowSlides.length : 0,
+    });
+
+    window.localStorage?.setItem('autodeck:lastGenerationDebug', JSON.stringify(window.__autodeck_generation_debug()));
+    return () => {
+      delete window.__autodeck_generation_debug;
+    };
+  }, [screen, generationStatus, generationError, activeDeckId, generationTrace, deckConfig, slideshowSlides]);
 
   React.useEffect(() => {
     if (window.firebaseDb) {
@@ -390,55 +503,130 @@ const App = () => {
   const handleGenerate = async (config) => {
     const runId = generationRunRef.current + 1;
     generationRunRef.current = runId;
-    const fallbackSlides = buildContextDraftSlides(config);
-    let timeoutId = null;
+    if (generationDeckUnsubRef.current) {
+      generationDeckUnsubRef.current();
+      generationDeckUnsubRef.current = null;
+    }
+    let delayNoticeId = null;
+    let clientDeadlineId = null;
+    let deckRef = null;
+    const startedAt = Date.now();
+    const deadlineAt = startedAt + GENERATION_CLIENT_DEADLINE_MS;
 
     setDeckConfig(config);
-    setSlideshowSlides(fallbackSlides.length ? fallbackSlides : null);
+    setSlideshowSlides(null);
     setGenerationStatus('loading');
     setGenerationError('');
+    activeDeckIdRef.current = null;
     setActiveDeckId(null);
+    setGenerationTrace({ stage: 'starting', deckId: null, startedAt, deadlineAt });
     setScreen('processing');
 
     const finishGeneration = (slides, status, message = '') => {
       if (generationRunRef.current !== runId) return;
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
+      if (delayNoticeId) {
+        clearTimeout(delayNoticeId);
+        delayNoticeId = null;
+      }
+      if (clientDeadlineId) {
+        clearTimeout(clientDeadlineId);
+        clientDeadlineId = null;
+      }
+      if (generationDeckUnsubRef.current) {
+        generationDeckUnsubRef.current();
+        generationDeckUnsubRef.current = null;
       }
       const normalized = normalizeDeckSlides(slides, config?.templateStyle);
-      setSlideshowSlides(normalized.length ? normalized : fallbackSlides);
+      setSlideshowSlides(status === 'ready' && normalized.length ? normalized : null);
       setGenerationStatus(status);
       setGenerationError(message);
+      setGenerationTrace((prev) => ({
+        ...prev,
+        deckId: prev?.deckId || activeDeckIdRef.current || null,
+        stage: status === 'error' ? (prev?.stage || status) : status,
+        message,
+      }));
     };
 
-    timeoutId = setTimeout(() => {
-      finishGeneration(
-        fallbackSlides,
-        'error',
-        'AI generation is taking longer than expected. Showing a draft from your content.'
-      );
-    }, GENERATION_TIMEOUT_MS);
+    const failGenerationOnDeadline = () => {
+      if (generationRunRef.current !== runId) return;
+      const message = `AI generation exceeded the ${Math.round(GENERATION_CLIENT_DEADLINE_MS / 1000)} second client deadline before generated slides were returned. No local draft was used.`;
+      if (deckRef) {
+        deckRef.update({
+          status: 'error',
+          error: message,
+          stage: 'client-deadline',
+          completedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        }).catch(() => {});
+      }
+      setGenerationTrace((prev) => ({
+        ...prev,
+        deckId: prev?.deckId || activeDeckIdRef.current || deckRef?.id || null,
+        stage: 'client-deadline',
+        message,
+      }));
+      finishGeneration([], 'error', message);
+    };
+
+    clientDeadlineId = setTimeout(failGenerationOnDeadline, GENERATION_CLIENT_DEADLINE_MS);
+
+    delayNoticeId = setTimeout(() => {
+      if (generationRunRef.current !== runId) return;
+      setGenerationError(`AI generation is still running in Firebase. AutoDeck will stop waiting after ${Math.round(GENERATION_CLIENT_DEADLINE_MS / 1000)} seconds if no generated slides arrive.`);
+      setGenerationTrace((prev) => ({ ...prev, stage: 'still-waiting' }));
+    }, GENERATION_DELAY_NOTICE_MS);
 
     if (!window.firebaseDb || !window.firebase?.app || !currentUser) {
       finishGeneration(
-        fallbackSlides,
+        [],
         'error',
-        currentUser ? 'AI generation is unavailable. Showing a draft from your content.' : 'Sign in to use AI generation. Showing a draft from your content.'
+        currentUser ? 'AI generation is unavailable. No local draft was used.' : 'Sign in to use AI generation.'
       );
       return;
     }
 
-    let deckRef = null;
     try {
-      deckRef = await window.firebaseDb.collection('decks').add(
-        buildDeckDocument(config, currentUser, { status: 'processing' })
-      );
+      deckRef = window.firebaseDb.collection('decks').doc();
+      const initialDeckWrite = deckRef.set(
+        buildDeckDocument(config, currentUser, { status: 'processing' }),
+        { merge: true }
+      ).catch((err) => {
+        setGenerationTrace((prev) => ({
+          ...prev,
+          stage: 'deck-write-delayed',
+          deckId: deckRef.id,
+          message: err?.message || 'Initial Firestore deck write did not complete before generation continued.',
+        }));
+      });
+      activeDeckIdRef.current = deckRef.id;
       setActiveDeckId(deckRef.id);
+      setGenerationTrace((prev) => ({ ...prev, stage: 'deck-id-created', deckId: deckRef.id }));
       uploadSourceFile(deckRef.id, config).catch(() => {});
 
-      const generateDeckFn = firebase.app().functions('us-central1').httpsCallable('generateDeck');
-      const { data } = await generateDeckFn({
+      generationDeckUnsubRef.current = deckRef.onSnapshot(async (snap) => {
+        if (generationRunRef.current !== runId || !snap.exists) return;
+        const deck = snap.data() || {};
+        if (deck.status === 'ready') {
+          setGenerationTrace((prev) => ({ ...prev, stage: 'firestore-ready', deckId: deckRef.id }));
+          const slides = await withDeadline(
+            readGeneratedSlides(deckRef, config.templateStyle),
+            GENERATION_STORE_READ_TIMEOUT_MS,
+            'Timed out reading generated slides from Firestore.'
+          ).catch(() => []);
+          if (slides.length) finishGeneration(slides, 'ready');
+        } else if (deck.status === 'error') {
+          setGenerationTrace((prev) => ({ ...prev, stage: 'firestore-error', deckId: deckRef.id }));
+          finishGeneration([], 'error', deck.error || 'AI generation failed before returning slides.');
+        } else if (deck.stage) {
+          setGenerationTrace((prev) => ({ ...prev, stage: deck.stage, deckId: deckRef.id }));
+        }
+      }, () => {});
+
+      const generateDeckFn = firebase.app().functions('us-central1').httpsCallable('generateDeck', {
+        timeout: GENERATION_FUNCTION_TIMEOUT_MS,
+      });
+      setGenerationTrace((prev) => ({ ...prev, stage: 'calling-generateDeck', deckId: deckRef.id }));
+      const { data } = await withDeadline(generateDeckFn({
         deckId: deckRef.id,
         inputText: config.inputText || '',
         parsedFileText: config.parsedFileText || '',
@@ -447,19 +635,67 @@ const App = () => {
         templateStyle: config.templateStyle || 'Professional',
         templatePreset: config.templatePreset || window.AutoDeckTemplatePresets?.summarizeForPrompt?.(config.templateStyle),
         brandVoice: brandConfig?.voice || config.templatePreset?.id || window.AutoDeckTemplatePresets?.normalizeTemplateStyle?.(config.templateStyle) || 'professional',
-      });
+      }), GENERATION_CLIENT_DEADLINE_MS, `AI generation exceeded the ${Math.round(GENERATION_CLIENT_DEADLINE_MS / 1000)} second client deadline before generated slides were returned.`);
+      await withDeadline(
+        initialDeckWrite,
+        GENERATION_STORE_READ_TIMEOUT_MS,
+        'Initial Firestore deck write did not acknowledge before callable returned.'
+      ).catch(() => {});
+      setGenerationTrace((prev) => ({ ...prev, stage: 'callable-returned', deckId: deckRef.id }));
 
       const generatedSlides = normalizeDeckSlides(data?.slides, config.templateStyle);
       if (!generatedSlides.length) {
-        throw new Error('The AI service returned no slides.');
+        const storedSlides = await withDeadline(
+          readGeneratedSlides(deckRef, config.templateStyle),
+          GENERATION_STORE_READ_TIMEOUT_MS,
+          'Timed out reading generated slides from Firestore.'
+        );
+        if (!storedSlides.length) throw new Error('The AI service returned no slides.');
+        finishGeneration(storedSlides, 'ready');
+        return;
+      }
+      if (data?.persisted === false) {
+        setGenerationTrace((prev) => ({ ...prev, stage: 'client-persisting-generated-slides', deckId: deckRef.id }));
+        await withDeadline(
+          persistGeneratedDeckFromClient(deckRef, config, generatedSlides),
+          GENERATION_STORE_READ_TIMEOUT_MS,
+          'Timed out writing generated slides from the client.'
+        ).catch((err) => {
+          setGenerationTrace((prev) => ({
+            ...prev,
+            stage: 'client-persist-failed',
+            deckId: deckRef.id,
+            message: err?.message || 'Client persistence failed after callable returned slides.',
+          }));
+        });
       }
       finishGeneration(generatedSlides, 'ready');
     } catch (err) {
-      const message = 'AI generation failed. Showing a draft from your content.';
-      if (deckRef) {
-        deckRef.update({ status: 'error', error: err?.message || message }).catch(() => {});
+      const storedSlides = deckRef ? await withDeadline(
+        readGeneratedSlides(deckRef, config.templateStyle),
+        GENERATION_STORE_READ_TIMEOUT_MS,
+        'Timed out reading generated slides from Firestore.'
+      ).catch(() => []) : [];
+      if (storedSlides.length) {
+        finishGeneration(storedSlides, 'ready');
+        return;
       }
-      finishGeneration(fallbackSlides, 'error', message);
+      const message = `AI generation failed before generated slides were returned${err?.message ? `: ${err.message}` : '.'}`;
+      setGenerationTrace((prev) => ({
+        ...prev,
+        deckId: prev?.deckId || activeDeckIdRef.current || deckRef?.id || null,
+        stage: 'error',
+        message,
+      }));
+      if (deckRef) {
+        deckRef.update({
+          status: 'error',
+          error: err?.message || message,
+          stage: 'client-error',
+          completedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        }).catch(() => {});
+      }
+      finishGeneration([], 'error', message);
     }
   };
 
@@ -496,6 +732,7 @@ const App = () => {
           onSettings={() => setScreen('settings')}
           darkMode={tweaks?.darkMode}
           onToggleDark={() => setTweak('darkMode', !tweaks?.darkMode)}
+          buildId={AUTODECK_BUILD_ID}
         />
       )}
 
@@ -514,6 +751,8 @@ const App = () => {
             config={deckConfig}
             generationStatus={generationStatus}
             generationError={generationError}
+            activeDeckId={activeDeckId}
+            generationTrace={generationTrace}
             onComplete={handleProcessingComplete}
             tweaks={tweaks}
           />
@@ -524,6 +763,8 @@ const App = () => {
             slides={slideshowSlides || []}
             generationStatus={generationStatus}
             generationError={generationError}
+            activeDeckId={activeDeckId}
+            generationTrace={generationTrace}
             onGenerateAgain={handleGenerateAgain}
             onViewSlideshow={async (slides) => {
               const finalSlides = normalizeDeckSlides(slides, deckConfig?.templateStyle);

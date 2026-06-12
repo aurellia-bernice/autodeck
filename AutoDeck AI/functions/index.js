@@ -1,4 +1,5 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const logger = require('firebase-functions/logger');
 const admin    = require('firebase-admin');
 const Anthropic = require('@anthropic-ai/sdk');
 const mammoth  = require('mammoth');
@@ -8,12 +9,22 @@ admin.initializeApp();
 const db = admin.firestore();
 
 const AnthropicClient = Anthropic.default || Anthropic;
-const anthropic = new AnthropicClient({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
 
 const MAX_INPUT_CHARS = 8000;
-const MAX_SOURCE_CHARS = 50000;
+const MAX_SOURCE_CHARS = 20000;
+const CALLABLE_CORS_ORIGINS = [
+  /^https?:\/\/localhost(?::\d+)?$/,
+  /^https?:\/\/127\.0\.0\.1(?::\d+)?$/,
+  'https://autodeck-ai.web.app',
+  'https://autodeck-ai.firebaseapp.com',
+];
+
+const callableOptions = (overrides = {}) => ({
+  region: 'us-central1',
+  cors: CALLABLE_CORS_ORIGINS,
+  invoker: 'public',
+  ...overrides,
+});
 
 const compactText = (value, limit) => String(value || '')
   .replace(/\u0000/g, '')
@@ -36,6 +47,39 @@ const isNoisySourceUnit = (value) => {
   return sectionRefs >= 2 && capitalizedWords >= 4;
 };
 
+const sourceUnitKey = (value) => String(value || '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim();
+
+const isLikelyRepeatedHeader = (value) => {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  const words = text.split(/\s+/).filter(Boolean);
+  const letters = text.replace(/[^A-Za-z]/g, '');
+  const upper = text.replace(/[^A-Z]/g, '');
+  const upperRatio = letters.length ? upper.length / letters.length : 0;
+  return words.length <= 14 && (upperRatio > 0.72 || /[@|]\s*\b/.test(text));
+};
+
+const dedupeSourceUnits = (units) => {
+  const counts = new Map();
+  units.forEach((unit) => {
+    const key = sourceUnitKey(unit);
+    if (!key) return;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+
+  const seen = new Map();
+  return units.filter((unit) => {
+    const key = sourceUnitKey(unit);
+    if (!key) return false;
+    const nextSeen = (seen.get(key) || 0) + 1;
+    seen.set(key, nextSeen);
+    if (nextSeen === 1) return true;
+    return !(counts.get(key) > 1 || isLikelyRepeatedHeader(unit));
+  });
+};
+
 const cleanSourceMaterial = (value, limit) => {
   const compact = compactText(value, limit);
   const units = compact
@@ -50,7 +94,7 @@ const cleanSourceMaterial = (value, limit) => {
     .map((line) => line.replace(/\s+/g, ' ').trim())
     .filter(Boolean);
   const cleaned = units.filter((unit) => !isNoisySourceUnit(unit));
-  return compactText((cleaned.length ? cleaned : units).join('\n'), limit);
+  return compactText(dedupeSourceUnits(cleaned.length ? cleaned : units).join('\n'), limit);
 };
 
 const wordCount = (value) => compactText(value, Number.MAX_SAFE_INTEGER)
@@ -134,7 +178,7 @@ const hasUsableMetric = (value) =>
 
 const normalizeSlides = (slides, count) => {
   if (!Array.isArray(slides)) return [];
-  return slides
+  const normalized = slides
     .map((slide) => {
       const title = trimWords(slide?.title, 12).replace(/^[^A-Za-z0-9$]+/, '').replace(/[.!?]+$/, '');
       const bullets = Array.isArray(slide?.bullets)
@@ -159,7 +203,80 @@ const normalizeSlides = (slides, count) => {
       };
     })
     .filter((slide) => slide.title && !isNoisySourceUnit(slide.title) && slide.bullets.length >= 2)
+    .map((slide, index) => ({ ...slide, index }));
+
+  const seenTitles = new Set();
+  const uniqueSlides = [];
+  normalized.forEach((slide) => {
+    let nextSlide = slide;
+    let titleKey = sourceUnitKey(nextSlide.title);
+
+    if (seenTitles.has(titleKey)) {
+      const replacement = nextSlide.bullets
+        .map((bullet) => trimWords(bullet, 10).replace(/^[^A-Za-z0-9$]+/, '').replace(/[.!?]+$/, ''))
+        .find((bullet) => bullet && !seenTitles.has(sourceUnitKey(bullet)) && !isNoisySourceUnit(bullet));
+      if (replacement) {
+        nextSlide = { ...nextSlide, title: replacement };
+        titleKey = sourceUnitKey(replacement);
+      }
+    }
+
+    if (!titleKey || seenTitles.has(titleKey)) return;
+    seenTitles.add(titleKey);
+    uniqueSlides.push(nextSlide);
+  });
+
+  return uniqueSlides
+    .map(({ index, ...slide }) => slide)
     .slice(0, count);
+};
+
+const slideDocumentId = (index) => `slide-${String(index + 1).padStart(2, '0')}`;
+
+const persistGeneratedSlides = async ({ deckId, uid, slides }) => {
+  try {
+    // Write deck-level slides and mark ready first so the Firestore listener
+    // on the client fires as early as possible. Subcollection batch follows.
+    await db.collection('decks').doc(deckId).set({
+      userId: uid,
+      status: 'ready',
+      stage: 'ready',
+      slideCount: slides.length,
+      slides,
+      completedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    const batch = db.batch();
+    slides.forEach((s, i) => {
+      const ref = db.collection('decks').doc(deckId).collection('slides').doc(slideDocumentId(i));
+      batch.set(ref, {
+        index: i,
+        title: s.title || '',
+        bullets: s.bullets || [],
+        layout: s.layout || 'standard',
+        contentType: s.contentType || null,
+        kicker: s.kicker || null,
+        speakerNotes: s.speakerNotes || '',
+        imagePrompt: s.imagePrompt || '',
+      });
+    });
+    await batch.commit();
+
+    logger.info('generateDeck completed', {
+      deckId,
+      slideCount: slides.length,
+      persisted: true,
+    });
+    return true;
+  } catch (e) {
+    logger.error('generateDeck persistence failed', {
+      deckId,
+      message: e.message,
+      name: e.name,
+      code: e.code,
+    });
+    return false;
+  }
 };
 
 const decodeXmlEntities = (value) => String(value || '')
@@ -213,6 +330,9 @@ Deck requirements:
 - Turn raw notes into a coherent narrative: context, problem/opportunity, evidence, plan/sections, risks, decisions, next steps.
 - Avoid generic filler like "improve efficiency", "drive growth", "leverage technology", or "enhance collaboration" unless the context says that specifically.
 - Titles should be specific and useful, not labels like "Overview" or "Key Metrics" unless the source truly supports them.
+- Every slide title must be distinct. Do not reuse the document title, lecture title, event title, or a previous slide title with minor suffixes.
+- Synthesize titles as takeaways from the evidence. Do not start multiple titles with the same person, event, institution, source name, or uploaded file name.
+- If the source is a transcript, lecture, report, article, or PDF export, identify the thesis and argument beats; do not copy source headings as the slide outline.
 - Bullets should state the point and the implication. Prefer concrete claims over vague phrases.
 - Every slide must include a layout from the template preset's allowedLayouts list.
 - Use "stat" only when there is a real number or metric in the source.
@@ -264,16 +384,34 @@ ${sourceMaterial || userInstruction}`;
 
 // ── generateDeck ──────────────────────────────────────────────
 exports.generateDeck = onCall(
-  { timeoutSeconds: 120, memory: '512MiB', region: 'us-central1' },
+  callableOptions({ timeoutSeconds: 300, memory: '512MiB', secrets: ['ANTHROPIC_API_KEY'] }),
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      logger.error('generateDeck: ANTHROPIC_API_KEY is not set in the function environment');
+      throw new HttpsError('internal', 'Anthropic API key is not configured. Generation cannot proceed.');
+    }
+    const anthropic = new AnthropicClient({ apiKey });
 
     const { deckId, inputText, parsedFileText, sourceDocumentName, slideCount, templateStyle, brandVoice, templatePreset } = request.data;
     const userInstruction = compactText(inputText, MAX_INPUT_CHARS);
     const sourceMaterial = cleanSourceMaterial(parsedFileText, MAX_SOURCE_CHARS);
     const content = [userInstruction, sourceMaterial].filter(Boolean).join('\n\n');
+    if (!deckId) throw new HttpsError('invalid-argument', 'No deckId was provided for generation.');
     if (!content) throw new HttpsError('invalid-argument', 'No content was provided for deck generation.');
     const count = resolveSlideCount(slideCount, content);
+
+    logger.info('generateDeck started', {
+      deckId,
+      uid: request.auth.uid,
+      requestedSlides: count,
+      templateStyle: templateStyle || 'Professional',
+      inputChars: userInstruction.length,
+      sourceChars: sourceMaterial.length,
+      contentChars: content.length,
+    });
 
     const voiceGuide = {
       professional: 'Clear, confident, executive-ready. Plain language, strong prioritisation, no jargon.',
@@ -301,9 +439,16 @@ You must be faithful to the source. If a fact is not in the source, do not add i
 
     let slides = [];
     try {
+      await db.collection('decks').doc(deckId).set({
+        userId: request.auth.uid,
+        status: 'processing',
+        stage: 'calling-anthropic',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true }).catch(() => {});
+
       const msg = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: Math.min(8192, Math.max(4096, count * 520)),
+        max_tokens: Math.min(4000, Math.max(2400, count * 300)),
         temperature: 0.35,
         system: systemPrompt,
         messages: [{ role: 'user', content: prompt }],
@@ -314,39 +459,56 @@ You must be faithful to the source. If a fact is not in the source, do not add i
         .join('\n')
         .trim();
       slides = normalizeSlides(extractJsonArray(raw), count);
+      logger.info('generateDeck anthropic response parsed', {
+        deckId,
+        rawChars: raw.length,
+        normalizedSlides: slides.length,
+        requestedSlides: count,
+      });
+      await db.collection('decks').doc(deckId).set({
+        stage: 'received-anthropic-response',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true }).catch(() => {});
       if (slides.length < Math.min(count, 5)) {
         throw new Error('Model returned too few usable slides');
       }
     } catch (e) {
+      logger.error('generateDeck failed', {
+        deckId,
+        message: e.message,
+        name: e.name,
+      });
+      if (deckId) {
+        await db.collection('decks').doc(deckId).set({
+          userId: request.auth.uid,
+          status: 'error',
+          error: 'Generation failed: ' + e.message,
+          stage: 'generation-error',
+          completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true }).catch(() => {});
+      }
       throw new HttpsError('internal', 'Generation failed: ' + e.message);
     }
 
-    const batch = db.batch();
-    slides.forEach((s, i) => {
-      const ref = db.collection('decks').doc(deckId).collection('slides').doc();
-      batch.set(ref, {
-        index: i,
-        title: s.title || '',
-        bullets: s.bullets || [],
-        layout: s.layout || 'standard',
-        contentType: s.contentType || null,
-        kicker: s.kicker || null,
-        speakerNotes: s.speakerNotes || '',
-        imagePrompt: s.imagePrompt || '',
-      });
+    const persisted = await persistGeneratedSlides({
+      deckId,
+      uid: request.auth.uid,
+      slides,
     });
-    await batch.commit();
-    await db.collection('decks').doc(deckId).update({ status: 'ready', slideCount: slides.length });
 
-    return { slides };
+    return { slides, persisted };
   }
 );
 
 // ── agentEdit ─────────────────────────────────────────────────
 exports.agentEdit = onCall(
-  { timeoutSeconds: 60, memory: '256MiB', region: 'us-central1' },
+  callableOptions({ timeoutSeconds: 60, memory: '256MiB', secrets: ['ANTHROPIC_API_KEY'] }),
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new HttpsError('internal', 'Anthropic API key is not configured.');
+    const anthropic = new AnthropicClient({ apiKey });
 
     const { slideTitle, bullets, userMessage, history = [] } = request.data;
 
@@ -387,7 +549,7 @@ Current slide: title="${slideTitle}", bullets=${JSON.stringify(bullets)}`;
 
 // ── parseDocx ─────────────────────────────────────────────────
 exports.parseDocx = onCall(
-  { timeoutSeconds: 30, memory: '256MiB', region: 'us-central1' },
+  callableOptions({ timeoutSeconds: 30, memory: '256MiB' }),
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
     const { base64 } = request.data;
@@ -399,7 +561,7 @@ exports.parseDocx = onCall(
 
 // ── parsePptx ─────────────────────────────────────────────────
 exports.parsePptx = onCall(
-  { timeoutSeconds: 30, memory: '256MiB', region: 'us-central1' },
+  callableOptions({ timeoutSeconds: 30, memory: '256MiB' }),
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
     const { base64 } = request.data;

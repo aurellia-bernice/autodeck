@@ -13,10 +13,10 @@ An internal Quidax tool that turns raw notes or uploaded documents into fully br
 | UI Framework | React 18.3.1 (CDN, UMD) | No build step |
 | Transpiler | Babel Standalone 7.29.0 | JSX transformed in the browser at runtime |
 | Styling | Inline React styles only | Design tokens in `tokens.jsx` |
-| Auth | Firebase Auth (compat SDK v10.12.2) | Email/password + Google SSO, @quidax.com restricted |
+| Auth | Firebase Auth (compat SDK v10.12.2) | Email/password + Google SSO, @quidax.com restricted, popup + redirect fallback |
 | Database | Cloud Firestore (compat SDK v10.12.2) | Decks, slides, brand config |
 | File Storage | Firebase Storage (compat SDK v10.12.2) | Uploaded source documents |
-| Backend | Firebase Cloud Functions v2 (Node.js) | AI generation, DOCX parsing |
+| Backend | Firebase Cloud Functions v2 (Node.js) | AI generation, agent edits, DOCX/PPTX parsing |
 | AI Model | Claude via Anthropic SDK | `generateDeck` and `agentEdit` functions |
 | PPTX Export | pptxgenjs 3.12.0 (CDN) | Working — downloads `.pptx` |
 | PNG Export | html2canvas 1.4.1 (CDN) | Working — captures slide canvas |
@@ -42,8 +42,9 @@ autodeck/
     ├── template-presets.jsx        # Built-in template recipes until source PPTX/templates are available
     ├── firebase-config.js          # ⚠ Gitignored — Firebase project credentials
     ├── firebase-config.example.js  # Template for firebase-config.js
+    ├── storage.cors.json           # Optional original-source upload CORS policy
     ├── functions/
-    │   └── index.js                # Cloud Functions: generateDeck, agentEdit, parseDocx
+    │   └── index.js                # Cloud Functions: generateDeck, agentEdit, parseDocx, parsePptx
     └── components/
         ├── motion.jsx              # Shared animation helpers
         ├── tweaks-panel.jsx        # Dev overlay: dark mode toggle, screen jump (localStorage)
@@ -97,9 +98,9 @@ Settings path:
 - **Screen router** — `screen` state drives which component renders
 - **Auth** — `onAuthStateChanged` listener; enforces @quidax.com domain; sets `currentUser`
 - **Admin gate** — `isAdminUser(user)` checks email against `ADMIN_EMAILS` array (`['admin@quidax.com']`)
-- **Generation orchestration** — `handleGenerate` writes deck to Firestore, calls `generateDeck` Cloud Function, handles timeout (105s), falls back to a client-side draft on failure
+- **Generation orchestration** — `handleGenerate` writes deck to Firestore, calls `generateDeck` Cloud Function with an extended callable timeout, watches the deck document for `ready` / `error`, and only promotes Firebase-generated slides to preview
 - **Brand config** — loads `config/brand` from Firestore on mount; passes `brandConfig` to SlideGenerator and AdminScreen; merges (not replaces) on save via `onBrandSave={(cfg) => setBrandConfig(p => ({ ...p, ...cfg }))}`
-- **`slideshowSlides`** — normalised slides array passed into SlideGenerator; set from both AI response and client-side fallback
+- **`slideshowSlides`** — normalised slides array passed into SlideGenerator; set only from Firebase/Anthropic output during the real generation flow
 
 ### `HomeScreenA` (active generate form)
 - User inputs: free-text textarea, drag-and-drop file upload, slide count picker (5/8/10/15/Auto), template style (Professional / Minimal / Bold / Fun)
@@ -116,11 +117,11 @@ Settings path:
 - Props: `config`, `generationStatus` (`'idle' | 'loading' | 'ready' | 'error'`), `generationError`, `onComplete`
 - 4 animated phases with a simulated progress bar and streaming slide thumbnail skeletons
 - Waits for `generationStatus` to leave `'loading'` before completing — stays open until AI returns
-- On error: shows the error message, still calls `onComplete` (fallback slides shown in PreviewScreen)
+- On error: shows the error message and completes into a no-slides error state; local drafts are not promoted as generated decks
 
 ### `PreviewScreen`
-- Receives `slides` (AI-generated or client fallback) and `config`
-- Builds a local draft from `config` if slides are empty
+- Receives `slides` from Firebase/Anthropic output and `config`
+- Uses local/demo slides only when opened directly in edit-preview mode; real generation errors show an explicit no-slides state
 - Inline card editing: click pencil → edit title/bullets in place
 - Add / delete / reorder slides
 - "Open slideshow" passes final slides array up to `app.jsx` → saves to Firestore → navigates to SlideGenerator
@@ -174,7 +175,11 @@ Four tabs — all changes persist to `config/brand` in Firestore (with `{ merge:
 ### `LoginScreen`
 - Modes: sign in, sign up, forgot password
 - Real Firebase Auth: `signInWithEmailAndPassword`, `createUserWithEmailAndPassword`, `GoogleAuthProvider`
-- `@quidax.com` domain enforced client-side before any Firebase call
+- Google SSO uses popup first, then redirect fallback when the browser blocks or does not support popups
+- Google SSO errors are mapped to actionable UI copy (`unauthorized-domain`, `operation-not-allowed`, popup blocked, storage blocked, network failure, provider conflicts)
+- Password accounts that hit `auth/account-exists-with-different-credential` can sign in once with password to link the pending Google credential
+- `@quidax.com` domain enforced client-side before any Firebase call and again after Google returns a user
+- Local OAuth testing should use `http://localhost:<port>/`; `127.0.0.1` may need to be added separately in Firebase Auth authorized domains
 - Forgot password: `sendPasswordResetEmail` (sender display name configurable in Firebase Console → Authentication → Templates)
 - Sign up sets `displayName` via `updateProfile`
 
@@ -194,11 +199,11 @@ Four tabs — all changes persist to `config/brand` in Firestore (with `{ merge:
 
 ### `generateDeck`
 - **Trigger:** HTTPS callable, auth required
-- **Input:** `{ deckId, inputText, parsedFileText, slideCount, templateStyle, brandVoice }`
-- **Process:** builds a structured prompt with voice guidance → calls Claude (`claude-sonnet-4-5` or similar) → parses JSON array response → normalises slides → updates Firestore deck document
-- **Timeout:** 120s function / 105s client-side guard
+- **Input:** `{ deckId, inputText, parsedFileText, sourceDocumentName, slideCount, templateStyle, brandVoice, templatePreset }`
+- **Process:** cleans source text, builds a structured prompt with preset + voice guidance → calls Claude → parses JSON array response → normalises and deduplicates slides → writes slides to both `decks/{deckId}.slides` and `decks/{deckId}/slides`
+- **Timeout:** 300s function / 290s browser callable timeout; the UI shows a delay notice after 45s and hard-stops after 300s
 - **Voice mapping:** `professional` / `bold` / `approachable` / `data` → prompt instruction strings
-- **Output:** `{ slides: [{ title, bullets[] }] }`
+- **Output:** `{ slides: [{ title, bullets[] }], persisted: boolean }`
 
 ### `agentEdit`
 - **Trigger:** HTTPS callable, auth required
@@ -210,6 +215,12 @@ Four tabs — all changes persist to `config/brand` in Firestore (with `{ merge:
 - **Trigger:** HTTPS callable, auth required
 - **Input:** `{ base64 }` — base64-encoded `.docx` file
 - **Process:** mammoth converts DOCX → plain text
+- **Output:** `{ text }`
+
+### `parsePptx`
+- **Trigger:** HTTPS callable, auth required
+- **Input:** `{ base64 }` — base64-encoded `.pptx` file
+- **Process:** placeholder parser for future template/source extraction
 - **Output:** `{ text }`
 
 ---
@@ -262,8 +273,10 @@ Four tabs — all changes persist to `config/brand` in Firestore (with `{ merge:
 | Rule | Implementation |
 |---|---|
 | Only @quidax.com emails | Enforced in LoginScreen before Firebase call + in `onAuthStateChanged` (signs out if domain wrong) |
+| Google SSO | Popup first, redirect fallback, specific Firebase error messages, password-account provider linking |
+| Local OAuth | Use `localhost`, not `127.0.0.1`, unless `127.0.0.1` is also authorized in Firebase Auth settings |
 | Admin access | `ADMIN_EMAILS = ['admin@quidax.com']` in `app.jsx` — email comparison |
-| Cloud Functions | All three functions check `request.auth` and throw `unauthenticated` if missing |
+| Cloud Functions | All callable functions check `request.auth` and throw `unauthenticated` if missing |
 | Password reset sender name | Set in Firebase Console → Authentication → Templates → Password reset → From name |
 
 ---

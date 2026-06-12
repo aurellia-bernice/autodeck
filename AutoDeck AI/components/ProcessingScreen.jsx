@@ -2,7 +2,7 @@
 // ProcessingScreen — make it feel earned. Live wire-up: the deck
 // builds itself. Slide-thumb skeletons stream in one by one.
 // ============================================================
-const ProcessingScreen = ({ config, generationStatus = 'ready', generationError, onComplete, tweaks }) => {
+const ProcessingScreen = ({ config, generationStatus = 'ready', generationError, activeDeckId, generationTrace, onComplete, tweaks }) => {
   const T = qxTheme(tweaks?.darkMode);
   const dark = tweaks?.darkMode;
   const [phase, setPhase] = React.useState(0);
@@ -10,6 +10,7 @@ const ProcessingScreen = ({ config, generationStatus = 'ready', generationError,
   const [streamedSlides, setStreamedSlides] = React.useState(0);
   const [logLines, setLogLines] = React.useState([]);
   const [animationDone, setAnimationDone] = React.useState(false);
+  const [now, setNow] = React.useState(Date.now());
   const statusRef = React.useRef(generationStatus);
   const completedRef = React.useRef(false);
 
@@ -39,6 +40,31 @@ const ProcessingScreen = ({ config, generationStatus = 'ready', generationError,
   const safePhase = Math.min(phase, phases.length - 1);
   const currentPhase = phases[safePhase];
   const waitingForGeneration = generationStatus === 'loading';
+  const loadingMessage = generationError || 'Waiting for AI output.';
+  const traceDeckId = activeDeckId || generationTrace?.deckId || '';
+  const traceStage = generationTrace?.stage || (waitingForGeneration ? 'loading' : generationStatus);
+  const traceLabels = {
+    starting: 'Starting request',
+    'deck-created': 'Deck created',
+    'calling-generateDeck': 'Calling generateDeck',
+    'callable-returned': 'Function returned',
+    'firestore-ready': 'Firestore ready',
+    'firestore-error': 'Firestore error',
+    'still-waiting': 'Still waiting',
+    loading: 'Waiting',
+    ready: 'Ready',
+    error: 'Error',
+  };
+  const traceLabel = traceLabels[traceStage] || traceStage;
+  const elapsedSeconds = generationTrace?.startedAt
+    ? Math.max(0, Math.floor((now - generationTrace.startedAt) / 1000))
+    : null;
+  const remainingSeconds = generationTrace?.deadlineAt
+    ? Math.max(0, Math.ceil((generationTrace.deadlineAt - now) / 1000))
+    : null;
+  const deadlineLabel = elapsedSeconds === null
+    ? ''
+    : ` · ${elapsedSeconds}s elapsed${remainingSeconds !== null ? ` · ${remainingSeconds}s left` : ''}`;
 
   const finishProcessing = React.useCallback(() => {
     if (completedRef.current) return;
@@ -54,6 +80,12 @@ const ProcessingScreen = ({ config, generationStatus = 'ready', generationError,
       finishProcessing();
     }
   }, [animationDone, finishProcessing, generationStatus]);
+
+  React.useEffect(() => {
+    if (!waitingForGeneration || !generationTrace?.startedAt) return undefined;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [generationTrace?.startedAt, waitingForGeneration]);
 
   React.useEffect(() => {
     let elapsed = 0;
@@ -131,7 +163,7 @@ const ProcessingScreen = ({ config, generationStatus = 'ready', generationError,
           <span style={{ color: QX.lime, textShadow: `0 0 24px ${QX.lime}` }}>…</span>
         </h1>
         <p style={{ ...qxMotion.fadeUp(140), fontSize: 17, color: T.inkDim, margin: '0 0 48px', maxWidth: 540 }}>
-          {waitingForGeneration ? `${currentPhase.label}. Waiting for AI output.` : generationStatus === 'error' ? (generationError || 'Using a draft from your content.') : `${currentPhase.label}.`}
+          {waitingForGeneration ? `${currentPhase.label}. ${loadingMessage}` : generationStatus === 'error' ? (generationError || 'AI generation did not complete.') : `${currentPhase.label}.`}
         </p>
 
         {/* Slide thumbs streaming in */}
@@ -262,8 +294,8 @@ const ProcessingScreen = ({ config, generationStatus = 'ready', generationError,
 
         {/* Footer config strip */}
         <div style={{ ...qxMotion.fadeUp(320), marginTop: 32, fontFamily: qxType.mono, fontSize: 10.5, letterSpacing: '0.10em', textTransform: 'uppercase', color: T.inkMute, display: 'flex', justifyContent: 'space-between' }}>
-          <span>{config?.templateStyle || 'Professional'} · {targetSlides} slides</span>
-          <span>{waitingForGeneration ? "Waiting for generated slides" : generationStatus === 'error' ? 'Context draft ready' : 'Generated slides ready'}</span>
+          <span>{config?.templateStyle || 'Professional'} · {targetSlides} slides{traceDeckId ? ` · Deck ${String(traceDeckId).slice(0, 8)}` : ''}</span>
+          <span>{waitingForGeneration ? (generationError ? 'Still generating in Firebase' : 'Waiting for generated slides') : generationStatus === 'error' ? 'Generation did not complete' : 'Generated slides ready'}{traceLabel ? ` · ${traceLabel}` : ''}{deadlineLabel}</span>
         </div>
       </div>
     </div>
