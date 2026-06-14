@@ -150,14 +150,72 @@ const resolveSlideCount = (slideCount, content) => {
   return 15;
 };
 
-const extractJsonArray = (raw) => {
+const extractJsonArrayText = (raw) => {
   const text = String(raw || '').trim();
   const jsonStart = text.indexOf('[');
   const jsonEnd = text.lastIndexOf(']') + 1;
   if (jsonStart < 0 || jsonEnd <= jsonStart) {
     throw new Error('Model did not return a JSON array');
   }
-  return JSON.parse(text.slice(jsonStart, jsonEnd));
+  return text.slice(jsonStart, jsonEnd);
+};
+
+const parseJsonArrayText = (jsonText) => {
+  const parsed = JSON.parse(jsonText);
+  if (!Array.isArray(parsed)) throw new Error('Model JSON was not an array');
+  return parsed;
+};
+
+const repairJsonArrayText = (jsonText) => {
+  const knownKeys = [
+    'title',
+    'slideType',
+    'layout',
+    'visualization',
+    'needsIcons',
+    'needsChart',
+    'needsImage',
+    'contentType',
+    'kicker',
+    'bullets',
+    'components',
+    'storytellingNote',
+    'speakerNotes',
+    'imagePrompt',
+    'type',
+    'label',
+    'icon',
+    'value',
+    'detail',
+    'items',
+    'level',
+  ].join('|');
+  const knownKeyLookahead = new RegExp(`(["}\\]\\d]|true|false|null)\\s+(?="(?:${knownKeys})"\\s*:)`, 'g');
+
+  return String(jsonText || '')
+    .replace(/^\uFEFF/, '')
+    .replace(/,\s*([}\]])/g, '$1')
+    .replace(/}\s*{/g, '},{')
+    .replace(/]\s*{/g, '],{')
+    .replace(knownKeyLookahead, '$1,');
+};
+
+const extractJsonArray = (raw) => {
+  const jsonText = extractJsonArrayText(raw);
+  try {
+    return parseJsonArrayText(jsonText);
+  } catch (firstError) {
+    const repairedText = repairJsonArrayText(jsonText);
+    if (repairedText !== jsonText) {
+      try {
+        return parseJsonArrayText(repairedText);
+      } catch (repairError) {
+        firstError.repairError = repairError.message;
+      }
+    }
+    firstError.jsonChars = jsonText.length;
+    throw firstError;
+  }
 };
 
 const trimWords = (value, maxWords) => String(value || '')
@@ -272,6 +330,69 @@ const normalizeSlides = (slides, count) => {
   return SlideIntelligence.enhanceSlides(uniqueSlides
     .map(({ index, ...slide }) => slide)
     .slice(0, count));
+};
+
+const generationMaxTokens = (count) => Math.min(8000, Math.max(3200, count * 550));
+
+const repairGeneratedSlidesJson = async ({ anthropic, raw, count, parseError }) => {
+  const jsonText = extractJsonArrayText(raw);
+  const msg = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: generationMaxTokens(count),
+    temperature: 0,
+    system: [
+      'You repair JSON for AutoDeck AI.',
+      'Return only one valid JSON array.',
+      'Do not add markdown, comments, or explanatory text.',
+      'Preserve the slide content and order as much as possible.',
+    ].join(' '),
+    messages: [{
+      role: 'user',
+      content: [
+        'The JSON array below was generated for presentation slides but failed to parse.',
+        `Parser error: ${parseError.message}`,
+        'Repair only the JSON syntax. If a field is incomplete, close it cleanly without inventing unsupported facts.',
+        'Return ONLY the repaired JSON array.',
+        '',
+        jsonText.slice(0, 45000),
+      ].join('\n'),
+    }],
+  });
+
+  return msg.content
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text)
+    .join('\n')
+    .trim();
+};
+
+const parseGeneratedSlides = async ({ anthropic, raw, count, deckId }) => {
+  try {
+    return {
+      slides: normalizeSlides(extractJsonArray(raw), count),
+      repaired: false,
+      repairRawChars: 0,
+    };
+  } catch (parseError) {
+    logger.warn('generateDeck response parse failed; attempting repair', {
+      deckId,
+      message: parseError.message,
+      repairError: parseError.repairError || null,
+      rawChars: raw.length,
+      jsonChars: parseError.jsonChars || null,
+    });
+
+    try {
+      const repairRaw = await repairGeneratedSlidesJson({ anthropic, raw, count, parseError });
+      return {
+        slides: normalizeSlides(extractJsonArray(repairRaw), count),
+        repaired: true,
+        repairRawChars: repairRaw.length,
+      };
+    } catch (repairError) {
+      throw new Error(`Model returned invalid JSON and automatic repair failed: ${repairError.message}`);
+    }
+  }
 };
 
 const slideDocumentId = (index) => `slide-${String(index + 1).padStart(2, '0')}`;
@@ -525,8 +646,8 @@ You must be faithful to the source. If a fact is not in the source, do not add i
 
       const msg = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: Math.min(4000, Math.max(2400, count * 300)),
-        temperature: 0.35,
+        max_tokens: generationMaxTokens(count),
+        temperature: 0.25,
         system: systemPrompt,
         messages: [{ role: 'user', content: prompt }],
       });
@@ -535,10 +656,13 @@ You must be faithful to the source. If a fact is not in the source, do not add i
         .map((block) => block.text)
         .join('\n')
         .trim();
-      slides = normalizeSlides(extractJsonArray(raw), count);
+      const parsed = await parseGeneratedSlides({ anthropic, raw, count, deckId });
+      slides = parsed.slides;
       logger.info('generateDeck anthropic response parsed', {
         deckId,
         rawChars: raw.length,
+        repaired: parsed.repaired,
+        repairRawChars: parsed.repairRawChars,
         normalizedSlides: slides.length,
         requestedSlides: count,
       });
