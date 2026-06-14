@@ -183,14 +183,14 @@ const LoginScreen = ({ onLogin, authError, onClearAuthError }) => {
       if (getFirebaseErrorCode(err) === 'auth/account-exists-with-different-credential') {
         const credential = getGoogleCredentialFromError(err);
         const credentialEmail = getFirebaseErrorEmail(err);
-        if (credential) {
+        if (credential && credentialEmail) {
           setPendingGoogleCredential(credential);
           setPendingGoogleEmail(credentialEmail);
+          setEmail(credentialEmail);
         }
-        if (credentialEmail) setEmail(credentialEmail);
         setLoading(false);
         setError(
-          credential
+          credential && credentialEmail
             ? 'A password account already exists for this email. Enter your password and sign in once to connect Google.'
             : googleSignInErrorMessage(err)
         );
