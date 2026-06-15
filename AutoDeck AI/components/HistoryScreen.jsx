@@ -2,16 +2,6 @@
 // HistoryScreen — like a library, not a table.
 // Featured deck up top, masonry of past decks below, quick stats strip.
 // ============================================================
-const SEED_DECKS = [
-  { id: 's1', title: 'Q2 Sales Strategy Overview',  slides: 10, template: 'Professional', date: '2026-05-03', size: '2.4 MB', author: 'Adaeze O.', favourite: true },
-  { id: 's2', title: 'Product Roadmap H2 2026',      slides: 8,  template: 'Bold',         date: '2026-05-02', size: '1.8 MB', author: 'Tunde A.',  favourite: false },
-  { id: 's3', title: 'HR Onboarding — New Hires',    slides: 15, template: 'Minimal',      date: '2026-04-30', size: '3.1 MB', author: 'Chiamaka I.', favourite: true },
-  { id: 's4', title: 'Engineering All Hands April',  slides: 12, template: 'Professional', date: '2026-04-28', size: '2.0 MB', author: 'Femi K.',   favourite: false },
-  { id: 's5', title: 'Investor Update — Series B',   slides: 10, template: 'Professional', date: '2026-04-22', size: '2.7 MB', author: 'Adaeze O.', favourite: true },
-  { id: 's6', title: 'Brand Guidelines 2026',        slides: 20, template: 'Bold',         date: '2026-04-18', size: '4.2 MB', author: 'Design',    favourite: false },
-  { id: 's7', title: 'Customer Success Stories Q1',  slides: 8,  template: 'Minimal',      date: '2026-04-10', size: '1.5 MB', author: 'Sade B.',   favourite: false },
-  { id: 's8', title: 'Operations Review March',      slides: 10, template: 'Fun',    date: '2026-03-31', size: '2.2 MB', author: 'Tunde A.',  favourite: false },
-];
 
 const HistoryScreen = ({ tweaks, currentUser }) => {
   const T = qxTheme(tweaks?.darkMode);
@@ -27,16 +17,21 @@ const HistoryScreen = ({ tweaks, currentUser }) => {
     Fun:    ['#0F0A24', '#312E81', '#A5B4FC'],
   };
 
-  const [decks, setDecks] = React.useState(SEED_DECKS);
+  const [decks, setDecks] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
-    if (!window.firebaseDb || !currentUser?.uid) return;
+    if (!window.firebaseDb || !currentUser?.uid) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     const unsub = window.firebaseDb
       .collection('decks')
       .where('userId', '==', currentUser.uid)
       .orderBy('createdAt', 'desc')
       .onSnapshot((snap) => {
-        if (snap.empty) return;
+        setLoading(false);
         const live = snap.docs.map((doc) => {
           const d = doc.data();
           const ts = d.createdAt?.toDate?.();
@@ -52,7 +47,10 @@ const HistoryScreen = ({ tweaks, currentUser }) => {
           };
         });
         setDecks(live);
-      }, () => {});
+      }, (err) => {
+        setLoading(false);
+        console.error('[HistoryScreen] Firestore query failed:', err?.message || err);
+      });
     return () => unsub();
   }, [currentUser?.uid]);
 
@@ -199,7 +197,19 @@ const HistoryScreen = ({ tweaks, currentUser }) => {
         </div>
       </div>
 
-      {filtered.length === 0 && (
+      {loading && (
+        <div style={{ textAlign: 'center', padding: '80px 0', color: T.inkMute, fontSize: 14 }}>
+          Loading your library…
+        </div>
+      )}
+
+      {!loading && decks.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '80px 0', color: T.inkMute, fontSize: 14 }}>
+          No decks yet — generate your first one to see it here.
+        </div>
+      )}
+
+      {!loading && decks.length > 0 && filtered.length === 0 && (
         <div style={{ textAlign: 'center', padding: '80px 0', color: T.inkMute, fontSize: 14 }}>
           Nothing in the library matches.
         </div>

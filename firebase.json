@@ -1,4 +1,8 @@
 {
+  "firestore": {
+    "rules": "AutoDeck AI/firestore.rules",
+    "indexes": "AutoDeck AI/firestore.indexes.json"
+  },
   "functions": [
     {
       "source": "AutoDeck AI/functions",
