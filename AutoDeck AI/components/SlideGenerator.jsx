@@ -63,6 +63,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
   const [imgQuery, setImgQuery] = React.useState('');
   const [imgResults, setImgResults] = React.useState([]);
   const [imgGenerating, setImgGenerating] = React.useState(false);
+  const [imgPage, setImgPage] = React.useState(1);
   const [showMenu, setShowMenu] = React.useState(false);
   const [showThemePop, setShowThemePop] = React.useState(false);
   const [showGrid, setShowGrid] = React.useState(false);
@@ -821,7 +822,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
   });
 
   // ─── image generation logic ──────────────────────────────────
-  const handleGeminiImageGenerate = async () => {
+  const fetchImages = async (page) => {
     const q = imgQuery.trim();
     if (!q || imgGenerating) return;
     setImgGenerating(true);
@@ -829,20 +830,22 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
 
     try {
       const searchImagesFn = firebase.app().functions('us-central1').httpsCallable('searchImages', { timeout: 30000 });
-      const { data } = await searchImagesFn({ query: q, count: 6, orientation: 'landscape' });
+      const { data } = await searchImagesFn({ query: q, count: 6, orientation: 'landscape', page });
       const photos = data?.images || [];
       if (photos.length) {
         setImgResults(photos);
       } else {
         showToast('No photos found — try a different prompt', 'info');
       }
-
     } catch (err) {
       showToast(err.message || 'Image search failed', 'info');
     } finally {
       setImgGenerating(false);
     }
   };
+
+  const handleGeminiImageGenerate = () => { setImgPage(1); fetchImages(1); };
+  const handleRegenerateImages    = () => { const next = imgPage + 1; setImgPage(next); fetchImages(next); };
 
   // ─── agent logic ─────────────────────────────────────────
   const openAgent = (idx) => {
@@ -1789,12 +1792,24 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
                     </div>
                   )}
                   {imgResults.length > 0 && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                      {imgResults.map((img) => (
-                        <button key={img.id} onClick={() => applyImage(img.src)} style={{ padding: 0, border: slideImages[currentIndex] === img.src ? '1px solid rgba(212,255,63,0.55)' : '1px solid rgba(246,241,251,0.08)', borderRadius: 7, overflow: 'hidden', cursor: 'pointer', aspectRatio: '16/9', background: '#0a0118' }}>
-                          <img src={img.thumb} alt={img.alt || ''} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                        </button>
-                      ))}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                        {imgResults.map((img) => (
+                          <button key={img.id} onClick={() => applyImage(img.src)} style={{ padding: 0, border: slideImages[currentIndex] === img.src ? '1px solid rgba(212,255,63,0.55)' : '1px solid rgba(246,241,251,0.08)', borderRadius: 7, overflow: 'hidden', cursor: 'pointer', aspectRatio: '16/9', background: '#0a0118' }}>
+                            <img src={img.thumb} alt={img.alt || ''} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        onClick={handleRegenerateImages}
+                        disabled={imgGenerating}
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(246,241,251,0.12)', background: 'rgba(246,241,251,0.05)', color: imgGenerating ? 'rgba(246,241,251,0.3)' : 'rgba(246,241,251,0.65)', fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', cursor: imgGenerating ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, transition: `all 140ms ${qxEase}` }}
+                        onMouseEnter={(e) => { if (!imgGenerating) e.currentTarget.style.background = 'rgba(246,241,251,0.10)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(246,241,251,0.05)'; }}>
+                        {imgGenerating
+                          ? <><svg width="11" height="11" viewBox="0 0 11 11" fill="none" style={{ animation: 'spin 0.9s linear infinite' }}><circle cx="5.5" cy="5.5" r="4" stroke="rgba(246,241,251,0.3)" strokeWidth="1.4" /><path d="M5.5 1.5A4 4 0 0 1 9.5 5.5" stroke="rgba(246,241,251,0.65)" strokeWidth="1.4" strokeLinecap="round" /></svg>Finding…</>
+                          : <><svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M9 5.5A3.5 3.5 0 1 1 5.5 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /><path d="M5.5 2l1.5-1.5v3L5.5 2z" fill="currentColor" /></svg>Regenerate</>}
+                      </button>
                     </div>
                   )}
                 </div>

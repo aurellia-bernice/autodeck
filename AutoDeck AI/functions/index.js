@@ -878,7 +878,7 @@ exports.searchImages = onCall(
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
 
-    const { query, count = 6, orientation = 'landscape' } = request.data || {};
+    const { query, count = 6, orientation = 'landscape', page = 1 } = request.data || {};
     if (!query || !String(query).trim()) throw new HttpsError('invalid-argument', 'query is required');
 
     const unsplashKey = process.env.UNSPLASH_ACCESS_KEY;
@@ -921,6 +921,7 @@ exports.searchImages = onCall(
       query: searchQuery,
       orientation: imageOrientation,
       per_page: String(perPage),
+      page: String(Math.max(1, parseInt(page, 10) || 1)),
       client_id: unsplashKey,
     });
 
