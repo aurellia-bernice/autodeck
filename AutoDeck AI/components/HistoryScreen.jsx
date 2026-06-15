@@ -13,7 +13,7 @@ const SEED_DECKS = [
   { id: 's8', title: 'Operations Review March',      slides: 10, template: 'Fun',          date: '2026-03-31', size: '2.2 MB', author: 'Tunde A.',  favourite: false },
 ];
 
-const HistoryScreen = ({ tweaks, currentUser }) => {
+const HistoryScreen = ({ tweaks, currentUser, onOpenDeck }) => {
   const T = qxTheme(tweaks?.darkMode);
   const dark = tweaks?.darkMode;
   const [search, setSearch] = React.useState('');
@@ -262,7 +262,7 @@ const HistoryScreen = ({ tweaks, currentUser }) => {
                   {featured.slides}-slide {featured.template.toLowerCase()} deck by {featured.author}. Last edited {fmt(featured.date)}.
                 </p>
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button style={{
+                  <button onClick={() => onOpenDeck?.(featured)} style={{
                     padding: '12px 22px', borderRadius: qxRadius.full,
                     border: 'none', background: QX.lime, color: '#1A0530',
                     fontFamily: qxType.body, fontSize: 14, fontWeight: 600,
@@ -275,7 +275,7 @@ const HistoryScreen = ({ tweaks, currentUser }) => {
                     <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><polygon points="3,2 12,7 3,12" fill="currentColor"/></svg>
                     Open
                   </button>
-                  <button style={{
+                  <button onClick={() => onOpenDeck?.(featured)} style={{
                     padding: '12px 18px', borderRadius: qxRadius.full,
                     border: `1px solid ${T.border}`, background: 'transparent', color: T.inkDim,
                     fontFamily: qxType.body, fontSize: 13.5, fontWeight: 500,
@@ -321,7 +321,7 @@ const HistoryScreen = ({ tweaks, currentUser }) => {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 24 }}>
                 {rest.map((d, i) => (
-                  <div key={d.id} style={{ ...qxMotion.fadeUp(160 + i * 40) }}>
+                  <div key={d.id} style={{ ...qxMotion.fadeUp(160 + i * 40) }} onClick={() => onOpenDeck?.(d)}>
                     <DeckCover deck={d} />
                     <div style={{ marginTop: 12 }}>
                       <div style={{ fontFamily: qxType.display, fontSize: 14, fontWeight: 500, color: T.ink, letterSpacing: '-0.01em', marginBottom: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.25 }}>
@@ -350,6 +350,7 @@ const HistoryScreen = ({ tweaks, currentUser }) => {
               cursor: 'pointer', transition: `background 140ms ${qxEase}`,
               ...qxMotion.fadeUp(40 + i * 20),
             }}
+              onClick={() => onOpenDeck?.(d)}
               onMouseEnter={e => e.currentTarget.style.background = T.ghostBg}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
               <div style={{ fontFamily: qxType.display, fontSize: 28, fontWeight: 500, color: T.inkFaint, letterSpacing: '-0.03em', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>

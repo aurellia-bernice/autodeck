@@ -418,6 +418,22 @@ const App = () => {
     setScreen(dest);
   };
 
+  const handleOpenDeckFromHistory = async (deck) => {
+    if (!window.firebaseDb || !currentUser || String(deck.id).startsWith('s')) return;
+    try {
+      const deckRef = window.firebaseDb.collection('decks').doc(deck.id);
+      const slides = await readGeneratedSlides(deckRef, deck.template);
+      if (!slides.length) return;
+      setDeckConfig({ templateStyle: deck.template, inputText: deck.title });
+      setSlideshowSlides(slides);
+      activeDeckIdRef.current = deck.id;
+      setActiveDeckId(deck.id);
+      setScreen('slideshow');
+    } catch (err) {
+      console.error('[History] open deck failed:', err);
+    }
+  };
+
   return (
     <div style={{
       display: 'flex',
@@ -510,7 +526,7 @@ const App = () => {
           />
         )}
         {screen === 'history' && (
-          <HistoryScreen tweaks={tweaks} currentUser={currentUser} />
+          <HistoryScreen tweaks={tweaks} currentUser={currentUser} onOpenDeck={handleOpenDeckFromHistory} />
         )}
         {screen === 'changePassword' && (
           <ChangePasswordScreen tweaks={tweaks} onBack={() => setScreen('settings')} />
