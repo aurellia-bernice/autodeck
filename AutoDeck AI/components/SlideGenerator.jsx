@@ -821,7 +821,6 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
   });
 
   // ─── image generation logic ──────────────────────────────────
-  // Gemini 2.0 Flash refines the prompt into search keywords, then Unsplash returns real photos
   const handleGeminiImageGenerate = async () => {
     const q = imgQuery.trim();
     if (!q || imgGenerating) return;
@@ -829,39 +828,14 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     setImgResults([]);
 
     try {
-      let searchQuery = q;
-      const geminiKey = window.GEMINI_API_KEY;
-      if (geminiKey) {
-        try {
-          const gRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: `Convert this into 3 short stock-photo search keywords. Return ONLY the keywords as a comma-separated list, nothing else.\n\n"${q}"` }] }],
-                generationConfig: { temperature: 0.1, maxOutputTokens: 30 },
-              }),
-            }
-          );
-          if (gRes.ok) {
-            const gData = await gRes.json();
-            const kw = gData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-            if (kw) searchQuery = kw;
-          }
-        } catch (_) {}
+      const searchImagesFn = firebase.app().functions('us-central1').httpsCallable('searchImages', { timeout: 30000 });
+      const { data } = await searchImagesFn({ query: q, count: 6, orientation: 'landscape' });
+      const photos = data?.images || [];
+      if (photos.length) {
+        setImgResults(photos);
+      } else {
+        showToast('No photos found — try a different prompt', 'info');
       }
-
-      const unsplashKey = window.UNSPLASH_ACCESS_KEY;
-      if (!unsplashKey) { showToast('Add your Unsplash key to api-config.js', 'info'); return; }
-
-      const uRes = await fetch(
-        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(searchQuery)}&orientation=landscape&per_page=6&client_id=${unsplashKey}`
-      );
-      if (!uRes.ok) throw new Error(`Unsplash error ${uRes.status}`);
-      const uData = await uRes.json();
-      const photos = (uData.results || []).map((p, i) => ({ id: i, src: p.urls.full, thumb: p.urls.small }));
-      if (photos.length) { setImgResults(photos); } else { showToast('No photos found — try a different prompt', 'info'); }
 
     } catch (err) {
       showToast(err.message || 'Image search failed', 'info');
@@ -1818,7 +1792,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                       {imgResults.map((img) => (
                         <button key={img.id} onClick={() => applyImage(img.src)} style={{ padding: 0, border: slideImages[currentIndex] === img.src ? '1px solid rgba(212,255,63,0.55)' : '1px solid rgba(246,241,251,0.08)', borderRadius: 7, overflow: 'hidden', cursor: 'pointer', aspectRatio: '16/9', background: '#0a0118' }}>
-                          <img src={img.thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                          <img src={img.thumb} alt={img.alt || ''} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                         </button>
                       ))}
                     </div>

@@ -4,6 +4,8 @@
  */
 
 const { test, expect } = require('@playwright/test');
+const fs = require('fs');
+const path = require('path');
 const { waitForApp, goToScreen, setGenerationState } = require('./helpers');
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -388,33 +390,66 @@ test.describe('Gap 7 — Real slide generation (Cloud Function)', () => {
   });
 });
 
-// ─── GAP 8 — File parsing (PDF.js) ───────────────────────────────────────────
+// ─── Phase 4 — API keys secured on backend ──────────────────────────────────
 
-test.describe('Gap 8 — File parsing (PDF.js client-side)', () => {
-  test('pdf.js CDN script tag present in HTML', async ({ page }) => {
+test.describe('Phase 4 — API keys secured on backend', () => {
+  test('api-config globals are intentionally empty in the browser', async ({ page }) => {
+    await loadApp(page);
+    const keys = await page.evaluate(() => ({
+      gemini: window.GEMINI_API_KEY,
+      unsplash: window.UNSPLASH_ACCESS_KEY,
+    }));
+    expect(keys).toEqual({ gemini: '', unsplash: '' });
+  });
+
+  test('SlideGenerator image search calls backend searchImages only', async ({ page }) => {
+    await loadApp(page);
+    const source = await page.evaluate(() =>
+      fetch('components/SlideGenerator.jsx').then((res) => res.text())
+    );
+    expect(source).toContain("httpsCallable('searchImages'");
+    expect(source).not.toContain('window.GEMINI_API_KEY');
+    expect(source).not.toContain('window.UNSPLASH_ACCESS_KEY');
+    expect(source).not.toContain('api.unsplash.com');
+    expect(source).not.toContain('generativelanguage.googleapis.com');
+  });
+
+  test('backend searchImages callable uses Firebase secrets', () => {
+    const functionsSource = fs.readFileSync(
+      path.join(__dirname, '..', 'AutoDeck AI', 'functions', 'index.js'),
+      'utf8'
+    );
+    expect(functionsSource).toContain('exports.searchImages');
+    expect(functionsSource).toContain("secrets: ['UNSPLASH_ACCESS_KEY', 'GEMINI_API_KEY']");
+  });
+});
+
+// ─── GAP 8 — File parsing (backend parseFile) ────────────────────────────────
+
+test.describe('Gap 8 — File parsing (backend parseFile)', () => {
+  test('PDF.js script tag is not loaded in HTML', async ({ page }) => {
     await loadApp(page);
     const present = await page.evaluate(() =>
       [...document.querySelectorAll('script')].some(s => s.src?.includes('pdf.min.js') || s.src?.includes('pdf.js'))
     );
-    expect(present).toBe(true);
+    expect(present).toBe(false);
   });
 
-  test('pdfjsLib global is defined after page load', async ({ page }) => {
+  test('pdfjsLib global is not defined after page load', async ({ page }) => {
     await loadApp(page);
-    const defined = await page.waitForFunction(
-      () => typeof window.pdfjsLib !== 'undefined',
-      { timeout: 15000 }
-    ).then(() => true).catch(() => false);
-    expect(defined).toBe(true);
+    const defined = await page.evaluate(() => typeof window.pdfjsLib !== 'undefined');
+    expect(defined).toBe(false);
   });
 
-  test('pdfjsLib.getDocument is a callable function', async ({ page }) => {
+  test('HomeScreen parser is wired to backend parseFile callable', async ({ page }) => {
     await loadApp(page);
-    const callable = await page.waitForFunction(
-      () => typeof window.pdfjsLib?.getDocument === 'function',
-      { timeout: 15000 }
-    ).then(() => true).catch(() => false);
-    expect(callable).toBe(true);
+    const source = await page.evaluate(() =>
+      fetch('components/HomeScreenA.jsx').then((res) => res.text())
+    );
+    expect(source).toContain("httpsCallable('parseFile'");
+    expect(source).toContain('uploads/temp/${uid}/');
+    expect(source).not.toContain('parseDocx');
+    expect(source).not.toContain('parsePptx');
   });
 
   test('HomeScreen file input has correct accept attribute for parsing', async ({ page }) => {

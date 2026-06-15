@@ -3,6 +3,9 @@
     "rules": "AutoDeck AI/firestore.rules",
     "indexes": "AutoDeck AI/firestore.indexes.json"
   },
+  "storage": {
+    "rules": "AutoDeck AI/storage.rules"
+  },
   "functions": [
     {
       "source": "AutoDeck AI/functions",
@@ -17,7 +20,15 @@
       "**/.*",
       "**/node_modules/**",
       "screenshots/**",
+      "functions/**",
+      "firestore.rules",
+      "firestore.indexes.json",
+      "storage.rules",
+      "storage.cors.json",
+      "**/*.md",
+      "AutoDeck AI.html",
       "firebase-config.example.js",
+      "api-config.example.js",
       "**/*.sh",
       "**/*.bat",
       "**/*.ps1"

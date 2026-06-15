@@ -11,6 +11,11 @@ const primaryLimeButton = () => ({
   transition: `all 160ms ${qxEase}`,
 });
 
+const adminCallFn = (name, payload = {}, timeoutMs = 30000) => {
+  const fn = firebase.app().functions('us-central1').httpsCallable(name, { timeout: timeoutMs });
+  return fn(payload).then((result) => result.data);
+};
+
 const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
   const T = qxTheme(tweaks?.darkMode);
   const [tab, setTab] = React.useState('brand');
@@ -252,7 +257,7 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
             <button onClick={() => {
               const cfg = { colorRows, colors: colorsFromRows(colorRows), voice };
               onBrandSave && onBrandSave(cfg);
-              if (window.firebaseDb) window.firebaseDb.doc('config/brand').set(cfg, { merge: true }).catch(() => {});
+              adminCallFn('saveBrand', { brand: cfg }).catch(() => {});
               setSaved(true); setTimeout(() => setSaved(false), 2000);
             }} style={primaryLimeButton()}>
               Save palette
@@ -330,7 +335,7 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
             <button onClick={() => {
               const cfg = { displayFont: displayFont.family, bodyFont: bodyFont.family };
               onBrandSave && onBrandSave(cfg);
-              if (window.firebaseDb) window.firebaseDb.doc('config/brand').set(cfg, { merge: true }).catch(() => {});
+              adminCallFn('saveBrand', { brand: cfg }).catch(() => {});
               setFontSaved(true); setTimeout(() => setFontSaved(false), 2000);
             }} style={primaryLimeButton()}>
               Save typography
@@ -499,7 +504,7 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
             <button onClick={() => {
               const cfg = { colorRows, voice, voiceDocs: Object.fromEntries(Object.entries(voiceDocs).map(([k, v]) => [k, v ? v.name : null])) };
               onBrandSave && onBrandSave(cfg);
-              if (window.firebaseDb) window.firebaseDb.doc('config/brand').set(cfg, { merge: true }).catch(() => {});
+              adminCallFn('saveBrand', { brand: cfg }).catch(() => {});
               setSaved(true); setTimeout(() => setSaved(false), 2000);
             }} style={primaryLimeButton()}>Save voice</button>
           </div>

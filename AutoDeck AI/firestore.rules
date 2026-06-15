@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Decks: authenticated Quidax users can read their own deck docs.
+    // All writes are performed by Cloud Functions via Admin SDK.
+    match /decks/{deckId} {
+      allow read: if request.auth != null
+        && request.auth.uid == resource.data.userId
+        && request.auth.token.email.matches('.*@quidax\\.com');
+      allow write: if false;
+
+      // Slides subcollection: same ownership check for reads.
+      match /slides/{slideId} {
+        allow read: if request.auth != null
+          && request.auth.token.email.matches('.*@quidax\\.com')
+          && get(/databases/$(database)/documents/decks/$(deckId)).data.userId == request.auth.uid;
+        allow write: if false;
+      }
+    }
+
+    // Brand config: any authenticated Quidax user can read.
+    // Writes go through the saveBrand Cloud Function only.
+    match /config/brand {
+      allow read: if request.auth != null
+        && request.auth.token.email.matches('.*@quidax\\.com');
+      allow write: if false;
+    }
+
+    // Deny all other documents and collections.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

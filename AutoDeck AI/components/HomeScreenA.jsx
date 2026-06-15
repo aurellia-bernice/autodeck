@@ -13,139 +13,38 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
   const [dragOver, setDragOver] = React.useState(false);
   const [activePrompt, setActivePrompt] = React.useState(0);
 
-  const fileToBase64 = (file) => new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = e => res(String(e.target.result || '').split(',')[1] || '');
-    r.onerror = rej;
-    r.readAsDataURL(file);
-  });
-
-  const pdfTextItemsToLines = (items = []) => {
-    const rows = new Map();
-    items.forEach((item) => {
-      const text = String(item?.str || '').replace(/\s+/g, ' ').trim();
-      if (!text) return;
-      const transform = Array.isArray(item?.transform) ? item.transform : [];
-      const y = Number.isFinite(transform[5]) ? Math.round(transform[5]) : 0;
-      const x = Number.isFinite(transform[4]) ? transform[4] : 0;
-      const key = String(y);
-      if (!rows.has(key)) rows.set(key, []);
-      rows.get(key).push({ x, text });
-    });
-    return [...rows.entries()]
-      .sort((a, b) => Number(b[0]) - Number(a[0]))
-      .map(([, row]) => row
-        .sort((a, b) => a.x - b.x)
-        .map((part) => part.text)
-        .join(' '))
-      .join('\n');
-  };
-
-  const isParsedDocumentNoise = (value) => {
-    const text = String(value || '').replace(/\s+/g, ' ').trim();
-    if (!text) return true;
-    const lower = text.toLowerCase();
-    if (/^[^\w]*\d{1,3}[^\w]*$/.test(text)) return true;
-    if (/^(page|slide)\s+\d+$/i.test(text)) return true;
-    if (/^(contents|table of contents|agenda)$/i.test(text)) return true;
-    if (/\bprepared for\b|\bprepared by\b/.test(lower)) return true;
-    if (/\bthis guide breaks down every concept\b/.test(lower)) return true;
-    const sectionRefs = (text.match(/\b\d{1,2}\s+[A-Z][A-Za-z]/g) || []).length;
-    const capitalizedWords = (text.match(/\b[A-Z][A-Za-z]{3,}\b/g) || []).length;
-    return sectionRefs >= 2 && capitalizedWords >= 4;
-  };
-
-  const sourceUnitKey = (value) => String(value || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-
-  const isLikelyRepeatedHeader = (value) => {
-    const text = String(value || '').replace(/\s+/g, ' ').trim();
-    const words = text.split(/\s+/).filter(Boolean);
-    const letters = text.replace(/[^A-Za-z]/g, '');
-    const upper = text.replace(/[^A-Z]/g, '');
-    const upperRatio = letters.length ? upper.length / letters.length : 0;
-    return words.length <= 14 && (upperRatio > 0.72 || /[@|]\s*\b/.test(text));
-  };
-
-  const dedupeParsedUnits = (units) => {
-    const counts = new Map();
-    units.forEach((unit) => {
-      const key = sourceUnitKey(unit);
-      if (!key) return;
-      counts.set(key, (counts.get(key) || 0) + 1);
-    });
-
-    const seen = new Map();
-    return units.filter((unit) => {
-      const key = sourceUnitKey(unit);
-      if (!key) return false;
-      const nextSeen = (seen.get(key) || 0) + 1;
-      seen.set(key, nextSeen);
-      if (nextSeen === 1) return true;
-      return !(counts.get(key) > 1 || isLikelyRepeatedHeader(unit));
-    });
-  };
-
-  const cleanParsedDocumentText = (value) => {
-    const units = String(value || '')
-      .replace(/\u0000/g, '')
-      .split(/\n+/)
-      .flatMap((line) => {
-        const compact = line.replace(/\s+/g, ' ').trim();
-        if (!compact) return [];
-        return compact.length > 260
-          ? (compact.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [compact])
-          : [compact];
-      })
-      .map((line) => line.replace(/\s+/g, ' ').trim())
-      .filter(Boolean);
-    const cleaned = units.filter((line) => !isParsedDocumentNoise(line));
-    return dedupeParsedUnits(cleaned.length ? cleaned : units).join('\n').trim();
-  };
+  const safeStorageFileName = (value) => String(value || 'source-file')
+    .replace(/[^\w.-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 120) || 'source-file';
 
   const parseFile = async (file) => {
-    if (!file) { setParsedFileText(''); return; }
+    if (!file) { setParsedFileText(''); return ''; }
+    const uid = window.firebaseAuth?.currentUser?.uid;
     const ext = file.name.split('.').pop().toLowerCase();
+    if (!uid || !window.firebaseStorage || !window.firebase?.app || !['pdf', 'docx', 'pptx', 'txt'].includes(ext)) {
+      setParsedFileText('');
+      return '';
+    }
+
+    const storagePath = `uploads/temp/${uid}/${Date.now()}_${safeStorageFileName(file.name)}`;
+    const storageRef = window.firebaseStorage.ref(storagePath);
     setParsing(true);
+    setParsedFileText('');
     try {
-      if (ext === 'txt') {
-        const text = await new Promise((res, rej) => {
-          const r = new FileReader();
-          r.onload = e => res(e.target.result);
-          r.onerror = rej;
-          r.readAsText(file);
-        });
-        setParsedFileText(cleanParsedDocumentText(text));
-      } else if (ext === 'pdf' && window.pdfjsLib) {
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
-        const buf = await file.arrayBuffer();
-        const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
-        const pages = [];
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const content = await page.getTextContent();
-          pages.push(pdfTextItemsToLines(content.items));
-        }
-        setParsedFileText(cleanParsedDocumentText(pages.join('\n\n')));
-      } else if (ext === 'docx' && window.firebase?.app) {
-        const base64 = await fileToBase64(file);
-        const parseDocxFn = firebase.app().functions('us-central1').httpsCallable('parseDocx');
-        const { data } = await parseDocxFn({ base64 });
-        setParsedFileText(cleanParsedDocumentText(data?.text || ''));
-      } else if (ext === 'pptx' && window.firebase?.app) {
-        const base64 = await fileToBase64(file);
-        const parsePptxFn = firebase.app().functions('us-central1').httpsCallable('parsePptx');
-        const { data } = await parsePptxFn({ base64 });
-        setParsedFileText(cleanParsedDocumentText(data?.text || ''));
-      } else {
-        setParsedFileText('');
-      }
+      await storageRef.put(file);
+      const parseFileFn = window.firebase.app().functions('us-central1').httpsCallable('parseFile', { timeout: 120000 });
+      const { data } = await parseFileFn({ storagePath, fileName: file.name });
+      const text = data?.text || '';
+      setParsedFileText(text);
+      return text;
     } catch (_) {
       setParsedFileText('');
+      return '';
+    } finally {
+      setParsing(false);
+      storageRef.delete().catch(() => {});
     }
-    setParsing(false);
   };
 
   const slideOptions = ['5', '8', '10', '15', 'Auto'];

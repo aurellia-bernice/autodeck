@@ -58,313 +58,20 @@ const normalizeDeckSlides = (slides, templateStyle = 'Professional') => {
     .filter((slide) => slide.title || slide.bullets.length);
 };
 
-const requestedSlideCount = (slideCount, sourceText = '') => {
-  const explicit = parseInt(slideCount, 10);
-  if (Number.isFinite(explicit) && explicit > 0) return Math.max(3, Math.min(20, explicit));
-  const words = sourceText.trim() ? sourceText.trim().split(/\s+/).length : 0;
-  return Math.max(5, Math.min(12, Math.round(words / 80) || 8));
-};
-
-const cleanSlideText = (value, maxWords = 18) => {
-  const words = String(value || '')
-    .replace(/^[^A-Za-z0-9$]+/, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  return words.slice(0, maxWords).join(' ').replace(/[.,;:!]+$/, '');
-};
-
-const titleFromText = (text, fallback) => {
-  const cleaned = cleanSlideText(text, 8);
-  if (!cleaned) return fallback;
-  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-};
-
-const splitDraftSentences = (value) => String(value || '')
-  .replace(/\s+/g, ' ')
-  .trim()
-  .match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
-
-const DRAFT_STOP_WORDS = new Set([
-  'this', 'that', 'with', 'from', 'have', 'will', 'your', 'about', 'into', 'their', 'there', 'where',
-  'when', 'what', 'were', 'been', 'being', 'they', 'them', 'than', 'then', 'also', 'should', 'could',
-  'would', 'these', 'those', 'because', 'through', 'between', 'within', 'without', 'document', 'presentation',
-]);
-
-const draftKeywordsFrom = (value) => {
-  const words = String(value || '').toLowerCase().match(/[a-z0-9]{4,}/g) || [];
-  return [...new Set(words.filter((word) => !DRAFT_STOP_WORDS.has(word)))].slice(0, 18);
-};
-
-const hasDraftKeyword = (sentence, keywords = []) => {
-  const text = String(sentence || '').toLowerCase();
-  return keywords.some((keyword) => text.includes(keyword));
-};
-
-const draftKeywordOverlap = (brief, source) => {
-  const sourceKeywords = draftKeywordsFrom(source);
-  if (!sourceKeywords.length) return 0;
-  return draftKeywordsFrom(brief).filter((keyword) =>
-    sourceKeywords.some((sourceKeyword) => sourceKeyword.includes(keyword) || keyword.includes(sourceKeyword))
-  ).length;
-};
-
-const draftBriefMatchesSource = (brief, source) => {
-  if (!String(source || '').trim() || !String(brief || '').trim()) return true;
-  const briefKeywords = draftKeywordsFrom(brief);
-  if (briefKeywords.length < 3) return true;
-  return draftKeywordOverlap(brief, source) >= Math.min(3, Math.max(1, Math.floor(briefKeywords.length * 0.25)));
-};
-
-const isDraftSourceNoise = (value) => {
-  const text = String(value || '').replace(/\s+/g, ' ').trim();
-  if (!text) return true;
-  const lower = text.toLowerCase();
-  if (/^[^\w]*\d{1,3}[^\w]*$/.test(text)) return true;
-  if (/^(page|slide)\s+\d+$/i.test(text)) return true;
-  if (/^(contents|table of contents|agenda)$/i.test(text)) return true;
-  if (/\bprepared for\b|\bprepared by\b/.test(lower)) return true;
-  if (/\bthis guide breaks down every concept\b/.test(lower)) return true;
-  const sectionRefs = (text.match(/\b\d{1,2}\s+[A-Z][A-Za-z]/g) || []).length;
-  const capitalizedWords = (text.match(/\b[A-Z][A-Za-z]{3,}\b/g) || []).length;
-  return sectionRefs >= 2 && capitalizedWords >= 4;
-};
-
-const draftSentencesFromSource = (value) => {
-  const rawSentences = splitDraftSentences(value).length ? splitDraftSentences(value) : [value];
-  const filtered = rawSentences
-    .map((sentence) => String(sentence || '').replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
-    .filter((sentence) => !isDraftSourceNoise(sentence));
-  return (filtered.length ? filtered : rawSentences)
-    .map((sentence) => cleanSlideText(sentence, 22))
-    .filter(Boolean);
-};
-
-const draftHasUsableMetric = (value) =>
-  /\b\d+(?:\.\d+)?\s*(%|x|×|m|k|b|bn|usd|\$|₦|days?|weeks?|months?|years?|users?|customers?|transactions?|revenue|growth|tickets?|hours?|mins?)\b/i.test(String(value || ''));
-
-const draftLayoutFor = (frame, bullets, index) => {
-  const text = [frame?.title, ...(bullets || [])].join(' ');
-  if (frame?.contentType === 'opening') return 'bigTitle';
-  if (frame?.contentType === 'evidence' && draftHasUsableMetric(text)) return 'stat';
-  if (['problem', 'plan', 'risk', 'decision'].includes(frame?.contentType)) return 'split';
-  if (frame?.contentType === 'next steps') return 'minimal';
-  return index % 2 ? 'standard' : 'split';
-};
-
-const draftTitleFor = (candidate, frame) => {
-  const title = String(candidate || '').trim();
-  if (!title || /^(when|instead|you|it|this|that|there|here)\b/i.test(title)) {
-    return frame.title;
-  }
-  return title;
-};
-
-const pickDraftSentences = (sentences, keywords, used, index, count) => {
-  const matched = [];
-  sentences.forEach((sentence, sentenceIndex) => {
-    if (matched.length >= 3 || used.has(sentenceIndex)) return;
-    if (hasDraftKeyword(sentence, keywords)) {
-      matched.push({ sentence, sentenceIndex });
-      used.add(sentenceIndex);
-    }
-  });
-  if (matched.length) return matched.map((item) => item.sentence);
-
-  const start = Math.floor((index * sentences.length) / Math.max(1, count));
-  const picked = [];
-  for (let offset = 0; picked.length < 3 && offset < sentences.length; offset++) {
-    const sentenceIndex = (start + offset) % sentences.length;
-    if (used.has(sentenceIndex)) continue;
-    picked.push(sentences[sentenceIndex]);
-    used.add(sentenceIndex);
-  }
-  return picked;
-};
-
-const draftStoryFrames = (count) => {
-  const frames = [
-    { title: 'Core message', kicker: 'Storyline', contentType: 'opening', keywords: ['summary', 'objective', 'goal', 'purpose', 'important', 'takeaway', 'overview'] },
-    { title: 'Context that matters', kicker: 'Context', contentType: 'context', keywords: ['context', 'market', 'customer', 'team', 'current', 'background', 'today'] },
-    { title: 'What the source shows', kicker: 'Evidence', contentType: 'evidence', keywords: ['data', 'metric', 'growth', 'revenue', 'result', 'performance', 'increase', 'decrease', 'users', 'volume', 'percent'] },
-    { title: 'Problem or opportunity', kicker: 'Tension', contentType: 'problem', keywords: ['problem', 'challenge', 'risk', 'gap', 'issue', 'opportunity', 'need', 'barrier'] },
-    { title: 'Recommended path forward', kicker: 'Plan', contentType: 'plan', keywords: ['plan', 'strategy', 'solution', 'roadmap', 'phase', 'initiative', 'launch', 'build', 'deliver'] },
-    { title: 'Risks and tradeoffs', kicker: 'Watchouts', contentType: 'risk', keywords: ['risk', 'dependency', 'constraint', 'concern', 'tradeoff', 'blocker', 'delay', 'compliance'] },
-    { title: 'Decisions and asks', kicker: 'Decision', contentType: 'decision', keywords: ['decision', 'approve', 'ask', 'request', 'recommend', 'owner', 'budget', 'signoff'] },
-    { title: 'Next steps', kicker: 'Next steps', contentType: 'next steps', keywords: ['next', 'action', 'timeline', 'owner', 'follow', 'complete', 'start', 'finish', 'due'] },
-  ];
-  if (count <= 5) return [frames[0], frames[1], frames[3], frames[4], frames[7]].slice(0, count);
-  if (count === 6) return [frames[0], frames[1], frames[2], frames[3], frames[4], frames[7]];
-  if (count === 7) return [frames[0], frames[1], frames[2], frames[3], frames[4], frames[6], frames[7]];
-  return [...frames, ...frames.slice(2)].slice(0, count);
-};
-
-const buildContextDraftSlides = (config = {}) => {
-  const userInstruction = String(config.inputText || '').trim();
-  const documentText = String(config.parsedFileText || '').trim();
-  const fileName = String(config.uploadedFile?.name || '').trim();
-  const source = [
-    documentText,
-    userInstruction,
-    fileName ? `Source document: ${fileName}` : '',
-  ].filter(Boolean).join('\n\n').trim();
-  if (!source) return [];
-
-  const count = requestedSlideCount(config.slideCount, source);
-  const sourceForSlides = documentText || userInstruction || source;
-  const sentences = draftSentencesFromSource(sourceForSlides);
-  const keywords = draftKeywordsFrom(`${userInstruction}\n${documentText}`);
-  const frames = draftStoryFrames(count);
-  const used = new Set();
-  const briefMatchesSource = draftBriefMatchesSource(userInstruction, documentText);
-
-  const draftSlides = frames.map((frame, i) => {
-    const frameKeywords = [...frame.keywords, ...keywords.slice(i, i + 4)];
-    let bullets = pickDraftSentences(sentences, frameKeywords, used, i, frames.length)
-      .map((sentence) => cleanSlideText(sentence, 26))
-      .filter(Boolean);
-
-    if (i === 0 && userInstruction) {
-      bullets.unshift(
-        briefMatchesSource
-          ? `Requested focus: ${cleanSlideText(userInstruction, 24)}`
-          : 'Source fit: uploaded document does not support the requested brief; this draft follows the document content'
-      );
-    }
-    if (i === 0 && fileName && !documentText) {
-      bullets.push(`Source document attached: ${fileName}`);
-    }
-    while (bullets.length < 2) {
-      const keyword = keywords[(i + bullets.length) % Math.max(1, keywords.length)];
-      bullets.push(keyword ? `Clarify how ${keyword} shapes this part of the story` : 'Add a source-backed takeaway for this section');
-    }
-    bullets = [...new Set(bullets)].slice(0, 4);
-
-    return {
-      title: draftTitleFor(
-        titleFromText(bullets.find((b) => !b.startsWith('Requested focus:') && !b.startsWith('Source fit:')) || bullets[0], frame.title),
-        frame
-      ),
-      layout: draftLayoutFor(frame, bullets, i),
-      contentType: frame.contentType,
-      kicker: frame.kicker,
-      bullets,
-      speakerNotes: userInstruction ? `User direction: ${cleanSlideText(userInstruction, 30)}` : '',
-      imagePrompt: '',
-    };
-  });
-  return window.AutoDeckTemplatePresets?.enhanceSlides
-    ? window.AutoDeckTemplatePresets.enhanceSlides(draftSlides, config.templateStyle)
-    : draftSlides;
-};
-
-Object.assign(window, { AutoDeckStoryDraft: { buildSlides: buildContextDraftSlides } });
-
-const deckTitleSource = (config = {}) => (
-  config.inputText ||
-  config.parsedFileText ||
-  config.uploadedFile?.name ||
-  'Untitled deck'
-).trim();
-
-const deckTitleFromConfig = (config = {}) => deckTitleSource(config)
-  .split(/\s+/)
-  .slice(0, 8)
-  .join(' ');
-
-const deckAuthorFromUser = (user = {}) => (
-  user.displayName ||
-  user.email?.split('@')[0] ||
-  'Unknown'
-);
-
-const templatePresetIdFromConfig = (config = {}) => (
-  window.AutoDeckTemplatePresets?.normalizeTemplateStyle?.(config.templateStyle) ||
-  'professional'
-);
-
-const buildDeckDocument = (config = {}, user = {}, options = {}) => {
-  const slides = Array.isArray(options.slides) ? options.slides : null;
-  const titleSource = deckTitleSource(config);
-  const doc = {
-    userId: user.uid,
-    author: deckAuthorFromUser(user),
-    title: deckTitleFromConfig(config),
-    inputText: config.inputText || '',
-    parsedFileText: config.parsedFileText || '',
-    templateStyle: config.templateStyle || 'Professional',
-    templatePresetId: templatePresetIdFromConfig(config),
-    slideCount: slides ? slides.length : requestedSlideCount(config.slideCount, titleSource),
-    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    status: options.status || 'processing',
-  };
-  if (slides) doc.slides = slides;
-  return doc;
-};
-
-const readyDeckUpdate = (config = {}, slides = []) => ({
-  status: 'ready',
-  templatePresetId: templatePresetIdFromConfig(config),
-  slideCount: slides.length,
-  slides,
-  completedAt: firebase.firestore.FieldValue.serverTimestamp(),
-});
-
 const uploadSourceFile = async (deckId, config) => {
-  if (!window.firebaseStorage || !window.firebaseDb || !deckId || !config?.uploadedFile) return;
+  if (!window.firebaseStorage || !deckId || !config?.uploadedFile) return;
   if (!isSourceFileUploadEnabled()) {
     if (window.AutoDeckBuild) window.AutoDeckBuild.sourceUploadsEnabled = false;
     return;
   }
   if (window.AutoDeckBuild) window.AutoDeckBuild.sourceUploadsEnabled = true;
   const file = config.uploadedFile;
-  const path = `uploads/${deckId}/${file.name}`;
+  const uid = window.firebaseAuth?.currentUser?.uid || '';
+  if (!uid) return;
+  const path = `uploads/${uid}/${deckId}/${file.name}`;
   const snap = await window.firebaseStorage.ref(path).put(file);
   const url = await snap.ref.getDownloadURL();
-  await window.firebaseDb.collection('decks').doc(deckId).update({
-    uploadedFileUrl: url,
-    uploadedFileName: file.name,
-  });
-};
-
-const writeSlideDocuments = async (deckRef, slides = []) => {
-  if (!deckRef || !Array.isArray(slides) || !slides.length || !window.firebaseDb) return;
-  const batch = window.firebaseDb.batch();
-  slides.forEach((slide, index) => {
-    const ref = deckRef.collection('slides').doc(`slide-${String(index + 1).padStart(2, '0')}`);
-    batch.set(ref, {
-      index,
-      title: slide.title || '',
-      bullets: slide.bullets || [],
-      layout: slide.layout || 'standard',
-      visualLayout: slide.visualLayout || slide.layout || null,
-      renderLayout: slide.renderLayout || null,
-      theme: slide.theme || null,
-      slideType: slide.slideType || null,
-      visualization: slide.visualization || null,
-      needsIcons: slide.needsIcons === true,
-      needsChart: slide.needsChart === true,
-      needsImage: slide.needsImage === true,
-      components: Array.isArray(slide.components) ? slide.components : [],
-      storytellingNote: slide.storytellingNote || '',
-      contentType: slide.contentType || null,
-      kicker: slide.kicker || null,
-      speakerNotes: slide.speakerNotes || '',
-      imagePrompt: slide.imagePrompt || '',
-    });
-  });
-  await batch.commit();
-};
-
-const persistGeneratedDeckFromClient = async (deckRef, config, slides = []) => {
-  if (!deckRef || !Array.isArray(slides) || !slides.length) return;
-  await deckRef.set({
-    ...readyDeckUpdate(config, slides),
-    stage: 'ready',
-  }, { merge: true });
-  await writeSlideDocuments(deckRef, slides);
+  await callFn('attachSourceFile', { deckId, uploadedFileUrl: url, uploadedFileName: file.name });
 };
 
 const readGeneratedSlides = async (deckRef, templateStyle = 'Professional') => {
@@ -383,6 +90,11 @@ const withDeadline = (promise, timeoutMs, message) => new Promise((resolve, reje
     .then(resolve, reject)
     .finally(() => clearTimeout(id));
 });
+
+const callFn = (name, payload = {}, timeoutMs = 30000) => {
+  const fn = firebase.app().functions('us-central1').httpsCallable(name, { timeout: timeoutMs });
+  return fn(payload).then((result) => result.data);
+};
 
 const App = () => {
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
@@ -461,11 +173,10 @@ const App = () => {
   }, [screen, generationStatus, generationError, activeDeckId, generationTrace, deckConfig, slideshowSlides]);
 
   React.useEffect(() => {
-    if (window.firebaseDb) {
-      window.firebaseDb.doc('config/brand').get()
-        .then(doc => { if (doc.exists) setBrandConfig(doc.data()); })
-        .catch(() => {});
-    }
+    if (!window.firebase?.app) return;
+    callFn('getBrand', {})
+      .then(data => { if (data?.brand) setBrandConfig(data.brand); })
+      .catch(() => {});
   }, []);
 
   React.useEffect(() => {
@@ -562,12 +273,7 @@ const App = () => {
       if (generationRunRef.current !== runId) return;
       const message = `AI generation exceeded the ${Math.round(GENERATION_CLIENT_DEADLINE_MS / 1000)} second client deadline before generated slides were returned. No local draft was used.`;
       if (deckRef) {
-        deckRef.update({
-          status: 'error',
-          error: message,
-          stage: 'client-deadline',
-          completedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        }).catch(() => {});
+        callFn('markDeckError', { deckId: deckRef.id, error: message, stage: 'client-deadline' }).catch(() => {});
       }
       setGenerationTrace((prev) => ({
         ...prev,
@@ -596,22 +302,19 @@ const App = () => {
     }
 
     try {
-      deckRef = window.firebaseDb.collection('decks').doc();
-      const initialDeckWrite = deckRef.set(
-        buildDeckDocument(config, currentUser, { status: 'processing' }),
-        { merge: true }
-      ).catch((err) => {
-        setGenerationTrace((prev) => ({
-          ...prev,
-          stage: 'deck-write-delayed',
-          deckId: deckRef.id,
-          message: err?.message || 'Initial Firestore deck write did not complete before generation continued.',
-        }));
+      const newDeck = await callFn('createDeck', {
+        inputText: config.inputText || '',
+        parsedFileText: config.parsedFileText || '',
+        templateStyle: config.templateStyle || 'Professional',
+        slideCount: config.slideCount || 'Auto',
+        uploadedFileName: config.uploadedFile?.name || '',
       });
-      activeDeckIdRef.current = deckRef.id;
-      setActiveDeckId(deckRef.id);
-      setGenerationTrace((prev) => ({ ...prev, stage: 'deck-id-created', deckId: deckRef.id }));
-      uploadSourceFile(deckRef.id, config).catch(() => {});
+      const resolvedDeckId = newDeck.deckId;
+      deckRef = window.firebaseDb.collection('decks').doc(resolvedDeckId);
+      activeDeckIdRef.current = resolvedDeckId;
+      setActiveDeckId(resolvedDeckId);
+      setGenerationTrace((prev) => ({ ...prev, stage: 'deck-id-created', deckId: resolvedDeckId }));
+      uploadSourceFile(resolvedDeckId, config).catch(() => {});
 
       generationDeckUnsubRef.current = deckRef.onSnapshot(async (snap) => {
         if (generationRunRef.current !== runId || !snap.exists) return;
@@ -646,11 +349,6 @@ const App = () => {
         templatePreset: config.templatePreset || window.AutoDeckTemplatePresets?.summarizeForPrompt?.(config.templateStyle),
         brandVoice: brandConfig?.voice || config.templatePreset?.id || window.AutoDeckTemplatePresets?.normalizeTemplateStyle?.(config.templateStyle) || 'professional',
       }), GENERATION_CLIENT_DEADLINE_MS, `AI generation exceeded the ${Math.round(GENERATION_CLIENT_DEADLINE_MS / 1000)} second client deadline before generated slides were returned.`);
-      await withDeadline(
-        initialDeckWrite,
-        GENERATION_STORE_READ_TIMEOUT_MS,
-        'Initial Firestore deck write did not acknowledge before callable returned.'
-      ).catch(() => {});
       setGenerationTrace((prev) => ({ ...prev, stage: 'callable-returned', deckId: deckRef.id }));
 
       const generatedSlides = normalizeDeckSlides(data?.slides, config.templateStyle);
@@ -667,15 +365,19 @@ const App = () => {
       if (data?.persisted === false) {
         setGenerationTrace((prev) => ({ ...prev, stage: 'client-persisting-generated-slides', deckId: deckRef.id }));
         await withDeadline(
-          persistGeneratedDeckFromClient(deckRef, config, generatedSlides),
+          callFn('finalizeDeck', {
+            deckId: deckRef.id,
+            slides: generatedSlides,
+            config: { templateStyle: config.templateStyle },
+          }),
           GENERATION_STORE_READ_TIMEOUT_MS,
-          'Timed out writing generated slides from the client.'
+          'Timed out finalizing deck from the client.'
         ).catch((err) => {
           setGenerationTrace((prev) => ({
             ...prev,
             stage: 'client-persist-failed',
             deckId: deckRef.id,
-            message: err?.message || 'Client persistence failed after callable returned slides.',
+            message: err?.message || 'Client finalization failed after callable returned slides.',
           }));
         });
       }
@@ -698,12 +400,7 @@ const App = () => {
         message,
       }));
       if (deckRef) {
-        deckRef.update({
-          status: 'error',
-          error: err?.message || message,
-          stage: 'client-error',
-          completedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        }).catch(() => {});
+        callFn('markDeckError', { deckId: deckRef.id, error: err?.message || message, stage: 'client-error' }).catch(() => {});
       }
       finishGeneration([], 'error', message);
     }
@@ -780,20 +477,23 @@ const App = () => {
               const finalSlides = normalizeDeckSlides(slides, deckConfig?.templateStyle);
               setSlideshowSlides(finalSlides);
               setScreen('slideshow');
-              if (window.firebaseDb && currentUser && deckConfig) {
+              if (window.firebase?.app && currentUser && deckConfig) {
                 try {
-                  if (activeDeckId) {
-                    await window.firebaseDb.collection('decks').doc(activeDeckId).update(
-                      readyDeckUpdate(deckConfig, finalSlides)
-                    );
-                    uploadSourceFile(activeDeckId, deckConfig).catch(() => {});
-                  } else {
-                    const deckRef = await window.firebaseDb.collection('decks').add(
-                      buildDeckDocument(deckConfig, currentUser, { status: 'ready', slides: finalSlides })
-                    );
-                    await writeSlideDocuments(deckRef, finalSlides);
-                    uploadSourceFile(deckRef.id, deckConfig).catch(() => {});
+                  const result = await callFn('finalizeDeck', {
+                    deckId: activeDeckId || null,
+                    slides: finalSlides,
+                    config: {
+                      templateStyle: deckConfig.templateStyle,
+                      inputText: deckConfig.inputText,
+                      parsedFileText: deckConfig.parsedFileText,
+                    },
+                  });
+                  const resolvedId = result.deckId || activeDeckId;
+                  if (!activeDeckId && resolvedId) {
+                    activeDeckIdRef.current = resolvedId;
+                    setActiveDeckId(resolvedId);
                   }
+                  if (resolvedId) uploadSourceFile(resolvedId, deckConfig).catch(() => {});
                 } catch (_) {}
               }
             }}
