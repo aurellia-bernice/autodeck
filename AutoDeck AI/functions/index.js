@@ -913,23 +913,40 @@ exports.searchImages = onCall(
       }
     }
 
-    const perPage = Math.max(1, Math.min(parseInt(count, 10) || 6, 10));
+    const perPage = Math.max(1, Math.min(parseInt(count, 10) || 6, 30));
     const imageOrientation = ['landscape', 'portrait', 'squarish'].includes(orientation)
       ? orientation
       : 'landscape';
-    const params = new URLSearchParams({
-      query: searchQuery,
-      orientation: imageOrientation,
-      per_page: String(perPage),
-      page: String(Math.max(1, parseInt(page, 10) || 1)),
-      client_id: unsplashKey,
-    });
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
 
-    const uRes = await fetch(`https://api.unsplash.com/search/photos?${params.toString()}`);
-    if (!uRes.ok) throw new HttpsError('internal', `Unsplash error: ${uRes.status}`);
-    const uData = await uRes.json();
+    let rawPhotos;
+    if (pageNum > 1) {
+      // Regenerate: use the random endpoint to guarantee a different set each call
+      const params = new URLSearchParams({
+        query: searchQuery,
+        orientation: imageOrientation,
+        count: String(perPage),
+        client_id: unsplashKey,
+      });
+      const uRes = await fetch(`https://api.unsplash.com/photos/random?${params.toString()}`);
+      if (!uRes.ok) throw new HttpsError('internal', `Unsplash error: ${uRes.status}`);
+      const uData = await uRes.json();
+      rawPhotos = Array.isArray(uData) ? uData : [];
+    } else {
+      const params = new URLSearchParams({
+        query: searchQuery,
+        orientation: imageOrientation,
+        per_page: String(perPage),
+        page: '1',
+        client_id: unsplashKey,
+      });
+      const uRes = await fetch(`https://api.unsplash.com/search/photos?${params.toString()}`);
+      if (!uRes.ok) throw new HttpsError('internal', `Unsplash error: ${uRes.status}`);
+      const uData = await uRes.json();
+      rawPhotos = uData.results || [];
+    }
 
-    const images = (uData.results || []).map((p, i) => ({
+    const images = rawPhotos.map((p, i) => ({
       id: p.id || i,
       src: p.urls?.full || p.urls?.regular || p.urls?.small || '',
       thumb: p.urls?.small || p.urls?.thumb || p.urls?.regular || '',
