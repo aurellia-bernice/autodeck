@@ -96,6 +96,66 @@ const callFn = (name, payload = {}, timeoutMs = 30000) => {
   return fn(payload).then((result) => result.data);
 };
 
+const SOURCE_REVIEW_STOP_WORDS = new Set([
+  'this', 'that', 'with', 'from', 'have', 'will', 'your', 'about', 'into', 'their', 'there', 'where',
+  'when', 'what', 'were', 'been', 'being', 'they', 'them', 'than', 'then', 'also', 'should', 'could',
+  'would', 'these', 'those', 'because', 'through', 'between', 'within', 'without', 'document', 'presentation',
+  'slide', 'slides', 'deck', 'cover', 'make', 'create', 'generate', 'build', 'please', 'need', 'want',
+]);
+
+const sourceReviewKeywords = (value) => [...new Set(
+  (String(value || '').toLowerCase().match(/[a-z0-9]{4,}/g) || [])
+    .filter((word) => !SOURCE_REVIEW_STOP_WORDS.has(word))
+)].slice(0, 40);
+
+const hasTangibleSourceInfo = (value, kind = 'brief') => {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return false;
+  const words = text.split(/\s+/).filter(Boolean);
+  const keywords = sourceReviewKeywords(text);
+  const hasSpecificAnchor = /(\d{2,}|%|\$|₦|Q[1-4]|FY\d{2,4}|20\d{2}|@[a-z0-9.-]+)/i.test(text);
+
+  if (kind === 'source') return words.length >= 10 && keywords.length >= 4;
+  return (words.length >= 10 && keywords.length >= 4) || (hasSpecificAnchor && keywords.length >= 3);
+};
+
+const buildSourceReviewData = ({ issueType, config, docSummary, briefSummary, missingItems, recommendations }) => {
+  const uploadedName = config?.uploadedFile?.name || '';
+  const hasUpload = Boolean(uploadedName);
+  const titleByIssue = {
+    insufficient_context: 'Need more source material',
+    unusable_source: 'Could not read usable source content',
+    source_mismatch: 'Source mismatch detected',
+  };
+  const messageByIssue = {
+    insufficient_context: 'AutoDeck needs a concrete brief, usable source document, or pasted notes before it can draft reliable slides.',
+    unusable_source: 'The selected document did not provide enough extractable text to support this deck.',
+    source_mismatch: 'The uploaded document does not appear to support what your brief is asking for.',
+  };
+
+  return {
+    hasConflict: true,
+    issueType,
+    title: titleByIssue[issueType] || titleByIssue.source_mismatch,
+    message: messageByIssue[issueType] || messageByIssue.source_mismatch,
+    sourceDocumentName: uploadedName || 'No source document',
+    docSummary: docSummary || (hasUpload
+      ? 'The uploaded file did not provide enough usable content for this request.'
+      : 'No source document or detailed pasted notes were provided.'),
+    briefSummary: briefSummary || (String(config?.inputText || '').trim() || 'No concrete brief was provided.'),
+    missingItems: missingItems || [
+      'A specific deck objective or audience',
+      'Facts, metrics, decisions, examples, or source notes to support the slides',
+      'A source document that contains the topic the deck should cover',
+    ],
+    recommendations: recommendations || [
+      'Upload a PDF, DOCX, PPTX, or TXT file with the facts and sections this deck should use.',
+      'Or paste concrete notes: audience, goal, key points, metrics, dates, decisions, risks, and desired next steps.',
+    ],
+    uploadLabel: hasUpload ? 'Upload replacement document' : 'Upload source document',
+  };
+};
+
 const App = () => {
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [screen, setScreen] = React.useState('login');
@@ -112,6 +172,70 @@ const App = () => {
   const generationRunRef = React.useRef(0);
   const generationDeckUnsubRef = React.useRef(null);
   const activeDeckIdRef = React.useRef(null);
+
+  // Source conflict workflow
+  const [conflictData, setConflictData] = React.useState(null);
+  const [conflictConfig, setConflictConfig] = React.useState(null);
+  const [conflictRechecking, setConflictRechecking] = React.useState(false);
+
+  // Client-side keyword overlap check (mirrors backend sourceFitGuide)
+  const hasSourceConflict = (brief, source) => {
+    if (!brief || !source) return false;
+    const bkw = sourceReviewKeywords(brief);
+    if (bkw.length < 3) return false;
+    const skw = sourceReviewKeywords(source);
+    const overlap = bkw.filter(k => skw.some(sk => sk.includes(k) || k.includes(sk)));
+    return overlap.length < Math.min(3, Math.max(1, Math.floor(bkw.length * 0.25)));
+  };
+
+  const getSourceReviewIssue = (config = {}) => {
+    const brief = String(config.inputText || '').trim();
+    const source = String(config.parsedFileText || '').trim();
+    const hasUpload = Boolean(config.uploadedFile);
+    const briefHasInfo = hasTangibleSourceInfo(brief, 'brief');
+    const sourceHasInfo = hasTangibleSourceInfo(source, 'source');
+
+    if (!briefHasInfo && !sourceHasInfo) {
+      return buildSourceReviewData({ issueType: 'insufficient_context', config });
+    }
+
+    if (hasUpload && !sourceHasInfo) {
+      return buildSourceReviewData({
+        issueType: 'unusable_source',
+        config,
+        missingItems: [
+          'Extractable text from the uploaded file',
+          'Source facts that support the requested deck',
+          'Fallback pasted notes if the file is image-only or protected',
+        ],
+        recommendations: [
+          'Upload a text-based PDF, DOCX, PPTX, or TXT file instead of an image-only scan.',
+          'Or paste the key points from the document into the brief box and proceed with those notes.',
+        ],
+      });
+    }
+
+    if (briefHasInfo && sourceHasInfo && hasSourceConflict(brief, source)) {
+      return buildSourceReviewData({ issueType: 'source_mismatch', config });
+    }
+
+    return null;
+  };
+
+  // Parse a replacement file (for conflict re-upload)
+  const parseReplacementFile = async (file) => {
+    const uid = window.firebaseAuth?.currentUser?.uid;
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!uid || !window.firebaseStorage || !window.firebase?.app || !['pdf','docx','pptx','txt'].includes(ext)) return '';
+    const storagePath = `uploads/temp/${uid}/${Date.now()}_${String(file.name).replace(/[^\w.-]+/g,'_').slice(0,120)||'file'}`;
+    const ref = window.firebaseStorage.ref(storagePath);
+    try {
+      await ref.put(file);
+      const parseFn = window.firebase.app().functions('us-central1').httpsCallable('parseFile', { timeout: 120000 });
+      const { data } = await parseFn({ storagePath, fileName: file.name });
+      return data?.text || '';
+    } catch (_) { return ''; } finally { ref.delete().catch(()=>{}); }
+  };
 
   const userRole = isAdminUser(currentUser) ? 'admin' : 'employee';
 
@@ -222,6 +346,53 @@ const App = () => {
   }
 
   const handleGenerate = async (config) => {
+    // ── Source conflict pre-check ──
+    // Block unsupported drafts before creating a deck. The user can still choose
+    // to proceed from the review screen, but we do not silently generate filler.
+    if (!config.conflictAcknowledged) {
+      const reviewIssue = getSourceReviewIssue(config);
+      if (reviewIssue) {
+        setConflictConfig(config);
+        setScreen('conflict');
+        if (reviewIssue.issueType !== 'source_mismatch') {
+          setConflictData(reviewIssue);
+          return;
+        }
+
+        setConflictData(null);
+        callFn('checkSourceConflict', {
+          inputText: config.inputText,
+          parsedFileText: config.parsedFileText,
+          sourceDocumentName: config.uploadedFile?.name || '',
+        }, 30000)
+          .then(result => {
+            if (result?.hasConflict) {
+              setConflictData({
+                ...reviewIssue,
+                ...result,
+                issueType: result.issueType || reviewIssue.issueType,
+                title: result.title || reviewIssue.title,
+                message: result.message || reviewIssue.message,
+                uploadLabel: result.uploadLabel || reviewIssue.uploadLabel,
+              });
+            } else {
+              handleConflictProceed({ ...config, conflictAcknowledged: true });
+            }
+          })
+          .catch(() => {
+            setConflictData({
+              ...reviewIssue,
+              docSummary: 'Source analysis is temporarily unavailable.',
+              recommendations: ['Verify that your document matches the requested deck topic before proceeding.'],
+            });
+          });
+        return;
+      }
+    }
+
+    setConflictData(null);
+    setConflictConfig(null);
+
     const runId = generationRunRef.current + 1;
     generationRunRef.current = runId;
     if (generationDeckUnsubRef.current) {
@@ -348,6 +519,7 @@ const App = () => {
         templateStyle: config.templateStyle || 'Professional',
         templatePreset: config.templatePreset || window.AutoDeckTemplatePresets?.summarizeForPrompt?.(config.templateStyle),
         brandVoice: brandConfig?.voice || config.templatePreset?.id || window.AutoDeckTemplatePresets?.normalizeTemplateStyle?.(config.templateStyle) || 'professional',
+        inputMode: config.inputMode || 'brief',
       }), GENERATION_CLIENT_DEADLINE_MS, `AI generation exceeded the ${Math.round(GENERATION_CLIENT_DEADLINE_MS / 1000)} second client deadline before generated slides were returned.`);
       setGenerationTrace((prev) => ({ ...prev, stage: 'callable-returned', deckId: deckRef.id }));
 
@@ -402,6 +574,28 @@ const App = () => {
       if (deckRef) {
         callFn('markDeckError', { deckId: deckRef.id, error: err?.message || message, stage: 'client-error' }).catch(() => {});
       }
+      if (/too few usable slides|returned no slides|no slides/i.test(err?.message || '')) {
+        setConflictConfig(config);
+        setConflictData(buildSourceReviewData({
+          issueType: 'insufficient_context',
+          config,
+          docSummary: 'AutoDeck could not find enough usable information to build a reliable slide draft.',
+          briefSummary: String(config?.inputText || '').trim() || 'No concrete brief was provided.',
+          missingItems: [
+            'Enough source facts to support multiple slides',
+            'A clear audience, objective, and intended takeaway',
+            'Specific examples, metrics, roles, sections, or decisions to structure the deck around',
+          ],
+          recommendations: [
+            'Paste a short outline with the key points each slide should cover.',
+            'Upload a source document with the facts, examples, metrics, or notes the deck should use.',
+          ],
+        }));
+        setGenerationStatus('idle');
+        setGenerationError('');
+        setScreen('conflict');
+        return;
+      }
       finishGeneration([], 'error', message);
     }
   };
@@ -411,6 +605,68 @@ const App = () => {
   };
 
   const handleGenerateAgain = () => {
+    setScreen('home');
+  };
+
+  // Conflict screen: user chose "Proceed with available info" or conflict cleared
+  const handleConflictProceed = (cfg) => {
+    setConflictData(null);
+    setConflictConfig(null);
+    handleGenerate(cfg); // cfg has conflictAcknowledged: true, bypasses pre-check
+  };
+
+  // Conflict screen: user uploaded a new replacement document
+  const handleConflictReupload = async (file) => {
+    setConflictRechecking(true);
+    try {
+      const newParsed = await parseReplacementFile(file);
+      const updatedConfig = {
+        ...conflictConfig,
+        uploadedFile: file,
+        parsedFileText: newParsed,
+        conflictAcknowledged: false, // re-check with new file
+      };
+      setConflictConfig(updatedConfig);
+      const reviewIssue = getSourceReviewIssue(updatedConfig);
+      if (!reviewIssue) {
+        // New file is fine — proceed
+        setConflictData(null);
+        setConflictRechecking(false);
+        handleGenerate({ ...updatedConfig, conflictAcknowledged: true });
+        return;
+      }
+      if (reviewIssue.issueType !== 'source_mismatch') {
+        setConflictData(reviewIssue);
+        setConflictRechecking(false);
+        return;
+      }
+      // Still a mismatch — fetch fresh conflict summary for the new file
+      const result = await callFn('checkSourceConflict', {
+        inputText: updatedConfig.inputText,
+        parsedFileText: newParsed,
+        sourceDocumentName: file.name,
+      }, 30000).catch(() => null);
+      setConflictData(result?.hasConflict ? {
+        ...reviewIssue,
+        ...result,
+        issueType: result.issueType || reviewIssue.issueType,
+        title: result.title || reviewIssue.title,
+        message: result.message || reviewIssue.message,
+        uploadLabel: result.uploadLabel || reviewIssue.uploadLabel,
+      } : null);
+      if (!result?.hasConflict) {
+        setConflictRechecking(false);
+        handleGenerate({ ...updatedConfig, conflictAcknowledged: true });
+        return;
+      }
+    } catch (_) {}
+    setConflictRechecking(false);
+  };
+
+  // Conflict screen: user chose "Back to edit"
+  const handleConflictBack = () => {
+    setConflictData(null);
+    // conflictConfig preserved so HomeScreenA can restore the input state
     setScreen('home');
   };
 
@@ -444,7 +700,7 @@ const App = () => {
       {screen === 'login' && (
         <LoginScreen onLogin={handleLogin} authError={authError} onClearAuthError={() => setAuthError("")} />
       )}
-      {screen !== 'login' && screen !== 'processing' && screen !== 'slideshow' && (
+      {screen !== 'login' && screen !== 'processing' && screen !== 'slideshow' && screen !== 'conflict' && (
         <Sidebar
           currentScreen={screen}
           onNavigate={handleNavigate}
@@ -461,13 +717,24 @@ const App = () => {
 
       {screen !== 'login' && <div style={{
         flex: 1,
-        marginLeft: (screen !== 'processing' && screen !== 'slideshow') ? '224px' : 0,
+        marginLeft: (screen !== 'processing' && screen !== 'slideshow' && screen !== 'conflict') ? '224px' : 0,
         overflowY: 'auto',
         overflowX: 'hidden',
         height: '100vh'
       }}>
         {screen === 'home' && (
-          <HomeScreenA onGenerate={handleGenerate} tweaks={tweaks} />
+          <HomeScreenA onGenerate={handleGenerate} tweaks={tweaks} initialConfig={conflictConfig} />
+        )}
+        {screen === 'conflict' && (
+          <SourceConflictScreen
+            conflictData={conflictData}
+            config={conflictConfig}
+            tweaks={tweaks}
+            isRechecking={conflictRechecking}
+            onProceed={handleConflictProceed}
+            onReupload={handleConflictReupload}
+            onBack={handleConflictBack}
+          />
         )}
         {screen === 'processing' && (
           <ProcessingScreen

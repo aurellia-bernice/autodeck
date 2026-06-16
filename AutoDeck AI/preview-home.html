@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HomeScreenA Preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="vendor/react.development.js"></script>
+  <script src="vendor/react-dom.development.js"></script>
+  <script src="vendor/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body { font-family: "Inter", system-ui, sans-serif; background: #FAF8FC; color: #1A0530; -webkit-font-smoothing: antialiased; }
+    textarea, input, button { font-family: inherit; }
+    textarea::placeholder, input::placeholder { color: #B8AAC8; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb { background: rgba(95,42,145,0.20); border-radius: 3px; }
+    @keyframes qxFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-18px)} }
+    @keyframes qxMarquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+    @keyframes qxBreathe { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.55;transform:scale(0.88)} }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" src="tokens.jsx"></script>
+  <script type="text/babel" src="template-presets.jsx"></script>
+  <script type="text/babel" src="components/motion.jsx"></script>
+  <script type="text/babel" src="components/HomeScreenA.jsx"></script>
+  <script type="text/babel">
+    // Stub qxMotion if not present
+    if (typeof qxMotion === 'undefined') window.qxMotion = { fadeUp: () => ({}) };
+    ReactDOM.render(
+      React.createElement(HomeScreenA, {
+        onGenerate: (cfg) => alert('Generate: ' + cfg.inputMode + ' mode'),
+        tweaks: {}
+      }),
+      document.getElementById('root')
+    );
+  </script>
+</body>
+</html>

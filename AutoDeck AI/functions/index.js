@@ -109,7 +109,7 @@ const KEYWORD_STOP_WORDS = new Set([
   'this', 'that', 'with', 'from', 'have', 'will', 'your', 'about', 'into', 'their', 'there', 'where',
   'when', 'what', 'were', 'been', 'being', 'they', 'them', 'than', 'then', 'also', 'should', 'could',
   'would', 'these', 'those', 'because', 'through', 'between', 'within', 'without', 'document', 'presentation',
-  'slide', 'slides', 'deck', 'cover',
+  'slide', 'slides', 'deck', 'cover', 'make', 'create', 'generate', 'build', 'please', 'need', 'want',
 ]);
 
 const keywordsFrom = (value) => {
@@ -122,6 +122,17 @@ const keywordOverlap = (brief, source) => {
   return keywordsFrom(brief).filter((keyword) =>
     sourceKeywords.some((sourceKeyword) => sourceKeyword.includes(keyword) || keyword.includes(sourceKeyword))
   );
+};
+
+const hasTangibleSourceInfo = (value, kind = 'brief') => {
+  const text = compactText(value, Number.MAX_SAFE_INTEGER).replace(/\s+/g, ' ').trim();
+  if (!text) return false;
+  const words = text.split(/\s+/).filter(Boolean);
+  const keywords = keywordsFrom(text);
+  const hasSpecificAnchor = /(\d{2,}|%|\$|₦|Q[1-4]|FY\d{2,4}|20\d{2}|@[a-z0-9.-]+)/i.test(text);
+
+  if (kind === 'source') return words.length >= 10 && keywords.length >= 4;
+  return (words.length >= 10 && keywords.length >= 4) || (hasSpecificAnchor && keywords.length >= 3);
 };
 
 const sourceFitGuide = (brief, source) => {
@@ -485,29 +496,41 @@ const extractPptxText = async (buffer) => {
   return slides.join('\n\n');
 };
 
-const buildDeckPrompt = ({ userInstruction, sourceMaterial, sourceDocumentName, sourceFit, count, templateStyle, voiceGuide, templatePreset }) => `Create exactly ${count} presentation slides from the user's context.
+const buildDeckPrompt = ({ userInstruction, sourceMaterial, sourceDocumentName, sourceFit, count, templateStyle, voiceGuide, templatePreset, inputMode }) => {
+  const isContentMode = inputMode === 'content';
 
-This is for an internal Quidax deck. The output must feel like a thoughtful first draft from a senior presentation strategist, not a generic summary.
-
-Deck requirements:
+  const modeRequirements = isContentMode ? `
+Mode: STRUCTURE AND STYLE (the user has supplied the complete slide content)
+- The user has pasted their finished content. Your job is to segment it into slides, assign visual treatments, and apply the Quidax brand — NOT to generate or invent new content.
+- Preserve the user's phrasing and points as closely as possible. Do not paraphrase or rewrite unless a bullet exceeds 26 words.
+- Segment the pasted text into logical slides based on topic breaks, blank lines, headers, or section shifts.
+- Do not add facts, metrics, examples, or arguments that are not present in the user's text.
+- If a section header appears in the user's text, use it (adapted) as the slide title.
+- You may reorder content only when a different sequence makes the narrative significantly clearer.
+- "Parsed source material" is unused in this mode — ignore it.` : `
+Mode: GENERATE (the user has supplied a brief or direction — generate content from it)
 - Treat "User instruction or pasted notes" as the brief: audience, goal, emphasis, missing context, and what story the user wants told.
 - Treat "Parsed source material" as the evidence: the facts, details, sections, and language to synthesize into the deck.
 - Factual content comes from the parsed source material first. The brief can frame the deck, but it cannot create facts that the document does not contain.
 - Merge the brief and the source material into one coherent story. Do not make separate "prompt" and "document" sections.
 - Do not mirror the original document/page/slide breaks mechanically; reorganize around the best narrative arc.
 - Ignore cover-page boilerplate, table of contents, repeated headers/footers, page numbers, "prepared for" metadata, and lists of section titles. Use them only to infer structure; do not turn them into slide content.
+- If the brief asks for a different story than the source supports, make that mismatch explicit with "Needs source confirmation" or reframe the deck around the actual source topic.`;
+
+  return `Create exactly ${count} presentation slides from the user's context.
+
+This is for an internal Quidax deck. The output must feel like a thoughtful first draft from a senior presentation strategist, not a generic summary.
+${modeRequirements}
+
+Universal requirements:
 - Do not copy phrases like "Requested focus" or "Source document" into slide bullets.
-- If the brief asks for a different story than the source supports, make that mismatch explicit with "Needs source confirmation" or reframe the deck around the actual source topic.
 - Use the user's supplied context as the source of truth.
 - Preserve specific names, products, metrics, dates, markets, phases, risks, asks, owners, and decisions when they appear in the context.
 - Every bullet must be directly supported by the context. Do not invent facts, numbers, customers, locations, or timelines.
 - If the context is thin, make the limitation visible with concrete "TBD" or "Needs confirmation" bullets instead of making things up.
-- Turn raw notes into a coherent narrative: context, problem/opportunity, evidence, plan/sections, risks, decisions, next steps.
 - Avoid generic filler like "improve efficiency", "drive growth", "leverage technology", or "enhance collaboration" unless the context says that specifically.
 - Titles should be specific and useful, not labels like "Overview" or "Key Metrics" unless the source truly supports them.
 - Every slide title must be distinct. Do not reuse the document title, lecture title, event title, or a previous slide title with minor suffixes.
-- Synthesize titles as takeaways from the evidence. Do not start multiple titles with the same person, event, institution, source name, or uploaded file name.
-- If the source is a transcript, lecture, report, article, or PDF export, identify the thesis and argument beats; do not copy source headings as the slide outline.
 - Bullets should state the point and the implication. Prefer concrete claims over vague phrases.
 - Every slide must include Slide Intelligence fields: slideType, layout, visualization, needsIcons, needsChart, needsImage, components, and storytellingNote.
 - The slideType must be one of: title_slide, section_break, process_flow, comparison, timeline, statistics, hierarchy, image_focus, roadmap, problem_solution, feature_breakdown, summary.
@@ -581,6 +604,127 @@ ${userInstruction || '(none)'}
 
 Parsed source material:
 ${sourceMaterial || userInstruction}`;
+};
+
+// ── checkSourceConflict ───────────────────────────────────────
+// Fast pre-generation check: does the uploaded document support the brief?
+// Returns { hasConflict, docSummary, briefSummary, missingItems, recommendations }
+exports.checkSourceConflict = onCall(
+  callableOptions({ timeoutSeconds: 30, memory: '256MiB', secrets: ['ANTHROPIC_API_KEY'] }),
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
+
+    const { inputText, parsedFileText, sourceDocumentName } = request.data;
+    const briefHasInfo = hasTangibleSourceInfo(inputText, 'brief');
+    const sourceHasInfo = hasTangibleSourceInfo(parsedFileText, 'source');
+
+    if (!briefHasInfo && !sourceHasInfo) {
+      return {
+        hasConflict: true,
+        issueType: 'insufficient_context',
+        title: 'Need more source material',
+        message: 'AutoDeck needs a concrete brief, usable source document, or pasted notes before it can draft reliable slides.',
+        sourceDocumentName: sourceDocumentName || 'No source document',
+        docSummary: sourceDocumentName
+          ? 'The uploaded file did not provide enough usable content for this request.'
+          : 'No source document or detailed pasted notes were provided.',
+        briefSummary: String(inputText || '').trim() || 'No concrete brief was provided.',
+        missingItems: [
+          'A specific deck objective or audience',
+          'Facts, metrics, decisions, examples, or source notes to support the slides',
+          'A source document that contains the topic the deck should cover',
+        ],
+        recommendations: [
+          'Upload a PDF, DOCX, PPTX, or TXT file with the facts and sections this deck should use.',
+          'Or paste concrete notes: audience, goal, key points, metrics, dates, decisions, risks, and desired next steps.',
+        ],
+        uploadLabel: sourceDocumentName ? 'Upload replacement document' : 'Upload source document',
+      };
+    }
+
+    if (sourceDocumentName && !sourceHasInfo) {
+      return {
+        hasConflict: true,
+        issueType: 'unusable_source',
+        title: 'Could not read usable source content',
+        message: 'The selected document did not provide enough extractable text to support this deck.',
+        sourceDocumentName: sourceDocumentName || 'uploaded file',
+        docSummary: 'The uploaded file did not provide enough usable text for this request.',
+        briefSummary: String(inputText || '').trim() || 'No concrete brief was provided.',
+        missingItems: [
+          'Extractable text from the uploaded file',
+          'Source facts that support the requested deck',
+          'Fallback pasted notes if the file is image-only or protected',
+        ],
+        recommendations: [
+          'Upload a text-based PDF, DOCX, PPTX, or TXT file instead of an image-only scan.',
+          'Or paste the key points from the document into the brief box and proceed with those notes.',
+        ],
+        uploadLabel: 'Upload replacement document',
+      };
+    }
+
+    if (!inputText || !parsedFileText) return { hasConflict: false };
+
+    const briefKeywords = keywordsFrom(inputText);
+    if (briefKeywords.length < 3) return { hasConflict: false };
+
+    const overlap = keywordOverlap(inputText, parsedFileText);
+    const threshold = Math.min(3, Math.max(1, Math.floor(briefKeywords.length * 0.25)));
+    if (overlap.length >= threshold) return { hasConflict: false };
+
+    // Confirmed mismatch — ask Haiku for a human-readable breakdown
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return {
+        hasConflict: true,
+        issueType: 'source_mismatch',
+        title: 'Source mismatch detected',
+        message: 'The uploaded document does not appear to support what your brief is asking for.',
+        sourceDocumentName: sourceDocumentName || '',
+        docSummary: 'The uploaded document does not appear to match the requested topic.',
+        briefSummary: String(inputText).slice(0, 200),
+        missingItems: [],
+        recommendations: ['Upload a source document that covers the requested topic, audience, evidence, and desired direction.'],
+        uploadLabel: 'Upload replacement document',
+      };
+    }
+
+    const anthropic = new AnthropicClient({ apiKey });
+    const docExcerpt = compactText(parsedFileText, 800);
+    let parsed = {};
+    try {
+      const msg = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 320,
+        messages: [{
+          role: 'user',
+          content: `Brief: "${compactText(inputText, 280)}"
+Document "${sourceDocumentName || 'uploaded file'}": "${docExcerpt}"
+
+The brief and document don't match. Return only JSON:
+{"docSummary":"one sentence: what this document actually is","briefSummary":"one sentence: what the brief needs to build","missingItems":["2-4 specific things the document lacks for this brief"],"recommendations":["1-2 document types or sources that would actually work"]}`,
+        }],
+      });
+      const raw = msg.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
+      const match = raw.match(/\{[\s\S]*\}/);
+      if (match) parsed = JSON.parse(match[0]);
+    } catch (_) {}
+
+    return {
+      hasConflict: true,
+      issueType: 'source_mismatch',
+      title: 'Source mismatch detected',
+      message: 'The uploaded document does not appear to support what your brief is asking for.',
+      sourceDocumentName: sourceDocumentName || '',
+      docSummary: String(parsed.docSummary || 'The document does not contain the requested content.'),
+      briefSummary: String(parsed.briefSummary || compactText(inputText, 200)),
+      missingItems: Array.isArray(parsed.missingItems) ? parsed.missingItems.slice(0, 4).map(String) : [],
+      recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations.slice(0, 2).map(String) : [],
+      uploadLabel: 'Upload replacement document',
+    };
+  }
+);
 
 // ── generateDeck ──────────────────────────────────────────────
 exports.generateDeck = onCall(
@@ -595,7 +739,7 @@ exports.generateDeck = onCall(
     }
     const anthropic = new AnthropicClient({ apiKey });
 
-    const { deckId, inputText, parsedFileText, sourceDocumentName, slideCount, templateStyle, brandVoice, templatePreset } = request.data;
+    const { deckId, inputText, parsedFileText, sourceDocumentName, slideCount, templateStyle, brandVoice, templatePreset, inputMode } = request.data;
     const userInstruction = compactText(inputText, MAX_INPUT_CHARS);
     const sourceMaterial = cleanSourceMaterial(parsedFileText, MAX_SOURCE_CHARS);
     const content = [userInstruction, sourceMaterial].filter(Boolean).join('\n\n');
@@ -644,6 +788,7 @@ You must be faithful to the source. If a fact is not in the source, do not add i
       templateStyle,
       voiceGuide,
       templatePreset,
+      inputMode: inputMode || 'brief',
     });
 
     let slides = [];

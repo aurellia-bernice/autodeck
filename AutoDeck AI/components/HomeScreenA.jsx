@@ -2,16 +2,17 @@
 // HomeScreenA — Editorial canvas with personality.
 // Big serif-italic accent, animated marquee strip, smart prompts.
 // ============================================================
-const HomeScreenA = ({ onGenerate, tweaks }) => {
+const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
   const T = qxTheme(tweaks?.darkMode);
-  const [inputText, setInputText] = React.useState('');
-  const [slideCount, setSlideCount] = React.useState('Auto');
-  const [templateStyle, setTemplateStyle] = React.useState('Professional');
-  const [uploadedFile, setUploadedFile] = React.useState(null);
-  const [parsedFileText, setParsedFileText] = React.useState('');
+  const [inputText, setInputText] = React.useState(() => initialConfig?.inputText || '');
+  const [slideCount, setSlideCount] = React.useState(() => initialConfig?.slideCount || 'Auto');
+  const [templateStyle, setTemplateStyle] = React.useState(() => initialConfig?.templateStyle || 'Professional');
+  const [uploadedFile, setUploadedFile] = React.useState(() => initialConfig?.uploadedFile || null);
+  const [parsedFileText, setParsedFileText] = React.useState(() => initialConfig?.parsedFileText || '');
   const [parsing, setParsing] = React.useState(false);
   const [dragOver, setDragOver] = React.useState(false);
   const [activePrompt, setActivePrompt] = React.useState(0);
+  const [userModeOverride, setUserModeOverride] = React.useState(null); // null | 'brief' | 'content'
 
   const safeStorageFileName = (value) => String(value || 'source-file')
     .replace(/[^\w.-]+/g, '_')
@@ -47,14 +48,6 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
     }
   };
 
-  const slideOptions = ['5', '8', '10', '15', 'Auto'];
-  const templates = window.AutoDeckTemplatePresets?.getTemplateOptions?.() || ['Professional', 'Minimal', 'Bold', 'Fun'];
-
-  const canGenerate = !parsing && (inputText.trim().length > 10 || uploadedFile);
-  const wordCount = inputText.trim() ? inputText.trim().split(/\s+/).length : 0;
-  const parsedWordCount = parsedFileText.trim() ? parsedFileText.trim().split(/\s+/).length : 0;
-  const estSlides = wordCount > 0 ? Math.max(3, Math.min(20, Math.round(wordCount / 60))) : 0;
-
   const promptIdeas = [
     { kicker: 'Quarterly', label: 'Q3 business review', seed: 'Quarterly business review for Q3 2026 covering revenue, retention, product wins, and outlook for Q4. Audience: leadership team.' },
     { kicker: 'Launch',    label: 'Product launch announcement', seed: 'Product launch announcement for a new merchant payment feature. Cover the problem, our solution, target customers, pricing, and rollout plan.' },
@@ -62,6 +55,39 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
     { kicker: 'Investor',  label: 'Series B update', seed: 'Investor update for our Series B partners. Cover Q3 metrics, key milestones hit, runway, and what we need from the round.' },
     { kicker: 'All-hands', label: 'Team all-hands recap', seed: 'All-hands recap covering company highlights, team news, customer wins, and OKR progress for the quarter.' },
   ];
+
+  // Mode inference: 'brief' = direction/prompt, 'content' = full pasted content
+  const detectMode = (text, hasFile) => {
+    if (!text.trim()) return hasFile ? 'brief' : null;
+    const words = text.trim().split(/\s+/).length;
+    const lines = text.split('\n').filter(l => l.trim());
+    const hasStructure = /slide\s*\d+|^#{1,3}\s|^---+$/im.test(text) ||
+      (lines.length > 6 && words > 80);
+    return (words > 120 || hasStructure) ? 'content' : 'brief';
+  };
+  // When file is attached, text always acts as a brief regardless of override
+  const inferredMode = detectMode(inputText, !!uploadedFile);
+  const activeMode = uploadedFile ? 'brief' : (userModeOverride || inferredMode);
+
+  // Reset user override when a file is attached
+  React.useEffect(() => { if (uploadedFile) setUserModeOverride(null); }, [!!uploadedFile]);
+
+  const modeConfig = {
+    brief:   { label: 'Direction', hint: 'AI generates content from your brief', dot: T.primary },
+    content: { label: 'Content',   hint: 'AI structures and styles your pasted text', dot: QX.lime },
+  };
+
+  const effectivePlaceholder = (activeMode === 'content' && !uploadedFile)
+    ? 'Paste your slide content here — titles, sections, bullet points…'
+    : promptIdeas[activePrompt].seed;
+
+  const slideOptions = ['5', '8', '10', '15', 'Auto'];
+  const templates = window.AutoDeckTemplatePresets?.getTemplateOptions?.() || ['Professional', 'Minimal', 'Bold', 'Fun'];
+
+  const canGenerate = !parsing && (inputText.trim().length > 10 || uploadedFile);
+  const wordCount = inputText.trim() ? inputText.trim().split(/\s+/).length : 0;
+  const parsedWordCount = parsedFileText.trim() ? parsedFileText.trim().split(/\s+/).length : 0;
+  const estSlides = wordCount > 0 ? Math.max(3, Math.min(20, Math.round(wordCount / 60))) : 0;
 
   // Cycle the active prompt
   React.useEffect(() => {
@@ -157,7 +183,7 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
             ...qxMotion.fadeUp(240),
             background: T.surface,
             borderRadius: qxRadius.lg,
-            border: `1px solid ${dragOver ? T.primary : T.border}`,
+            border: `1px solid ${dragOver ? T.primary : activeMode === 'content' ? T.borderHi : T.border}`,
             boxShadow: dragOver ? `0 0 0 4px ${T.ghostBg}, ${qxShadow(tweaks?.darkMode).lg}` : qxShadow(tweaks?.darkMode).md,
             transition: `all 240ms ${qxEase}`,
             overflow: 'hidden', position: 'relative',
@@ -173,7 +199,7 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
           <textarea
             value={inputText}
             onChange={e => setInputText(e.target.value)}
-            placeholder={inputText ? '' : promptIdeas[activePrompt].seed}
+            placeholder={inputText ? '' : effectivePlaceholder}
             autoFocus
             style={{
               width: '100%', minHeight: 200,
@@ -204,6 +230,54 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
             <input id="hsAFile" type="file" accept=".pdf,.docx,.txt,.pptx" style={{ display: 'none' }}
                    onChange={e => { const f = e.target.files[0]; if (f) { setUploadedFile(f); parseFile(f); } }} />
 
+            {/* Mode toggle — hidden when file drives the mode */}
+            {!uploadedFile && inferredMode && (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center',
+                background: T.ghostBg, borderRadius: qxRadius.sm,
+                border: `1px solid ${T.border}`, padding: 2, gap: 1,
+              }}>
+                {['brief', 'content'].map(m => {
+                  const active = activeMode === m;
+                  const cfg = modeConfig[m];
+                  return (
+                    <button key={m}
+                      title={cfg.hint}
+                      onClick={() => setUserModeOverride(userModeOverride === m ? null : m)}
+                      style={{
+                        padding: '4px 10px', border: 'none', borderRadius: qxRadius.xs,
+                        background: active ? T.bgElev : 'transparent',
+                        color: active ? (m === 'brief' ? T.primary : tweaks?.darkMode ? '#a8d400' : '#4a6800') : T.inkMute,
+                        fontFamily: qxType.mono, fontSize: 10,
+                        letterSpacing: '0.12em', textTransform: 'uppercase',
+                        fontWeight: active ? 600 : 400, cursor: 'pointer',
+                        transition: `all 140ms ${qxEase}`,
+                        display: 'flex', alignItems: 'center', gap: 5,
+                        boxShadow: active ? qxShadow(tweaks?.darkMode).sm : 'none',
+                      }}>
+                      <span style={{
+                        width: 5, height: 5, borderRadius: '50%',
+                        background: active ? cfg.dot : T.inkFaint,
+                        flexShrink: 0,
+                      }} />
+                      {cfg.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {uploadedFile && activeMode && (
+              <span style={{
+                fontFamily: qxType.mono, fontSize: 10,
+                letterSpacing: '0.10em', textTransform: 'uppercase',
+                color: T.primary, opacity: 0.75,
+                display: 'flex', alignItems: 'center', gap: 5,
+              }}>
+                <span style={{ width: 5, height: 5, borderRadius: '50%', background: T.primary }} />
+                File → source · Text → direction
+              </span>
+            )}
+
             <div style={{ flex: 1 }} />
 
             <span style={{ fontFamily: qxType.mono, fontSize: 11, color: T.inkMute, letterSpacing: '0.05em' }}>
@@ -232,6 +306,7 @@ const HomeScreenA = ({ onGenerate, tweaks }) => {
               templatePreset: window.AutoDeckTemplatePresets?.summarizeForPrompt?.(templateStyle),
               uploadedFile,
               parsedFileText,
+              inputMode: activeMode, // 'brief' | 'content' | null
             })}
             disabled={!canGenerate}
             style={{

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="vendor/react.development.js"></script>
+<script src="vendor/react-dom.development.js"></script>
+<script src="vendor/babel.min.js"></script>
+<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Inter',sans-serif;}</style>
+</head><body>
+<div id="root"></div>
+<script type="text/babel" src="tokens.jsx"></script>
+<script type="text/babel" src="components/SourceConflictScreen.jsx"></script>
+<script type="text/babel">
+const mc = {
+  hasConflict: true,
+  sourceDocumentName: 'poem for grads pdf.pdf',
+  docSummary: 'A personal graduation poem written by a student named Amarachi reflecting on her secondary school memories, friendships, and anticipation of the future.',
+  briefSummary: 'An AML and KYC compliance training deck for new Quidax hires covering policy basics, red flags, escalation procedures, and a knowledge check quiz.',
+  missingItems: [
+    'Anti-Money Laundering (AML) policy procedures',
+    'KYC verification requirements and workflows',
+    'Red flag indicators and escalation paths',
+    'Quiz or knowledge assessment content'
+  ],
+  recommendations: [
+    'Upload the Quidax AML/KYC policy document or compliance training materials',
+    'Use the Quidax internal compliance handbook or a regulatory training guide as the source'
+  ]
+};
+ReactDOM.render(
+  React.createElement(SourceConflictScreen, {
+    conflictData: mc,
+    config: { inputText: 'Compliance training deck on AML and KYC procedures for new hires. Include policy basics, red flags, escalation, and a short quiz.' },
+    tweaks: {},
+    isRechecking: false,
+    onProceed: () => alert('Proceed with available info'),
+    onReupload: (f) => alert('Re-upload: ' + f.name),
+    onBack: () => alert('Back to edit'),
+  }),
+  document.getElementById('root')
+);
+</script>
+</body></html>
