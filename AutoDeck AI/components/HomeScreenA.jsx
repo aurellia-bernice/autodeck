@@ -18,12 +18,12 @@ const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
   const [layoutTemplateId, setLayoutTemplateId] = React.useState(null);
 
   const SLIDE_TEMPLATES = [
-    { id: 'product-launch', name: 'Product Launch', desc: 'New product or feature announcement', slides: ['Cover', 'The Problem', 'Our Solution', 'Key Features', 'Pricing & Timeline', 'Next Steps'] },
-    { id: 'all-hands', name: 'All-Hands', desc: 'Company-wide update meeting', slides: ['Cover', 'Company Highlights', 'Team Updates', 'Customer Wins', 'OKR Progress', "What's Next"] },
-    { id: 'investor', name: 'Investor Update', desc: 'Quarterly update for investors', slides: ['Cover', 'Key Metrics', 'Milestones Hit', 'Financials & Runway', 'Roadmap', 'The Ask'] },
-    { id: 'training', name: 'Training', desc: 'Onboarding or compliance deck', slides: ['Cover', 'Learning Objectives', 'Key Concepts', 'Practical Examples', 'Common Mistakes', 'Summary & Quiz'] },
-    { id: 'sales', name: 'Sales Pitch', desc: 'Win a deal or partnership', slides: ['Cover', 'Your Challenge', 'Our Solution', 'Why Quidax', 'Pricing', 'Getting Started'] },
-    { id: 'retro', name: 'Retrospective', desc: 'Team review and learnings', slides: ['Cover', "What Went Well", "What Didn't", 'Root Causes', 'Action Items', 'Commitments'] },
+    { id: 'product-launch', kicker: 'Launch',    name: 'Product launch announcement', slides: ['Cover', 'The Problem', 'Our Solution', 'Key Features', 'Pricing & Timeline', 'Next Steps'] },
+    { id: 'all-hands',      kicker: 'All-Hands', name: 'Team all-hands recap',         slides: ['Cover', 'Company Highlights', 'Team Updates', 'Customer Wins', 'OKR Progress', "What's Next"] },
+    { id: 'investor',       kicker: 'Investor',  name: 'Series update for investors',  slides: ['Cover', 'Key Metrics', 'Milestones Hit', 'Financials & Runway', 'Roadmap', 'The Ask'] },
+    { id: 'training',       kicker: 'Training',  name: 'Compliance training deck',     slides: ['Cover', 'Learning Objectives', 'Key Concepts', 'Practical Examples', 'Common Mistakes', 'Summary & Quiz'] },
+    { id: 'sales',          kicker: 'Sales',     name: 'Sales pitch deck',             slides: ['Cover', 'Your Challenge', 'Our Solution', 'Why Quidax', 'Pricing', 'Getting Started'] },
+    { id: 'retro',          kicker: 'Retro',     name: 'Sprint retrospective',         slides: ['Cover', "What Went Well", "What Didn't", 'Root Causes', 'Action Items', 'Commitments'] },
   ];
 
   const safeStorageFileName = (value) => String(value || 'source-file')
@@ -157,7 +157,7 @@ const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
         </div>
       </div>
 
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: 880, margin: '0 auto', padding: '56px 32px 96px' }}>
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: 1000, margin: '0 auto', padding: '56px 40px 96px' }}>
         {/* Eyebrow */}
         <div style={{ ...qxMotion.fadeUp(0), fontFamily: qxType.mono, fontSize: 11, letterSpacing: '0.30em', textTransform: 'uppercase', color: T.inkMute, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: QX.lime, boxShadow: `0 0 12px ${QX.lime}`, animation: 'qxBreathe 2.4s ease-in-out infinite' }} />
@@ -181,12 +181,77 @@ const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
         <p style={{
           ...qxMotion.fadeUp(160),
           fontSize: 18, lineHeight: 1.55, color: T.inkDim,
-          margin: '0 0 44px', maxWidth: 540,
+          margin: '0 0 28px', maxWidth: 540,
         }}>
-          Paste notes, drop a doc, or describe it. AutoDeck structures a brand-perfect Quidax deck in seconds.
+          {templateMode === 'Layout'
+            ? 'Pick a pre-built slide structure below, then add your content.'
+            : 'Paste notes, drop a doc, or describe it. AutoDeck structures a brand-perfect Quidax deck in seconds.'}
         </p>
 
-        {/* Textarea card */}
+        {/* Mode selector */}
+        <div style={{ ...qxMotion.fadeUp(200), display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 36 }}>
+          {[
+            {
+              mode: 'Prompt',
+              icon: (
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M2 13l1.5-4.5L11 1l3 3-7.5 7.5L2 13z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
+                  <path d="M10 2.5l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                </svg>
+              ),
+              title: 'From a brief',
+              desc: 'Describe what you need — AI generates the structure and content for you.',
+            },
+            {
+              mode: 'Layout',
+              icon: (
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1.5" stroke="currentColor" strokeWidth="1.4"/>
+                  <rect x="9" y="1.5" width="5.5" height="5.5" rx="1.5" stroke="currentColor" strokeWidth="1.4"/>
+                  <rect x="1.5" y="9" width="5.5" height="5.5" rx="1.5" stroke="currentColor" strokeWidth="1.4"/>
+                  <rect x="9" y="9" width="5.5" height="5.5" rx="1.5" stroke="currentColor" strokeWidth="1.4"/>
+                </svg>
+              ),
+              title: 'From a template',
+              desc: 'Pick a pre-built slide structure — just add your content to fill each slide.',
+            },
+          ].map(({ mode, icon, title, desc }) => {
+            const active = templateMode === mode;
+            return (
+              <button key={mode}
+                onClick={() => { setTemplateMode(mode); setLayoutTemplateId(null); }}
+                style={{
+                  padding: '20px 24px', textAlign: 'left', cursor: 'pointer',
+                  borderRadius: qxRadius.md,
+                  border: `1.5px solid ${active ? T.primary : T.border}`,
+                  background: active ? T.surface : 'transparent',
+                  transition: `all 200ms ${qxEase}`,
+                  boxShadow: active ? qxShadow(tweaks?.darkMode).md : 'none',
+                }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                  <div style={{
+                    width: 30, height: 30, borderRadius: qxRadius.sm, flexShrink: 0,
+                    background: active ? `${T.primary}18` : T.ghostBg,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: active ? T.primary : T.inkMute,
+                    transition: `all 200ms ${qxEase}`,
+                  }}>{icon}</div>
+                  <div style={{ fontFamily: qxType.display, fontSize: 16, fontWeight: 500, letterSpacing: '-0.015em', color: active ? T.primary : T.ink }}>
+                    {title}
+                  </div>
+                </div>
+                <div style={{ fontFamily: qxType.body, fontSize: 13, color: T.inkDim, lineHeight: 1.5, paddingLeft: 40 }}>
+                  {desc}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Brief mode: textarea + config + CTA (left) · seeds (right) */}
+        {templateMode === 'Prompt' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 268px', gap: 20, alignItems: 'start' }}>
+        <div>
         <div
           onDragOver={e => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
@@ -298,67 +363,158 @@ const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
           </div>
         </div>
 
-        {/* Config row */}
-        <div style={{ ...qxMotion.fadeUp(300), marginTop: 24 }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-end' }}>
-            <ConfigGroup label="Slides" T={T}>
-              <Pills value={slideCount} onChange={setSlideCount} options={slideOptions} T={T} />
-            </ConfigGroup>
-            <ConfigGroup label="Template" T={T}>
-              <Pills value={templateMode} onChange={(v) => { setTemplateMode(v); setLayoutTemplateId(null); }} options={['Prompt', 'Layout']} T={T} />
-            </ConfigGroup>
-            {templateMode === 'Prompt' && (
-              <ConfigGroup label="Style" T={T}>
-                <Pills value={templateStyle} onChange={setTemplateStyle} options={templates} T={T} />
-              </ConfigGroup>
-            )}
-          </div>
-
-          {/* Slide layout template picker */}
-          {templateMode === 'Layout' && (
-            <div style={{ marginTop: 20 }}>
-              <div style={{ fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.inkMute, marginBottom: 12 }}>
-                Choose a slide structure — add your content and the AI will fill each slide
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(186px, 1fr))', gap: 10 }}>
-                {SLIDE_TEMPLATES.map(t => {
-                  const active = layoutTemplateId === t.id;
-                  return (
-                    <button key={t.id} onClick={() => setLayoutTemplateId(active ? null : t.id)} style={{
-                      padding: '14px 16px', textAlign: 'left',
-                      border: `1px solid ${active ? T.primary : T.border}`,
-                      background: active ? T.surface : 'transparent',
-                      borderRadius: qxRadius.md, cursor: 'pointer',
-                      transition: `all 160ms ${qxEase}`,
-                      boxShadow: active ? qxShadow(tweaks?.darkMode).md : 'none',
-                    }}
-                      onMouseEnter={e => { if (!active) e.currentTarget.style.borderColor = T.inkMute; }}
-                      onMouseLeave={e => { if (!active) e.currentTarget.style.borderColor = T.border; }}>
-                      <div style={{ fontFamily: qxType.body, fontWeight: 600, fontSize: 13, color: active ? T.primary : T.ink, marginBottom: 3, letterSpacing: '-0.01em' }}>
-                        {t.name}
-                      </div>
-                      <div style={{ fontFamily: qxType.body, fontSize: 11, color: T.inkMute, marginBottom: 10, lineHeight: 1.4 }}>
-                        {t.desc}
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {t.slides.map((s, i) => (
-                          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                            <span style={{ fontFamily: qxType.mono, fontSize: 9, color: active ? T.primary : T.inkFaint, width: 14, flexShrink: 0, opacity: 0.7 }}>
-                              {String(i + 1).padStart(2, '0')}
-                            </span>
-                            <span style={{ fontFamily: qxType.mono, fontSize: 9.5, color: active ? T.inkDim : T.inkFaint, letterSpacing: '0.04em' }}>{s}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+        {/* Config + CTA inside left column */}
+        <div style={{ marginTop: 24, display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-end' }}>
+          <ConfigGroup label="Slides" T={T}>
+            <Pills value={slideCount} onChange={setSlideCount} options={slideOptions} T={T} />
+          </ConfigGroup>
+          <ConfigGroup label="Style" T={T}>
+            <Pills value={templateStyle} onChange={setTemplateStyle} options={templates} T={T} />
+          </ConfigGroup>
+        </div>
+        <div style={{ marginTop: 28, display: 'flex', alignItems: 'center', gap: 16 }}>
+          <button
+            onClick={() => canGenerate && onGenerate({
+              inputText, slideCount, templateStyle,
+              templatePreset: window.AutoDeckTemplatePresets?.summarizeForPrompt?.(templateStyle),
+              uploadedFile, parsedFileText, inputMode: activeMode, layoutTemplate: null,
+            })}
+            disabled={!canGenerate}
+            style={{
+              padding: '17px 32px', borderRadius: qxRadius.full, border: 'none',
+              background: canGenerate ? QX.lime : T.ghostBg,
+              color: canGenerate ? QX.limeInk : T.inkFaint,
+              fontFamily: qxType.body, fontSize: 15.5, fontWeight: 600,
+              letterSpacing: '-0.005em',
+              cursor: canGenerate ? 'pointer' : 'not-allowed',
+              display: 'flex', alignItems: 'center', gap: 12,
+              transition: `all 180ms ${qxEase}`,
+              boxShadow: canGenerate ? '0 8px 30px rgba(212,255,63,0.42)' : 'none',
+            }}
+            onMouseEnter={e => { if (canGenerate) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 36px rgba(212,255,63,0.55)'; } }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; if (canGenerate) e.currentTarget.style.boxShadow = '0 8px 30px rgba(212,255,63,0.42)'; }}>
+            {parsing ? 'Parsing file...' : 'Generate deck'}
+            <svg width="15" height="15" viewBox="0 0 14 14" fill="none">
+              <path d="M3 7h8M8 4l3 3-3 3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          <span style={{ fontFamily: qxType.mono, fontSize: 11, color: T.inkMute, letterSpacing: '0.05em' }}>⌘ ↵</span>
+        </div>
         </div>
 
-        {/* CTA — the lime moment */}
+        {/* Seeds sidebar — right column */}
+        <div>
+          <div style={{ fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.inkMute, marginBottom: 14 }}>
+            Or start from
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {promptIdeas.map((p, i) => (
+              <button key={p.label}
+                onClick={() => { setInputText(p.seed); setUserModeOverride('brief'); }}
+                onMouseEnter={() => setActivePrompt(i)}
+                style={{
+                  padding: '14px 16px', borderRadius: qxRadius.md,
+                  border: `1px solid ${activePrompt === i ? T.primary : T.border}`,
+                  background: activePrompt === i ? T.surface : 'transparent',
+                  color: T.ink, fontFamily: qxType.body,
+                  cursor: 'pointer', transition: `all 240ms ${qxEase}`, textAlign: 'left',
+                  boxShadow: activePrompt === i ? qxShadow(tweaks?.darkMode).sm : 'none',
+                  transform: activePrompt === i ? 'translateY(-1px)' : 'translateY(0)',
+                }}>
+                <div style={{ fontFamily: qxType.mono, fontSize: 9.5, letterSpacing: '0.20em', textTransform: 'uppercase', color: activePrompt === i ? T.primary : T.inkMute, marginBottom: 5 }}>
+                  {p.kicker}
+                </div>
+                <div style={{ fontFamily: qxType.display, fontSize: 14, fontWeight: 500, letterSpacing: '-0.01em', lineHeight: 1.25, color: T.ink }}>
+                  {p.label}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+        </div>)}
+
+        {/* Template picker + content textarea — Layout mode */}
+        {templateMode === 'Layout' && (
+          <div style={{ ...qxMotion.fadeUp(240) }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+              {SLIDE_TEMPLATES.map(t => {
+                const active = layoutTemplateId === t.id;
+                return (
+                  <button key={t.id} onClick={() => setLayoutTemplateId(active ? null : t.id)}
+                    style={{
+                      padding: '18px 18px 16px', borderRadius: qxRadius.md,
+                      border: `1px solid ${active ? T.primary : T.border}`,
+                      background: active ? T.surface : 'transparent',
+                      color: T.ink, fontFamily: qxType.body,
+                      cursor: 'pointer', transition: `all 240ms ${qxEase}`, textAlign: 'left',
+                      boxShadow: active ? qxShadow(tweaks?.darkMode).md : 'none',
+                      transform: active ? 'translateY(-2px)' : 'translateY(0)',
+                    }}>
+                    <div style={{ fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.20em', textTransform: 'uppercase', color: active ? T.primary : T.inkMute, marginBottom: 8 }}>
+                      {t.kicker}
+                    </div>
+                    <div style={{ fontFamily: qxType.display, fontSize: 17, fontWeight: 500, letterSpacing: '-0.015em', lineHeight: 1.25, color: T.ink }}>
+                      {t.name}
+                    </div>
+                    <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: active ? T.primary : T.inkFaint, marginTop: 10, opacity: 0.7 }}>
+                      {t.slides.length} slides
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Content textarea — appears once a template is chosen */}
+            {layoutTemplateId && (
+              <div style={{ marginTop: 16, background: T.surface, borderRadius: qxRadius.lg, border: `1px solid ${T.borderHi}`, boxShadow: qxShadow(tweaks?.darkMode).md, overflow: 'hidden' }}>
+                <textarea
+                  value={inputText}
+                  onChange={e => setInputText(e.target.value)}
+                  autoFocus
+                  placeholder={`Add your content for "${SLIDE_TEMPLATES.find(t => t.id === layoutTemplateId)?.name}" — notes, facts, key points, data…`}
+                  style={{
+                    width: '100%', minHeight: 160, padding: '20px 24px 16px',
+                    border: 'none', outline: 'none', resize: 'vertical', background: 'transparent',
+                    fontFamily: qxType.body, fontSize: 16, lineHeight: 1.65,
+                    color: T.ink, boxSizing: 'border-box',
+                  }}
+                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderTop: `1px solid ${T.border}`, background: tweaks?.darkMode ? 'rgba(0,0,0,0.18)' : T.surfaceHi }}>
+                  <button onClick={() => document.getElementById('hsAFileLayout').click()} style={ghostBtn(T)}
+                    onMouseEnter={e => e.currentTarget.style.background = T.ghostHi}
+                    onMouseLeave={e => e.currentTarget.style.background = T.ghostBg}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <path d="M9 1H3v12h8V3L9 1Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+                      <path d="M9 1v2h2" stroke="currentColor" strokeWidth="1.3"/>
+                    </svg>
+                    {uploadedFile ? truncate(uploadedFile.name, 22) : 'Attach file'}
+                  </button>
+                  <input id="hsAFileLayout" type="file" accept=".pdf,.docx,.txt,.pptx" style={{ display: 'none' }}
+                         onChange={e => { const f = e.target.files[0]; if (f) { setUploadedFile(f); parseFile(f); } }} />
+                  <div style={{ flex: 1 }} />
+                  <span style={{ fontFamily: qxType.mono, fontSize: 11, color: T.inkMute, letterSpacing: '0.05em' }}>
+                    {parsing ? 'parsing file...' : wordCount > 0 ? `${wordCount.toLocaleString()} words` : 'or drag a file'}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Config row — Layout mode only */}
+        {templateMode === 'Layout' && (
+        <div style={{ ...qxMotion.fadeUp(300), marginTop: 24, display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-end' }}>
+          <ConfigGroup label="Slides" T={T}>
+            <Pills value={slideCount} onChange={setSlideCount} options={slideOptions} T={T} />
+          </ConfigGroup>
+          <ConfigGroup label="Style" T={T}>
+            <Pills value={templateStyle} onChange={setTemplateStyle} options={templates} T={T} />
+          </ConfigGroup>
+        </div>
+        )}
+
+        {/* CTA — Layout mode only */}
+        {templateMode === 'Layout' && (
         <div style={{ ...qxMotion.fadeUp(360), marginTop: 36, display: 'flex', alignItems: 'center', gap: 16 }}>
           <button
             onClick={() => canGenerate && onGenerate({
@@ -368,8 +524,8 @@ const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
               templatePreset: window.AutoDeckTemplatePresets?.summarizeForPrompt?.(templateStyle),
               uploadedFile,
               parsedFileText,
-              inputMode: templateMode === 'Layout' ? 'content' : activeMode,
-              layoutTemplate: templateMode === 'Layout' ? SLIDE_TEMPLATES.find(t => t.id === layoutTemplateId) : null,
+              inputMode: 'content',
+              layoutTemplate: SLIDE_TEMPLATES.find(t => t.id === layoutTemplateId) || null,
             })}
             disabled={!canGenerate}
             style={{
@@ -386,57 +542,15 @@ const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
             }}
             onMouseEnter={e => { if (canGenerate) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 36px rgba(212,255,63,0.55)'; } }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; if (canGenerate) e.currentTarget.style.boxShadow = '0 8px 30px rgba(212,255,63,0.42)'; }}>
-            {parsing ? 'Parsing file...' : templateMode === 'Layout' ? 'Fill template' : 'Generate deck'}
+            {parsing ? 'Parsing file...' : 'Fill template'}
             <svg width="15" height="15" viewBox="0 0 14 14" fill="none">
               <path d="M3 7h8M8 4l3 3-3 3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
           <span style={{ fontFamily: qxType.mono, fontSize: 11, color: T.inkMute, letterSpacing: '0.05em' }}>⌘ ↵</span>
         </div>
+        )}
 
-        {/* Prompt seeds — editorial card row */}
-        <div style={{ ...qxMotion.fadeUp(440), marginTop: 72, paddingTop: 32, borderTop: `1px solid ${T.border}` }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 18 }}>
-            <div style={{ fontFamily: qxType.mono, fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.inkMute }}>
-              Or start from
-            </div>
-            <div style={{ fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.inkFaint }}>
-              {String(activePrompt + 1).padStart(2, '0')} / {String(promptIdeas.length).padStart(2, '0')}
-            </div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
-            {promptIdeas.map((p, i) => (
-              <button key={p.label} onClick={() => { setInputText(p.seed); setUserModeOverride('brief'); }}
-                onMouseEnter={() => setActivePrompt(i)}
-                style={{
-                  padding: '18px 18px 16px',
-                  borderRadius: qxRadius.md,
-                  border: `1px solid ${activePrompt === i ? T.primary : T.border}`,
-                  background: activePrompt === i ? T.surface : 'transparent',
-                  color: T.ink,
-                  fontFamily: qxType.body,
-                  cursor: 'pointer',
-                  transition: `all 240ms ${qxEase}`,
-                  textAlign: 'left',
-                  boxShadow: activePrompt === i ? qxShadow(tweaks?.darkMode).md : 'none',
-                  transform: activePrompt === i ? 'translateY(-2px)' : 'translateY(0)',
-                }}>
-                <div style={{
-                  fontFamily: qxType.mono, fontSize: 10,
-                  letterSpacing: '0.20em', textTransform: 'uppercase',
-                  color: activePrompt === i ? T.primary : T.inkMute,
-                  marginBottom: 8,
-                }}>
-                  {p.kicker}
-                </div>
-                <div style={{
-                  fontFamily: qxType.display, fontSize: 17, fontWeight: 500,
-                  letterSpacing: '-0.015em', lineHeight: 1.25, color: T.ink,
-                }}>{p.label}</div>
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );
