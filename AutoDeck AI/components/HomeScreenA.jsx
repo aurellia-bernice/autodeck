@@ -14,6 +14,17 @@ const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
   const [dragOver, setDragOver] = React.useState(false);
   const [activePrompt, setActivePrompt] = React.useState(0);
   const [userModeOverride, setUserModeOverride] = React.useState(() => restoredInputMode); // null | 'brief' | 'content'
+  const [templateMode, setTemplateMode] = React.useState('Prompt'); // 'Prompt' | 'Layout'
+  const [layoutTemplateId, setLayoutTemplateId] = React.useState(null);
+
+  const SLIDE_TEMPLATES = [
+    { id: 'product-launch', name: 'Product Launch', desc: 'New product or feature announcement', slides: ['Cover', 'The Problem', 'Our Solution', 'Key Features', 'Pricing & Timeline', 'Next Steps'] },
+    { id: 'all-hands', name: 'All-Hands', desc: 'Company-wide update meeting', slides: ['Cover', 'Company Highlights', 'Team Updates', 'Customer Wins', 'OKR Progress', "What's Next"] },
+    { id: 'investor', name: 'Investor Update', desc: 'Quarterly update for investors', slides: ['Cover', 'Key Metrics', 'Milestones Hit', 'Financials & Runway', 'Roadmap', 'The Ask'] },
+    { id: 'training', name: 'Training', desc: 'Onboarding or compliance deck', slides: ['Cover', 'Learning Objectives', 'Key Concepts', 'Practical Examples', 'Common Mistakes', 'Summary & Quiz'] },
+    { id: 'sales', name: 'Sales Pitch', desc: 'Win a deal or partnership', slides: ['Cover', 'Your Challenge', 'Our Solution', 'Why Quidax', 'Pricing', 'Getting Started'] },
+    { id: 'retro', name: 'Retrospective', desc: 'Team review and learnings', slides: ['Cover', "What Went Well", "What Didn't", 'Root Causes', 'Action Items', 'Commitments'] },
+  ];
 
   const safeStorageFileName = (value) => String(value || 'source-file')
     .replace(/[^\w.-]+/g, '_')
@@ -85,7 +96,7 @@ const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
   const slideOptions = ['5', '8', '10', '15', 'Auto'];
   const templates = window.AutoDeckTemplatePresets?.getTemplateOptions?.() || ['Professional', 'Minimal', 'Bold', 'Fun'];
 
-  const canGenerate = !parsing && (inputText.trim().length > 10 || uploadedFile);
+  const canGenerate = !parsing && (inputText.trim().length > 10 || uploadedFile) && (templateMode === 'Prompt' || layoutTemplateId !== null);
   const wordCount = inputText.trim() ? inputText.trim().split(/\s+/).length : 0;
   const parsedWordCount = parsedFileText.trim() ? parsedFileText.trim().split(/\s+/).length : 0;
   const estSlides = wordCount > 0 ? Math.max(3, Math.min(20, Math.round(wordCount / 60))) : 0;
@@ -287,14 +298,64 @@ const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
           </div>
         </div>
 
-        {/* Compact config row */}
-        <div style={{ ...qxMotion.fadeUp(300), marginTop: 24, display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-end' }}>
-          <ConfigGroup label="Slides" T={T}>
-            <Pills value={slideCount} onChange={setSlideCount} options={slideOptions} T={T} />
-          </ConfigGroup>
-          <ConfigGroup label="Style" T={T}>
-            <Pills value={templateStyle} onChange={setTemplateStyle} options={templates} T={T} />
-          </ConfigGroup>
+        {/* Config row */}
+        <div style={{ ...qxMotion.fadeUp(300), marginTop: 24 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-end' }}>
+            <ConfigGroup label="Slides" T={T}>
+              <Pills value={slideCount} onChange={setSlideCount} options={slideOptions} T={T} />
+            </ConfigGroup>
+            <ConfigGroup label="Template" T={T}>
+              <Pills value={templateMode} onChange={(v) => { setTemplateMode(v); setLayoutTemplateId(null); }} options={['Prompt', 'Layout']} T={T} />
+            </ConfigGroup>
+            {templateMode === 'Prompt' && (
+              <ConfigGroup label="Style" T={T}>
+                <Pills value={templateStyle} onChange={setTemplateStyle} options={templates} T={T} />
+              </ConfigGroup>
+            )}
+          </div>
+
+          {/* Slide layout template picker */}
+          {templateMode === 'Layout' && (
+            <div style={{ marginTop: 20 }}>
+              <div style={{ fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.inkMute, marginBottom: 12 }}>
+                Choose a slide structure — add your content and the AI will fill each slide
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(186px, 1fr))', gap: 10 }}>
+                {SLIDE_TEMPLATES.map(t => {
+                  const active = layoutTemplateId === t.id;
+                  return (
+                    <button key={t.id} onClick={() => setLayoutTemplateId(active ? null : t.id)} style={{
+                      padding: '14px 16px', textAlign: 'left',
+                      border: `1px solid ${active ? T.primary : T.border}`,
+                      background: active ? T.surface : 'transparent',
+                      borderRadius: qxRadius.md, cursor: 'pointer',
+                      transition: `all 160ms ${qxEase}`,
+                      boxShadow: active ? qxShadow(tweaks?.darkMode).md : 'none',
+                    }}
+                      onMouseEnter={e => { if (!active) e.currentTarget.style.borderColor = T.inkMute; }}
+                      onMouseLeave={e => { if (!active) e.currentTarget.style.borderColor = T.border; }}>
+                      <div style={{ fontFamily: qxType.body, fontWeight: 600, fontSize: 13, color: active ? T.primary : T.ink, marginBottom: 3, letterSpacing: '-0.01em' }}>
+                        {t.name}
+                      </div>
+                      <div style={{ fontFamily: qxType.body, fontSize: 11, color: T.inkMute, marginBottom: 10, lineHeight: 1.4 }}>
+                        {t.desc}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {t.slides.map((s, i) => (
+                          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <span style={{ fontFamily: qxType.mono, fontSize: 9, color: active ? T.primary : T.inkFaint, width: 14, flexShrink: 0, opacity: 0.7 }}>
+                              {String(i + 1).padStart(2, '0')}
+                            </span>
+                            <span style={{ fontFamily: qxType.mono, fontSize: 9.5, color: active ? T.inkDim : T.inkFaint, letterSpacing: '0.04em' }}>{s}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* CTA — the lime moment */}
@@ -307,7 +368,8 @@ const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
               templatePreset: window.AutoDeckTemplatePresets?.summarizeForPrompt?.(templateStyle),
               uploadedFile,
               parsedFileText,
-              inputMode: activeMode, // 'brief' | 'content' | null
+              inputMode: templateMode === 'Layout' ? 'content' : activeMode,
+              layoutTemplate: templateMode === 'Layout' ? SLIDE_TEMPLATES.find(t => t.id === layoutTemplateId) : null,
             })}
             disabled={!canGenerate}
             style={{
@@ -324,7 +386,7 @@ const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
             }}
             onMouseEnter={e => { if (canGenerate) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 36px rgba(212,255,63,0.55)'; } }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; if (canGenerate) e.currentTarget.style.boxShadow = '0 8px 30px rgba(212,255,63,0.42)'; }}>
-            {parsing ? 'Parsing file...' : 'Generate deck'}
+            {parsing ? 'Parsing file...' : templateMode === 'Layout' ? 'Fill template' : 'Generate deck'}
             <svg width="15" height="15" viewBox="0 0 14 14" fill="none">
               <path d="M3 7h8M8 4l3 3-3 3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
