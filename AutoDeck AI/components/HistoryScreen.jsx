@@ -27,8 +27,8 @@ const HistoryScreen = ({ tweaks, currentUser, onOpenDeck }) => {
     Fun:    ['#0F0A24', '#312E81', '#A5B4FC'],
   };
 
-  const [decks, setDecks] = React.useState(SEED_DECKS);
-  const [loading, setLoading] = React.useState(false);
+  const [decks, setDecks] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
   const [selectedDeck, setSelectedDeck] = React.useState(null);
   const detailPanelRef = React.useRef(null);
 
