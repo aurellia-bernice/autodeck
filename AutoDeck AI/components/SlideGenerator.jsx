@@ -191,7 +191,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
   const align  = getAlign(currentIndex);
   const slide  = localSlides[currentIndex] || localSlides[0];
   const total  = localSlides.length;
-  const deckTitleRaw = config?.inputText ? config.inputText.trim() : 'Untitled deck';
+  const deckTitleRaw = localSlides[0]?.title || (config?.inputText ? config.inputText.trim() : 'Untitled deck');
   const deckTitle = deckTitleRaw.split(/\s+/).slice(0, 6).join(' ') + (deckTitleRaw.split(/\s+/).length > 6 ? '…' : '');
 
   // ─── helpers ─────────────────────────────────────────────

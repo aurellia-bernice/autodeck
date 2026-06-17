@@ -95,6 +95,23 @@ test.describe('HomeScreenA', () => {
     await expect(page.getByRole('button', { name: /Generate deck/i })).toBeEnabled();
   });
 
+  test('manual Direction mode is submitted as a brief even for long text', async ({ page }) => {
+    const longDirection = [
+      'Build a hiring strategy deck for the Quidax data engineering program and keep it framed as a proposal for talent leadership.',
+      'Cover the role profile, hiring funnel, candidate assessment, onboarding milestones, mentoring ownership, tooling readiness, data platform priorities, risks, and next steps.',
+      'Use a practical operating cadence with weekly review moments, named decision points, open assumptions, and clear information gaps for the recruiting team.',
+      'The deck should feel like a direction-setting narrative rather than pasted source content, with sections for context, problem, approach, implementation plan, and leadership decisions.',
+      'Avoid pretending we already have final metrics, final headcount approvals, final budget, confirmed interview panels, or finalized timelines unless the source later provides them.',
+      'Make the outcome useful for planning a discussion, assigning owners, and identifying what extra source material should be uploaded before producing a final version.',
+    ].join(' ');
+
+    await page.locator('textarea').fill(longDirection);
+    await page.getByRole('button', { name: 'Direction', exact: true }).click();
+    await page.getByRole('button', { name: /Generate deck/i }).click();
+
+    await expect.poll(async () => page.evaluate(() => window.__autodeck_generation_debug?.().inputMode)).toBe('brief');
+  });
+
   // ── Pill selection ────────────────────────────────────────────────────────
 
   test('clicking a different slide count pill does not crash', async ({ page }) => {

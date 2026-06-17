@@ -195,10 +195,6 @@ const App = () => {
     const briefHasInfo = hasTangibleSourceInfo(brief, 'brief');
     const sourceHasInfo = hasTangibleSourceInfo(source, 'source');
 
-    if (!briefHasInfo && !sourceHasInfo) {
-      return buildSourceReviewData({ issueType: 'insufficient_context', config });
-    }
-
     if (hasUpload && !sourceHasInfo) {
       return buildSourceReviewData({
         issueType: 'unusable_source',
@@ -213,6 +209,10 @@ const App = () => {
           'Or paste the key points from the document into the brief box and proceed with those notes.',
         ],
       });
+    }
+
+    if (!briefHasInfo && !sourceHasInfo) {
+      return buildSourceReviewData({ issueType: 'insufficient_context', config });
     }
 
     if (briefHasInfo && sourceHasInfo && hasSourceConflict(brief, source)) {
@@ -285,6 +285,7 @@ const App = () => {
       generationTrace,
       requestedSlides: deckConfig?.slideCount || null,
       templateStyle: deckConfig?.templateStyle || null,
+      inputMode: deckConfig?.inputMode || null,
       sourceDocumentName: deckConfig?.uploadedFile?.name || '',
       sourceUploadsEnabled: isSourceFileUploadEnabled(),
       generatedSlideCount: Array.isArray(slideshowSlides) ? slideshowSlides.length : 0,
@@ -605,7 +606,11 @@ const App = () => {
   };
 
   const handleGenerateAgain = () => {
-    setScreen('home');
+    if (!deckConfig) {
+      setScreen('home');
+      return;
+    }
+    handleGenerate({ ...deckConfig, conflictAcknowledged: true });
   };
 
   // Conflict screen: user chose "Proceed with available info" or conflict cleared

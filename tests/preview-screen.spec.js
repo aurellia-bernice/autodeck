@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { waitForApp, goToScreen } = require('./helpers');
+const { waitForApp, goToScreen, setGenerationState } = require('./helpers');
 
 test.describe('PreviewScreen', () => {
   test.beforeEach(async ({ page }) => {
@@ -23,8 +23,81 @@ test.describe('PreviewScreen', () => {
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   });
 
+  test('cover title matches the generated first slide title', async ({ page }) => {
+    await setGenerationState(page, {
+      screen: 'preview',
+      status: 'ready',
+      config: {
+        inputText: 'let the them be the focus',
+        slideCount: '5',
+        templateStyle: 'Professional',
+      },
+      slides: [
+        {
+          title: 'About to Leave — A Poem for the Class Leaving',
+          kicker: 'Graduation',
+          bullets: ['A poem written from the heart of the class'],
+        },
+        {
+          title: 'Three Years Packed Into Dusty Memories',
+          kicker: 'Memory',
+          bullets: ['Shared classroom moments become the story'],
+        },
+      ],
+    });
+
+    await expect(page.getByRole('heading', { name: /About to Leave — A Poem for the Class Leaving/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /let the them be the focus/i })).not.toBeVisible();
+  });
+
   test('renders "Generate again" button on the cover', async ({ page }) => {
     await expect(page.getByRole('button', { name: /Generate again/i })).toBeVisible();
+  });
+
+  test('Generate again starts a new generation run from the current config', async ({ page }) => {
+    await setGenerationState(page, {
+      screen: 'preview',
+      status: 'ready',
+      currentUser: { uid: 'test-user', email: 'admin@quidax.com', displayName: 'Admin' },
+      config: {
+        inputText: 'Graduation poem deck for the class leaving with concrete sections and a final farewell.',
+        slideCount: '5',
+        templateStyle: 'Professional',
+        inputMode: 'brief',
+      },
+      slides: [
+        {
+          title: 'About to Leave — A Poem for the Class Leaving',
+          kicker: 'Graduation',
+          bullets: ['A poem written from the heart of the class'],
+        },
+      ],
+    });
+
+    await page.evaluate(() => {
+      window.firebaseDb = {
+        collection: () => ({
+          doc: (id) => ({
+            id,
+            onSnapshot: () => () => {},
+            collection: () => ({ orderBy: () => ({ get: async () => ({ docs: [] }) }) }),
+          }),
+        }),
+      };
+      const app = firebase.app();
+      app.functions = () => ({
+        httpsCallable: (name) => async () => {
+          if (name === 'createDeck') return { data: { deckId: 'regen-deck-123' } };
+          if (name === 'generateDeck') return new Promise(() => {});
+          return { data: {} };
+        },
+      });
+    });
+
+    await page.getByRole('button', { name: /Generate again/i }).click();
+
+    await expect.poll(async () => page.evaluate(() => window.__autodeck_generation_debug?.().screen)).toBe('processing');
+    await expect.poll(async () => page.evaluate(() => window.__autodeck_generation_debug?.().requestedSlides)).toBe('5');
   });
 
   test('renders "Open slideshow" button on the cover', async ({ page }) => {
@@ -117,7 +190,7 @@ test.describe('PreviewScreen', () => {
     await titleInput.clear();
     await titleInput.fill('Updated Slide Title');
     await page.getByRole('button', { name: /Save changes/i }).click();
-    await expect(page.getByText('Updated Slide Title')).toBeVisible();
+    await expect(page.getByText('Updated Slide Title', { exact: true })).toBeVisible();
   });
 
   // ── Slide management ──────────────────────────────────────────────────────

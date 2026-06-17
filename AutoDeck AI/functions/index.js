@@ -498,6 +498,7 @@ const extractPptxText = async (buffer) => {
 
 const buildDeckPrompt = ({ userInstruction, sourceMaterial, sourceDocumentName, sourceFit, count, templateStyle, voiceGuide, templatePreset, inputMode }) => {
   const isContentMode = inputMode === 'content';
+  const hasSourceMaterial = Boolean(String(sourceMaterial || '').trim());
 
   const modeRequirements = isContentMode ? `
 Mode: STRUCTURE AND STYLE (the user has supplied the complete slide content)
@@ -508,14 +509,18 @@ Mode: STRUCTURE AND STYLE (the user has supplied the complete slide content)
 - If a section header appears in the user's text, use it (adapted) as the slide title.
 - You may reorder content only when a different sequence makes the narrative significantly clearer.
 - "Parsed source material" is unused in this mode — ignore it.` : `
-Mode: GENERATE (the user has supplied a brief or direction — generate content from it)
+Mode: ${hasSourceMaterial ? 'GENERATE FROM BRIEF + SOURCE' : 'GENERATE FROM DIRECTION ONLY'}
 - Treat "User instruction or pasted notes" as the brief: audience, goal, emphasis, missing context, and what story the user wants told.
-- Treat "Parsed source material" as the evidence: the facts, details, sections, and language to synthesize into the deck.
+${hasSourceMaterial ? `- Treat "Parsed source material" as the evidence: the facts, details, sections, and language to synthesize into the deck.
 - Factual content comes from the parsed source material first. The brief can frame the deck, but it cannot create facts that the document does not contain.
 - Merge the brief and the source material into one coherent story. Do not make separate "prompt" and "document" sections.
 - Do not mirror the original document/page/slide breaks mechanically; reorganize around the best narrative arc.
 - Ignore cover-page boilerplate, table of contents, repeated headers/footers, page numbers, "prepared for" metadata, and lists of section titles. Use them only to infer structure; do not turn them into slide content.
-- If the brief asks for a different story than the source supports, make that mismatch explicit with "Needs source confirmation" or reframe the deck around the actual source topic.`;
+- If the brief asks for a different story than the source supports, make that mismatch explicit with "Needs source confirmation" or reframe the deck around the actual source topic.` : `- No source document was provided. Build a useful first-draft deck from the direction alone.
+- Do not invent company-specific metrics, dates, customers, funding details, policies, or decisions.
+- Where the direction implies needed facts that are not present, use concrete "Needs confirmation" or "TBD" bullets instead of filler.
+- Make the deck structure actionable: audience, objective, likely sections, assumptions, information gaps, and next steps.
+- Keep the output tied to the requested topic. Do not drift into a generic deck about presentations or Quidax.`}`;
 
   return `Create exactly ${count} presentation slides from the user's context.
 
@@ -603,7 +608,7 @@ User instruction or pasted notes:
 ${userInstruction || '(none)'}
 
 Parsed source material:
-${sourceMaterial || userInstruction}`;
+${sourceMaterial || '(none provided)'}`;
 };
 
 // ── checkSourceConflict ───────────────────────────────────────
@@ -617,30 +622,6 @@ exports.checkSourceConflict = onCall(
     const { inputText, parsedFileText, sourceDocumentName } = request.data;
     const briefHasInfo = hasTangibleSourceInfo(inputText, 'brief');
     const sourceHasInfo = hasTangibleSourceInfo(parsedFileText, 'source');
-
-    if (!briefHasInfo && !sourceHasInfo) {
-      return {
-        hasConflict: true,
-        issueType: 'insufficient_context',
-        title: 'Need more source material',
-        message: 'AutoDeck needs a concrete brief, usable source document, or pasted notes before it can draft reliable slides.',
-        sourceDocumentName: sourceDocumentName || 'No source document',
-        docSummary: sourceDocumentName
-          ? 'The uploaded file did not provide enough usable content for this request.'
-          : 'No source document or detailed pasted notes were provided.',
-        briefSummary: String(inputText || '').trim() || 'No concrete brief was provided.',
-        missingItems: [
-          'A specific deck objective or audience',
-          'Facts, metrics, decisions, examples, or source notes to support the slides',
-          'A source document that contains the topic the deck should cover',
-        ],
-        recommendations: [
-          'Upload a PDF, DOCX, PPTX, or TXT file with the facts and sections this deck should use.',
-          'Or paste concrete notes: audience, goal, key points, metrics, dates, decisions, risks, and desired next steps.',
-        ],
-        uploadLabel: sourceDocumentName ? 'Upload replacement document' : 'Upload source document',
-      };
-    }
 
     if (sourceDocumentName && !sourceHasInfo) {
       return {
@@ -661,6 +642,28 @@ exports.checkSourceConflict = onCall(
           'Or paste the key points from the document into the brief box and proceed with those notes.',
         ],
         uploadLabel: 'Upload replacement document',
+      };
+    }
+
+    if (!briefHasInfo && !sourceHasInfo) {
+      return {
+        hasConflict: true,
+        issueType: 'insufficient_context',
+        title: 'Need more source material',
+        message: 'AutoDeck needs a concrete brief, usable source document, or pasted notes before it can draft reliable slides.',
+        sourceDocumentName: sourceDocumentName || 'No source document',
+        docSummary: 'No source document or detailed pasted notes were provided.',
+        briefSummary: String(inputText || '').trim() || 'No concrete brief was provided.',
+        missingItems: [
+          'A specific deck objective or audience',
+          'Facts, metrics, decisions, examples, or source notes to support the slides',
+          'A source document that contains the topic the deck should cover',
+        ],
+        recommendations: [
+          'Upload a PDF, DOCX, PPTX, or TXT file with the facts and sections this deck should use.',
+          'Or paste concrete notes: audience, goal, key points, metrics, dates, decisions, risks, and desired next steps.',
+        ],
+        uploadLabel: 'Upload source document',
       };
     }
 

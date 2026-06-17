@@ -85,7 +85,7 @@ const PreviewScreen = ({
   const [theme, setTheme] = React.useState(() => window.AutoDeckTemplatePresets?.getTemplatePreset?.(config?.templateStyle)?.theme || 'purple');
 
   const inputText = config?.inputText || config?.parsedFileText || config?.uploadedFile?.name || 'Q2 Sales Strategy and market expansion plan for Quidax';
-  const deckTitle = inputText.trim().split(/\s+/).slice(0, 8).join(' ').replace(/[.,;:!]+$/, '');
+  const fallbackDeckTitle = inputText.trim().split(/\s+/).slice(0, 8).join(' ').replace(/[.,;:!]+$/, '');
   const slideCount = config?.slideCount === 'Auto' || !config?.slideCount ? 10 : (parseInt(config.slideCount) || 10);
   const incomingSlides = normalizePreviewSlides(generatedSlides, config?.templateStyle);
 
@@ -106,6 +106,7 @@ const PreviewScreen = ({
     : [];
   const initialSlides = incomingSlides.length ? incomingSlides : previewFallbackSlides;
   const [slides, setSlides] = React.useState(initialSlides);
+  const deckTitle = String(slides[0]?.title || fallbackDeckTitle || 'Untitled deck').trim();
 
   React.useEffect(() => {
     const nextSlides = normalizePreviewSlides(generatedSlides, config?.templateStyle);

@@ -4,6 +4,7 @@
 // ============================================================
 const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
   const T = qxTheme(tweaks?.darkMode);
+  const restoredInputMode = ['brief', 'content'].includes(initialConfig?.inputMode) ? initialConfig.inputMode : null;
   const [inputText, setInputText] = React.useState(() => initialConfig?.inputText || '');
   const [slideCount, setSlideCount] = React.useState(() => initialConfig?.slideCount || 'Auto');
   const [templateStyle, setTemplateStyle] = React.useState(() => initialConfig?.templateStyle || 'Professional');
@@ -12,7 +13,7 @@ const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
   const [parsing, setParsing] = React.useState(false);
   const [dragOver, setDragOver] = React.useState(false);
   const [activePrompt, setActivePrompt] = React.useState(0);
-  const [userModeOverride, setUserModeOverride] = React.useState(null); // null | 'brief' | 'content'
+  const [userModeOverride, setUserModeOverride] = React.useState(() => restoredInputMode); // null | 'brief' | 'content'
 
   const safeStorageFileName = (value) => String(value || 'source-file')
     .replace(/[^\w.-]+/g, '_')
@@ -343,7 +344,7 @@ const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
             {promptIdeas.map((p, i) => (
-              <button key={p.label} onClick={() => setInputText(p.seed)}
+              <button key={p.label} onClick={() => { setInputText(p.seed); setUserModeOverride('brief'); }}
                 onMouseEnter={() => setActivePrompt(i)}
                 style={{
                   padding: '18px 18px 16px',
