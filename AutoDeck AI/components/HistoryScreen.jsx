@@ -29,6 +29,15 @@ const HistoryScreen = ({ tweaks, currentUser, onOpenDeck }) => {
 
   const [decks, setDecks] = React.useState(SEED_DECKS);
   const [loading, setLoading] = React.useState(false);
+  const [selectedDeck, setSelectedDeck] = React.useState(null);
+  const detailPanelRef = React.useRef(null);
+
+  const selectDeck = (d) => {
+    setSelectedDeck(d);
+    setTimeout(() => {
+      detailPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  };
 
   const deckFromServer = (d) => ({
     id: d.id,
@@ -74,10 +83,12 @@ const HistoryScreen = ({ tweaks, currentUser, onOpenDeck }) => {
     return () => { cancelled = true; };
   }, [currentUser?.uid]);
 
+  React.useEffect(() => { setSelectedDeck(null); }, [search, filter]);
+
   const templates = ['All', 'Professional', 'Minimal', 'Bold', 'Fun'];
   const filtered = decks.filter(d => d.title.toLowerCase().includes(search.toLowerCase()) && (filter === 'All' || d.template === filter));
   const featured = filtered[0];
-  const rest = filtered.slice(1);
+  const activeFeatured = selectedDeck || featured;
   const fmt = (s) => new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const handleDelete = (id) => {
     setDecks(p => p.filter(d => d.id !== id));
@@ -239,30 +250,30 @@ const HistoryScreen = ({ tweaks, currentUser, onOpenDeck }) => {
       )}
 
       {/* Featured + Shelf view */}
-      {view === 'shelf' && featured && (
+      {view === 'shelf' && activeFeatured && (
         <>
-          {/* Featured */}
-          <div style={{ ...qxMotion.fadeUp(140), marginBottom: 56 }}>
+          {/* Featured / Selected */}
+          <div ref={detailPanelRef} style={{ ...qxMotion.fadeUp(140), marginBottom: 56 }}>
             <div style={{ fontFamily: qxType.mono, fontSize: 10.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.inkMute, marginBottom: 16 }}>
-              Most recent
+              {selectedDeck ? 'Selected' : 'Most recent'}
             </div>
             <div style={{
               display: 'grid', gridTemplateColumns: '320px 1fr', gap: 40,
               alignItems: 'center',
             }}>
-              <DeckCover deck={featured} size="lg" />
+              <DeckCover deck={activeFeatured} size="lg" />
               <div>
                 <div style={{ fontFamily: qxType.mono, fontSize: 10.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.primary, marginBottom: 14 }}>
-                  {featured.template} · {fmt(featured.date)}
+                  {activeFeatured.template} · {fmt(activeFeatured.date)}
                 </div>
                 <h2 style={{ fontFamily: qxType.display, fontSize: 'clamp(32px, 4vw, 48px)', fontWeight: 500, color: T.ink, margin: '0 0 12px', letterSpacing: '-0.025em', lineHeight: 1.05 }}>
-                  {featured.title}
+                  {activeFeatured.title}
                 </h2>
                 <p style={{ fontSize: 16, color: T.inkDim, margin: '0 0 24px', lineHeight: 1.55, maxWidth: 540 }}>
-                  {featured.slides}-slide {featured.template.toLowerCase()} deck by {featured.author}. Last edited {fmt(featured.date)}.
+                  {activeFeatured.slides}-slide {activeFeatured.template.toLowerCase()} deck by {activeFeatured.author}. Last edited {fmt(activeFeatured.date)}.
                 </p>
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button onClick={() => onOpenDeck?.(featured)} style={{
+                  <button onClick={() => onOpenDeck?.(activeFeatured)} style={{
                     padding: '12px 22px', borderRadius: qxRadius.full,
                     border: 'none', background: QX.lime, color: '#1A0530',
                     fontFamily: qxType.body, fontSize: 14, fontWeight: 600,
@@ -275,7 +286,7 @@ const HistoryScreen = ({ tweaks, currentUser, onOpenDeck }) => {
                     <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><polygon points="3,2 12,7 3,12" fill="currentColor"/></svg>
                     Open
                   </button>
-                  <button onClick={() => onOpenDeck?.(featured)} style={{
+                  <button onClick={() => onOpenDeck?.(activeFeatured)} style={{
                     padding: '12px 18px', borderRadius: qxRadius.full,
                     border: `1px solid ${T.border}`, background: 'transparent', color: T.inkDim,
                     fontFamily: qxType.body, fontSize: 13.5, fontWeight: 500,
@@ -284,13 +295,13 @@ const HistoryScreen = ({ tweaks, currentUser, onOpenDeck }) => {
                     <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M7 1v9M3 6l4 4 4-4M1 12h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     Download
                   </button>
-                  <button onClick={() => toggleFav(featured.id)} style={{
+                  <button onClick={() => toggleFav(activeFeatured.id)} style={{
                     width: 42, height: 42, borderRadius: '50%',
                     border: `1px solid ${T.border}`, background: 'transparent',
-                    color: featured.favourite ? '#F5A623' : T.inkMute,
+                    color: activeFeatured.favourite ? '#F5A623' : T.inkMute,
                     cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill={featured.favourite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.4">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill={activeFeatured.favourite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.4">
                       <path d="M7 1l1.8 4 4.2.4-3.2 2.8 1 4.2L7 10.2 3.2 12.4l1-4.2L1 5.4 5.2 5z"/>
                     </svg>
                   </button>
@@ -299,9 +310,9 @@ const HistoryScreen = ({ tweaks, currentUser, onOpenDeck }) => {
                 {/* Mini meta strip */}
                 <div style={{ display: 'flex', gap: 32, marginTop: 32, paddingTop: 24, borderTop: `1px solid ${T.border}` }}>
                   {[
-                    ['Slides', String(featured.slides).padStart(2, '0')],
-                    ['Size', featured.size],
-                    ['Author', featured.author],
+                    ['Slides', String(activeFeatured.slides).padStart(2, '0')],
+                    ['Size', activeFeatured.size],
+                    ['Author', activeFeatured.author],
                   ].map(([k, v]) => (
                     <div key={k}>
                       <div style={{ fontFamily: qxType.mono, fontSize: 9.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.inkMute, marginBottom: 4 }}>{k}</div>
@@ -313,26 +324,35 @@ const HistoryScreen = ({ tweaks, currentUser, onOpenDeck }) => {
             </div>
           </div>
 
-          {/* Shelf — masonry of past decks */}
-          {rest.length > 0 && (
+          {/* Shelf — masonry of all decks */}
+          {filtered.length > 0 && (
             <div>
               <div style={{ fontFamily: qxType.mono, fontSize: 10.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.inkMute, marginBottom: 16 }}>
-                The shelf · {rest.length} deck{rest.length === 1 ? '' : 's'}
+                The shelf · {filtered.length} deck{filtered.length === 1 ? '' : 's'}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 24 }}>
-                {rest.map((d, i) => (
-                  <div key={d.id} style={{ ...qxMotion.fadeUp(160 + i * 40) }} onClick={() => onOpenDeck?.(d)}>
-                    <DeckCover deck={d} />
-                    <div style={{ marginTop: 12 }}>
-                      <div style={{ fontFamily: qxType.display, fontSize: 14, fontWeight: 500, color: T.ink, letterSpacing: '-0.01em', marginBottom: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.25 }}>
-                        {d.title}
+                {filtered.map((d, i) => {
+                  const isSelected = activeFeatured.id === d.id;
+                  return (
+                    <div key={d.id} style={{ ...qxMotion.fadeUp(160 + i * 40), cursor: 'pointer' }} onClick={() => selectDeck(d)}>
+                      <div style={{
+                        outline: isSelected ? `2px solid ${T.primary}` : '2px solid transparent',
+                        borderRadius: qxRadius.md,
+                        transition: `outline 140ms ${qxEase}`,
+                      }}>
+                        <DeckCover deck={d} />
                       </div>
-                      <div style={{ fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.10em', textTransform: 'uppercase', color: T.inkMute }}>
-                        {fmt(d.date)} · {d.author}
+                      <div style={{ marginTop: 12 }}>
+                        <div style={{ fontFamily: qxType.display, fontSize: 14, fontWeight: 500, color: isSelected ? T.primary : T.ink, letterSpacing: '-0.01em', marginBottom: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.25 }}>
+                          {d.title}
+                        </div>
+                        <div style={{ fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.10em', textTransform: 'uppercase', color: T.inkMute }}>
+                          {fmt(d.date)} · {d.author}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -350,7 +370,7 @@ const HistoryScreen = ({ tweaks, currentUser, onOpenDeck }) => {
               cursor: 'pointer', transition: `background 140ms ${qxEase}`,
               ...qxMotion.fadeUp(40 + i * 20),
             }}
-              onClick={() => onOpenDeck?.(d)}
+              onClick={() => selectDeck(d)}
               onMouseEnter={e => e.currentTarget.style.background = T.ghostBg}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
               <div style={{ fontFamily: qxType.display, fontSize: 28, fontWeight: 500, color: T.inkFaint, letterSpacing: '-0.03em', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
