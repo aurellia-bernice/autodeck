@@ -6,7 +6,8 @@
   <title>AutoDeck AI — Quidax Internal Tool</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Uncut Sans: self-host when font files are available (not on Google Fonts) -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <script src="vendor/react.development.js"></script>
   <script src="vendor/react-dom.development.js"></script>
   <script src="vendor/babel.min.js"></script>
@@ -24,14 +25,14 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; overflow: hidden; }
-    body { font-family: "Inter", system-ui, sans-serif; background: #FAF8FC; color: #1A0530; -webkit-font-smoothing: antialiased; }
+    body { font-family: "Uncut Sans", "Inter", system-ui, sans-serif; background: #FAF7FF; color: #232126; -webkit-font-smoothing: antialiased; }
     textarea, input, button { font-family: inherit; }
-    textarea::placeholder, input::placeholder { color: #B8AAC8; }
+    textarea::placeholder, input::placeholder { color: #BDBCBE; }
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(95,42,145,0.20); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(95,42,145,0.40); }
-    * { scrollbar-width: thin; scrollbar-color: rgba(95,42,145,0.20) transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(97,0,165,0.20); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(97,0,165,0.40); }
+    * { scrollbar-width: thin; scrollbar-color: rgba(97,0,165,0.20) transparent; }
   </style>
 </head>
 <body>
@@ -54,7 +55,7 @@
   <!-- Components -->
   <script type="text/babel" src="components/tweaks-panel.jsx"></script>
   <script type="text/babel" src="components/Sidebar.jsx"></script>
-  <script type="text/babel" src="components/HomeScreenA.jsx?v=20260619-seeds-dropdown"></script>
+  <script type="text/babel" src="components/HomeScreenA.jsx?v=20260619-seeds-no-autoclose"></script>
   <script type="text/babel" src="components/SourceConflictScreen.jsx"></script>
   <script type="text/babel" src="components/ProcessingScreen.jsx"></script>
   <script type="text/babel" src="components/PreviewScreen.jsx"></script>

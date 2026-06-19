@@ -1,101 +1,112 @@
 // ============================================================
-// QUIDAX DESIGN TOKENS — quieter brand-aligned system
+// QUIDAX DESIGN TOKENS — aligned to design system V1.0 (2026-06-19)
 // ============================================================
-// Core palette: deep purple primary, lime accent reserved for THE
-// single most important CTA on a screen. Everything else is purple
-// ghost / outline / surface.
+// Source of truth: design.md + tokens.json (Figma Token-system file)
+// DESIGN GAPS (pending design owner review):
+//   • QX.lime / CTA accent — no Button/accent token yet; using Lemon/500 (#D5F953)
+//   • qxShadow — no system shadow tokens defined yet; keeping product values
+//   • Uncut Sans — not on Google Fonts; falls back to Inter until self-hosted
 
 const QX = {
-  // brand
+  // Official Colours/Brand ramp
   purple: {
-    50:  '#F6F1FB',
-    100: '#EDE3F7',
-    200: '#D9C2EE',
-    300: '#B891DC',
-    400: '#9461C7',
-    500: '#7A3FB0',   // primary purple
-    600: '#5F2A91',
-    700: '#451B6E',
-    800: '#2D0F4E',
-    900: '#1A0530',
-    950: '#0F031F',
+    50:  '#F1E9FF',   // Brand/50
+    100: '#DECBFF',   // Brand/100
+    200: '#CBADFF',   // Brand/200
+    300: '#B890FE',   // Brand/300
+    400: '#8D48D1',   // Brand/400
+    500: '#6100A5',   // Brand/500
+    600: '#540096',   // Brand/600
+    700: '#480086',   // Brand/700
+    800: '#3C0076',   // Brand/800
+    900: '#320067',   // Brand/900
+    950: '#280058',   // Brand/950
   },
-  // accent — used SPARINGLY (one per screen)
-  lime: '#D4FF3F',
-  limeInk: '#1A0530',  // text color on lime
+  // Accent — Lemon/500 (closest system value to previous #D4FF3F)
+  // DESIGN GAP: no Button/accent token exists yet — use sparingly, one per screen
+  lime:    '#D5F953',
+  limeInk: '#232126',  // Text/uniform = Neutral/975
 
-  // semantic
-  ok:    '#34C77B',
-  warn:  '#F5A623',
-  bad:   '#E03E6B',
+  // Semantic feedback colors
+  ok:   '#04C786',   // Green/700  = Border/success
+  warn: '#FAC83D',   // Yellow/500 = Text/warning
+  bad:  '#BC3B23',   // Red/800    = Text/danger
 };
 
 // theme objects — call qxTheme(dark) to get the active set
 const qxTheme = (dark) => dark ? ({
+  // ── Dark mode ── purple-atmospheric base (DESIGN GAP: system bg dark = #17151B has no purple equivalent)
   bg:        '#0F031F',
   bgElev:    '#170729',
   surface:   '#1E0B36',
   surfaceHi: '#291149',
-  border:    'rgba(184,145,220,0.14)',
-  borderHi:  'rgba(184,145,220,0.28)',
-  ink:       '#F6F1FB',
-  inkDim:    'rgba(246,241,251,0.66)',
-  inkMute:   'rgba(246,241,251,0.40)',
-  inkFaint:  'rgba(246,241,251,0.22)',
-  primary:   '#B891DC',   // brighter on dark
-  primaryHover: '#D9C2EE',
-  ghostBg:   'rgba(184,145,220,0.10)',
-  ghostHi:   'rgba(184,145,220,0.16)',
-  scrim:     'rgba(15,3,31,0.72)',
-  // ambient blob
-  blob1:     'rgba(122,63,176,0.30)',
-  blob2:     'rgba(217,194,238,0.10)',
+  border:    '#36343A',
+  borderHi:  '#59585C',
+  ink:       '#FFFFFF',
+  inkDim:    '#CDCDCE',
+  inkMute:   '#ACABAE',
+  inkFaint:  '#59585C',
+  primary:   '#B890FE',      // Button/primary dark
+  primaryHover: '#CBADFF',   // Button/primary-hover dark
+  ghostBg:   'rgba(184,144,254,0.10)',
+  ghostHi:   'rgba(184,144,254,0.16)',
+  scrim:     'rgba(23,21,27,0.7)',
+  // ambient blobs
+  blob1:     'rgba(141,72,209,0.25)',
+  blob2:     'rgba(184,144,254,0.08)',
 }) : ({
-  bg:        '#FAF8FC',
+  // ── Light mode ── Brand/25 tint (system value, closest to warm off-white)
+  bg:        '#FAF7FF',
   bgElev:    '#FFFFFF',
   surface:   '#FFFFFF',
-  surfaceHi: '#F6F1FB',
-  border:    'rgba(45,15,78,0.08)',
-  borderHi:  'rgba(45,15,78,0.16)',
-  ink:       '#1A0530',
-  inkDim:    '#5A4B6E',
-  inkMute:   '#8A7B9E',
-  inkFaint:  '#B8AAC8',
-  primary:   '#5F2A91',
-  primaryHover: '#451B6E',
-  ghostBg:   'rgba(95,42,145,0.06)',
-  ghostHi:   'rgba(95,42,145,0.10)',
-  scrim:     'rgba(26,5,48,0.40)',
-  blob1:     'rgba(122,63,176,0.10)',
-  blob2:     'rgba(217,194,238,0.50)',
+  surfaceHi: '#F4F4F4',
+  border:    '#E6E6E7',
+  borderHi:  '#BDBCBE',
+  ink:       '#232126',
+  inkDim:    '#4A484D',
+  inkMute:   '#6A696C',
+  inkFaint:  '#BDBCBE',
+  primary:   '#540096',      // Button/primary light
+  primaryHover: '#480086',   // Button/primary-hover light
+  ghostBg:   'rgba(97,0,165,0.06)',
+  ghostHi:   'rgba(97,0,165,0.10)',
+  scrim:     'rgba(23,21,27,0.5)',
+  // ambient blobs
+  blob1:     'rgba(97,0,165,0.10)',
+  blob2:     'rgba(184,144,254,0.20)',
 });
 
-// type system — Space Grotesk display, Inter UI/body, JetBrains Mono for hints
+// type system — Uncut Sans only per design system (Inter as web fallback until self-hosted)
 const qxType = {
-  display: '"Space Grotesk", "Inter", system-ui, sans-serif',
-  body:    '"Inter", system-ui, sans-serif',
+  display: '"Uncut Sans", "Inter", system-ui, sans-serif',
+  body:    '"Uncut Sans", "Inter", system-ui, sans-serif',
   mono:    '"JetBrains Mono", "SF Mono", Menlo, monospace',
 };
 
 // motion
 const qxEase = 'cubic-bezier(0.22, 1, 0.36, 1)';
 
-// shape
+// shape — aligned to Radius/* tokens
 const qxRadius = {
-  xs: 6, sm: 8, md: 12, lg: 16, xl: 20, full: 999,
+  xs: 4,    // radius-xsmall
+  sm: 8,    // radius-small
+  md: 12,   // radius-medium
+  lg: 16,   // radius-large
+  xl: 24,   // radius-xlarge
+  full: 999, // radius-full
 };
 
-// shadow — subtle, never dramatic
+// shadow — no system tokens defined yet; product values retained
 const qxShadow = (dark) => dark ? ({
   sm:  '0 1px 2px rgba(0,0,0,0.4)',
   md:  '0 4px 16px rgba(0,0,0,0.32)',
   lg:  '0 12px 40px rgba(0,0,0,0.48)',
-  ring:'0 0 0 1px rgba(184,145,220,0.16)',
+  ring:'0 0 0 1px rgba(184,144,254,0.16)',
 }) : ({
-  sm:  '0 1px 2px rgba(45,15,78,0.04)',
-  md:  '0 2px 12px rgba(45,15,78,0.06)',
-  lg:  '0 12px 40px rgba(45,15,78,0.10)',
-  ring:'0 0 0 1px rgba(45,15,78,0.04)',
+  sm:  '0 1px 2px rgba(23,21,27,0.04)',
+  md:  '0 2px 12px rgba(23,21,27,0.06)',
+  lg:  '0 12px 40px rgba(23,21,27,0.10)',
+  ring:'0 0 0 1px rgba(23,21,27,0.04)',
 });
 
 Object.assign(window, { QX, qxTheme, qxType, qxEase, qxRadius, qxShadow });
