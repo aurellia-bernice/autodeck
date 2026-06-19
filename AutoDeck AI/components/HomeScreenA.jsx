@@ -92,7 +92,7 @@ const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
 
   const effectivePlaceholder = (activeMode === 'content' && !uploadedFile)
     ? 'Paste your slide content here — titles, sections, bullet points…'
-    : promptIdeas[activePrompt].seed;
+    : (promptIdeas[activePrompt] ?? promptIdeas[0]).seed;
 
   const slideOptions = ['5', '8', '10', '15', 'Auto'];
   const templates = window.AutoDeckTemplatePresets?.getTemplateOptions?.() || ['Professional', 'Minimal', 'Bold', 'Fun'];
@@ -409,7 +409,7 @@ const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
             onClick={() => setSeedsOpen(o => !o)}
             style={{
               width: '100%', padding: '13px 16px',
-              borderRadius: seedsOpen ? `${qxRadius.md} ${qxRadius.md} 0 0` : qxRadius.md,
+              borderRadius: seedsOpen ? `${qxRadius.md}px ${qxRadius.md}px 0 0` : qxRadius.md,
               border: `1px solid ${seedsOpen ? T.primary : T.border}`,
               background: seedsOpen ? T.surface : 'transparent',
               cursor: 'pointer', textAlign: 'left',
@@ -434,15 +434,14 @@ const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
           {seedsOpen && (
             <div style={{
               border: `1px solid ${T.primary}`, borderTop: 'none',
-              borderRadius: `0 0 ${qxRadius.md} ${qxRadius.md}`,
+              borderRadius: `0 0 ${qxRadius.md}px ${qxRadius.md}px`,
               background: T.surface, overflow: 'hidden',
             }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 0, padding: '6px 8px 8px' }}>
                 {promptIdeas.map((p, i) => (
                   <button key={p.label}
-                    onClick={() => { setInputText(p.seed); setUserModeOverride('brief'); setSeedsOpen(false); }}
+                    onClick={() => { setInputText(p.seed); setUserModeOverride('brief'); }}
                     onMouseEnter={() => setActivePrompt(i)}
-                    onMouseLeave={() => setActivePrompt(null)}
                     style={{
                       padding: '10px 10px', borderRadius: qxRadius.sm,
                       border: 'none',
