@@ -43,7 +43,11 @@ const pptFontName = (family, fallback, role = 'body') => {
 };
 
 const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, onBack }) => {
-  const safeInitial = Array.isArray(initialSlides) && initialSlides.length > 0 ? initialSlides : DEMO_SLIDES;
+  const isDemo = !Array.isArray(initialSlides) || initialSlides.length === 0;
+  const safeInitial = isDemo ? DEMO_SLIDES : initialSlides;
+  if (isDemo && typeof console !== 'undefined') {
+    console.warn('[AutoDeck] SlideGenerator: no slides provided, falling back to demo data.');
+  }
   const preparedInitial = window.AutoDeckTemplatePresets?.enhanceSlides
     ? window.AutoDeckTemplatePresets.enhanceSlides(safeInitial, config?.templateStyle)
     : safeInitial;
@@ -93,6 +97,8 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
   const [agentOpen, setAgentOpen] = React.useState(false);
   const [agentSlideIndex, setAgentSlideIndex] = React.useState(0);
   const [agentMessages, setAgentMessages] = React.useState([]);
+  const [agentHistorySessions, setAgentHistorySessions] = React.useState([]);
+  const [agentHistoryOpen, setAgentHistoryOpen] = React.useState(false);
   const [agentInput, setAgentInput] = React.useState('');
   const [agentThinking, setAgentThinking] = React.useState(false);
   const agentScrollRef = React.useRef(null);
@@ -181,6 +187,30 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     { key: 'summary', name: 'Summary', desc: 'Takeaways' },
     { key: 'image_focus', name: 'Image focus', desc: 'Visual anchor' },
   ];
+  const layoutKeys = LAYOUTS.map((l) => l.key);
+  const layoutAliases = [
+    { key: 'standard', patterns: [/standard/, /default/, /title\s*\+\s*bullets?/, /bullet\s+list/] },
+    { key: 'split', patterns: [/split/, /two[-\s]?column/, /2[-\s]?column/, /side\s+by\s+side/] },
+    { key: 'bigTitle', patterns: [/big\s*title/, /bold\s*title/, /hero\s*title/, /large\s*headline/, /bold\s*headline/] },
+    { key: 'stat', patterns: [/\bstat\b/, /\bmetric\b/, /number\s*slide/, /hero\s*number/] },
+    { key: 'quote', patterns: [/\bquote\b/, /pull\s*quote/, /testimonial/] },
+    { key: 'image', patterns: [/image[-\s]?led/, /photo\s*\+\s*text/, /picture\s*\+\s*text/] },
+    { key: 'minimal', patterns: [/minimal/, /simple/, /clean/] },
+    { key: 'centered', patterns: [/centered?/, /centre/, /middle/] },
+    { key: 'process_flow', patterns: [/process/, /\bflow\b/, /step[s]?/, /journey\s*(?:layout|flow|map)/] },
+    { key: 'comparison', patterns: [/comparison/, /compare/, /versus/, /\bvs\b/] },
+    { key: 'timeline', patterns: [/timeline/, /chronolog/, /sequence/] },
+    { key: 'statistics', patterns: [/kpi/, /statistics?/, /metrics?\s*cards?/, /numbers?\s*cards?/] },
+    { key: 'hierarchy', patterns: [/hierarchy/, /org\s*chart/, /levels?/] },
+    { key: 'roadmap', patterns: [/roadmap/, /phases?/, /milestones?/] },
+    { key: 'problem_solution', patterns: [/problem\s*solution/, /problem\s*(?:and|&|vs)\s*solution/, /tension\s*(?:and|&)\s*answer/] },
+    { key: 'feature_breakdown', patterns: [/feature/, /icon\s*cards?/, /breakdown/] },
+    { key: 'summary', patterns: [/summary/, /takeaways?/, /recap/] },
+    { key: 'image_focus', patterns: [/image\s*focus/, /full\s*bleed/, /visual\s*anchor/] },
+  ];
+  const ordinalSlideWords = {
+    first: 0, second: 1, third: 2, fourth: 3, fifth: 4, sixth: 5, seventh: 6, eighth: 7, ninth: 8, tenth: 9,
+  };
 
   // ─── derived ─────────────────────────────────────────────
   const getTheme  = (i) => THEMES[slideThemeOverrides[i] || globalTheme || localSlides[i]?.theme] || THEMES[localSlides[i]?.theme] || THEMES.purple;
@@ -811,7 +841,183 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
   const handleShare        = () => { setShowMenu(false); const link = `autodeck.quidax.com/d/${Math.random().toString(36).slice(2, 8)}`; navigator.clipboard?.writeText(link).catch(() => {}); showToast('Link copied · ' + link, 'success'); };
   const handleDuplicate    = () => { setShowMenu(false); showToast('Deck duplicated to your library', 'success'); };
 
-  const applyLayout     = (key) => setSlideLayoutOverrides((p) => ({ ...p, [currentIndex]: key }));
+  const normalizeAgentLayout = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+    if (layoutKeys.includes(raw)) return raw;
+    const lower = raw.toLowerCase().replace(/[_/-]+/g, ' ').replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const direct = LAYOUTS.find((l) => {
+      const key = l.key.toLowerCase().replace(/[_/-]+/g, ' ').replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+      const name = l.name.toLowerCase().replace(/[_/-]+/g, ' ').replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+      return key === lower || name === lower;
+    });
+    if (direct) return direct.key;
+    return layoutAliases.find((entry) => entry.patterns.some((pattern) => pattern.test(lower)))?.key || null;
+  };
+
+  const layoutFromAgentText = (value) => {
+    const lower = String(value || '').toLowerCase().replace(/[_/-]+/g, ' ').replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!/(layout|slide|make|change|convert|switch|turn|use|as|into)/.test(lower)) return null;
+    return layoutAliases.find((entry) => entry.patterns.some((pattern) => pattern.test(lower)))?.key || null;
+  };
+
+  const agentTargetSlideIndex = (value, fallback = currentIndex) => {
+    const text = String(value || '').toLowerCase();
+    const numbered = text.match(/\b(?:slide|page)\s*(\d{1,2})\b/) || text.match(/\b(\d{1,2})(?:st|nd|rd|th)\s+(?:slide|page)\b/);
+    if (numbered) return Math.max(0, Math.min(localSlides.length - 1, parseInt(numbered[1], 10) - 1));
+    const word = Object.entries(ordinalSlideWords).find(([label]) => new RegExp(`\\b${label}\\s+(?:slide|page)\\b`).test(text));
+    if (word) return Math.max(0, Math.min(localSlides.length - 1, word[1]));
+    if (/\bnext\s+(?:slide|page)\b/.test(text)) return Math.max(0, Math.min(localSlides.length - 1, fallback + 1));
+    if (/\b(previous|prev|last)\s+(?:slide|page)\b/.test(text)) return Math.max(0, Math.min(localSlides.length - 1, fallback - 1));
+    return Math.max(0, Math.min(localSlides.length - 1, fallback));
+  };
+
+  const compactAgentText = (value, maxWords = 24) => String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, maxWords)
+    .join(' ');
+
+  const uniqueAgentTexts = (values) => {
+    const seen = new Set();
+    return values
+      .map((value) => compactAgentText(value, 28))
+      .filter((value) => value.length > 3)
+      .filter((value) => {
+        const key = value.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  };
+
+  const componentTextsForAgent = (components = []) => {
+    if (!Array.isArray(components)) return [];
+    return components.flatMap((component) => [
+      component?.label,
+      component?.title,
+      component?.value,
+      component?.detail,
+      ...(Array.isArray(component?.items) ? component.items : []),
+    ]).filter(Boolean);
+  };
+
+  const slideFactsForAgent = (targetSlide = {}) => uniqueAgentTexts([
+    ...(Array.isArray(targetSlide.bullets) ? targetSlide.bullets : []),
+    targetSlide.content,
+    targetSlide.summary,
+    ...componentTextsForAgent(targetSlide.components),
+  ]);
+
+  const sourceFactsForAgent = () => uniqueAgentTexts([
+    config?.inputText,
+    config?.parsedFileText,
+    config?.sourceText,
+    config?.uploadedFile?.name,
+  ]).slice(0, 3);
+
+  const expansionBulletsForAgent = (targetSlide = {}) => {
+    const topic = compactAgentText(targetSlide.title || 'this slide', 10);
+    const facts = slideFactsForAgent(targetSlide);
+    const sourceFacts = sourceFactsForAgent();
+    if (!facts.length && !sourceFacts.length && !topic) return [];
+    const first = facts[0] || sourceFacts[0] || topic;
+    const second = facts[1] || sourceFacts[1] || `Connect ${topic} to one concrete source detail`;
+    const third = facts[2] || sourceFacts[2] || `Add an example, metric, or quote that supports ${topic}`;
+    return uniqueAgentTexts([
+      `What this means: ${first}`,
+      `Why it matters: ${second}`,
+      `What to show next: ${third}`,
+      `Decision point: confirm the source detail that should anchor ${topic}`,
+    ]).slice(0, 4);
+  };
+
+  const agentComponentsForLayout = (targetSlide = {}, layoutKey) => {
+    const bullets = uniqueAgentTexts(Array.isArray(targetSlide.bullets) ? targetSlide.bullets : []).slice(0, 6);
+    if (!bullets.length) return undefined;
+    if (layoutKey === 'problem_solution') {
+      const splitAt = Math.max(1, Math.ceil(bullets.length / 2));
+      return [
+        { type: 'problem', label: 'Problem', icon: 'alert-triangle', items: bullets.slice(0, splitAt) },
+        { type: 'solution', label: 'Solution', icon: 'check-circle', items: bullets.slice(splitAt) },
+      ];
+    }
+    if (layoutKey === 'comparison') {
+      const splitAt = Math.max(1, Math.ceil(bullets.length / 2));
+      return [
+        { type: 'comparison_column', label: 'Current', icon: 'alert-triangle', items: bullets.slice(0, splitAt) },
+        { type: 'comparison_column', label: 'Future', icon: 'check-circle', items: bullets.slice(splitAt) },
+      ];
+    }
+    if (['process_flow', 'timeline', 'roadmap', 'feature_breakdown', 'summary', 'hierarchy', 'statistics'].includes(layoutKey)) {
+      return bullets.map((bullet, i) => ({
+        type: layoutKey === 'process_flow' ? `step ${i + 1}` : 'item',
+        label: bullet,
+        detail: i === 0 ? compactAgentText(targetSlide.title, 12) : undefined,
+        icon: i === 0 ? 'check-circle' : 'circle-dot',
+        level: i + 1,
+      }));
+    }
+    return undefined;
+  };
+
+  const compactSlideForAgent = (targetSlide = {}, idx) => ({
+    index: idx,
+    title: compactAgentText(targetSlide.title, 16),
+    layout: getLayout(idx),
+    bullets: (Array.isArray(targetSlide.bullets) ? targetSlide.bullets : []).map((b) => compactAgentText(b, 26)).filter(Boolean).slice(0, 6),
+    content: compactAgentText(targetSlide.content || targetSlide.summary, 36),
+    components: componentTextsForAgent(targetSlide.components).map((value) => compactAgentText(value, 18)).filter(Boolean).slice(0, 8),
+  });
+
+  const applyAgentPatch = (idx, patch = {}) => {
+    const targetIdx = Math.max(0, Math.min(localSlides.length - 1, idx));
+    const normalizedLayout = normalizeAgentLayout(patch.updatedLayout || patch.layout);
+    const targetLayout = normalizedLayout || getLayout(targetIdx);
+    if (normalizedLayout) {
+      setSlideLayoutOverrides((p) => ({ ...p, [targetIdx]: normalizedLayout }));
+    }
+    setLocalSlides((prev) => prev.map((slide, i) => {
+      if (i !== targetIdx) return slide;
+      const bulletsChanged = Array.isArray(patch.updatedBullets)
+        || (Array.isArray(patch.addBullets) && patch.addBullets.length)
+        || patch.removeLastBullet;
+      const next = {
+        ...slide,
+        bullets: Array.isArray(slide.bullets) ? [...slide.bullets] : [],
+      };
+      if (typeof patch.updatedTitle === 'string' && patch.updatedTitle.trim()) {
+        next.title = patch.updatedTitle.trim();
+      }
+      if (Array.isArray(patch.updatedBullets)) {
+        next.bullets = patch.updatedBullets.map((b) => String(b || '').trim()).filter(Boolean).slice(0, 6);
+      }
+      if (Array.isArray(patch.addBullets) && patch.addBullets.length) {
+        next.bullets = [...next.bullets, ...patch.addBullets.map((b) => String(b || '').trim()).filter(Boolean)].slice(0, 6);
+      }
+      if (patch.removeLastBullet && next.bullets.length > 1) {
+        next.bullets = next.bullets.slice(0, -1);
+      }
+      if (normalizedLayout) {
+        next.layout = normalizedLayout;
+        next.visualLayout = normalizedLayout;
+        next.renderLayout = normalizedLayout;
+      }
+      if (bulletsChanged || normalizedLayout) {
+        const nextComponents = agentComponentsForLayout(next, targetLayout);
+        if (nextComponents) next.components = nextComponents;
+        else delete next.components;
+      }
+      return next;
+    }));
+    if (targetIdx !== currentIndex) goTo(targetIdx);
+    setAgentSlideIndex(targetIdx);
+  };
+
+  const applyLayoutForSlide = (idx, key) => applyAgentPatch(idx, { updatedLayout: key });
+  const applyLayout     = (key) => applyLayoutForSlide(currentIndex, key);
   const applyAlign      = (val) => setSlideAlignments((p) => ({ ...p, [currentIndex]: val }));
   const applyImage      = (url) => { setSlideImages((p) => ({ ...p, [currentIndex]: url })); setEditTab('layout'); };
   const removeImage     = ()    => setSlideImages((p) => { const n = { ...p }; delete n[currentIndex]; return n; });
@@ -848,50 +1054,149 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
   const handleRegenerateImages    = () => { const next = imgPage + 1; setImgPage(next); fetchImages(next); };
 
   // ─── agent logic ─────────────────────────────────────────
+  const agentIntroMessage = (idx, isFresh = false) => {
+    const targetIdx = Math.max(0, Math.min(localSlides.length - 1, idx));
+    return {
+      role: 'assistant',
+      text: `${isFresh ? 'New chat started. ' : ''}I’m looking at slide ${targetIdx + 1} — "${localSlides[targetIdx]?.title || 'Untitled slide'}". Ask me to rewrite text, add more detail from deck context, target another slide, or switch layout. What should I change?`,
+    };
+  };
+
+  const hasUserAgentMessages = (messages = agentMessages) => messages.some((m) => m.role === 'user' && String(m.text || '').trim());
+
+  const agentHistoryTitle = (messages = agentMessages, idx = agentSlideIndex) => {
+    const firstUser = messages.find((m) => m.role === 'user' && String(m.text || '').trim())?.text;
+    return compactAgentText(firstUser || localSlides[idx]?.title || 'Agent chat', 9) || `Slide ${idx + 1}`;
+  };
+
+  const archiveAgentChat = (messages = agentMessages, idx = agentSlideIndex) => {
+    if (!hasUserAgentMessages(messages)) return;
+    const targetIdx = Math.max(0, Math.min(localSlides.length - 1, idx));
+    const session = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      title: agentHistoryTitle(messages, targetIdx),
+      slideIndex: targetIdx,
+      slideTitle: localSlides[targetIdx]?.title || 'Untitled slide',
+      layout: getLayout(targetIdx),
+      updatedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      messages: messages.map((m) => ({ role: m.role, text: m.text })),
+    };
+    setAgentHistorySessions((prev) => [session, ...prev].slice(0, 12));
+  };
+
+  const resetAgentChat = (idx = agentSlideIndex) => {
+    const targetIdx = Math.max(0, Math.min(localSlides.length - 1, idx));
+    archiveAgentChat(agentMessages, targetIdx);
+    setAgentSlideIndex(targetIdx);
+    setAgentMessages([agentIntroMessage(targetIdx, true)]);
+    setAgentHistoryOpen(false);
+    setAgentInput('');
+    setAgentThinking(false);
+    setTimeout(() => agentInputRef.current?.focus(), 60);
+  };
+
+  const restoreAgentHistory = (session) => {
+    if (!session) return;
+    archiveAgentChat(agentMessages, agentSlideIndex);
+    const targetIdx = Math.max(0, Math.min(localSlides.length - 1, Number(session.slideIndex) || 0));
+    setAgentSlideIndex(targetIdx);
+    setAgentMessages(Array.isArray(session.messages) && session.messages.length ? session.messages : [agentIntroMessage(targetIdx)]);
+    setAgentHistoryOpen(false);
+    setAgentInput('');
+    setAgentThinking(false);
+    setTimeout(() => agentInputRef.current?.focus(), 60);
+  };
+
   const openAgent = (idx) => {
     setAgentSlideIndex(idx);
-    setAgentMessages([{ role: 'assistant', text: `I've got slide ${idx + 1} open — "${localSlides[idx]?.title}". What should I change?` }]);
+    setAgentMessages((prev) => prev.length ? prev : [agentIntroMessage(idx)]);
     setAgentInput('');
     setAgentOpen(true);
     setTimeout(() => agentInputRef.current?.focus(), 80);
   };
 
+  const quotedAgentValue = (value) => {
+    const match = String(value || '').match(/["“”']([^"“”']{3,})["“”']/);
+    return match ? match[1].trim() : '';
+  };
+
+  const titleFromAgentText = (value, currentTitle = '') => {
+    const text = String(value || '').trim();
+    const lower = text.toLowerCase();
+    if (!/(title|heading|headline|rename)/.test(lower)) return '';
+    const quoted = quotedAgentValue(text);
+    if (quoted) return quoted;
+    const explicit = text.match(/(?:rename|change|set|make|update).{0,24}(?:title|heading|headline)?\s*(?:to|as|:)\s*(.+)$/i)
+      || text.match(/(?:title|heading|headline)\s*(?:to|as|:)\s*(.+)$/i);
+    if (explicit?.[1]) {
+      return explicit[1]
+        .replace(/\b(?:and|also)\s+(?:make|change|set|turn|switch|convert)\b.*$/i, '')
+        .replace(/\b(?:slide|page)\s*\d{1,2}\b/ig, '')
+        .trim()
+        .replace(/[.!]+$/, '');
+    }
+    if (/(shorter|shorten|concise|tighter)/.test(lower) && currentTitle) {
+      return currentTitle.split(/\s+/).slice(0, 6).join(' ').replace(/[.,;:!]+$/, '');
+    }
+    return '';
+  };
+
+  const bulletFromAgentText = (value) => {
+    const text = String(value || '').trim();
+    const quoted = quotedAgentValue(text);
+    if (quoted && /bullet|point/.test(text.toLowerCase())) return quoted;
+    const match = text.match(/add\s+(?:a\s+)?(?:bullet|point)\s*(?:about|on|for|that|:)?\s*(.+)$/i);
+    if (!match?.[1]) return '';
+    return match[1]
+      .replace(/\b(?:to|on|for)?\s*(?:slide|page)\s*\d{1,2}\b/ig, '')
+      .replace(/\b(?:and|also)\s+(?:make|change|set|turn|switch|convert)\b.*$/i, '')
+      .trim()
+      .replace(/^[,.:;-]+|[,.:;-]+$/g, '');
+  };
+
+  const localAgentPatch = (userText, idx) => {
+    const slide = localSlides[idx] || {};
+    const text = String(userText || '');
+    const lower = text.toLowerCase();
+    const patch = {};
+    const layoutKey = layoutFromAgentText(text);
+    const title = titleFromAgentText(text, slide.title);
+    const addBullet = bulletFromAgentText(text);
+
+    if (layoutKey) patch.updatedLayout = layoutKey;
+    if (title) patch.updatedTitle = title.charAt(0).toUpperCase() + title.slice(1);
+    if (addBullet) patch.addBullets = [addBullet.charAt(0).toUpperCase() + addBullet.slice(1)];
+    if (/(concise|shorter|shorten|tighten|fewer)/.test(lower)) {
+      patch.updatedBullets = (slide.bullets || []).slice(0, Math.max(1, Math.ceil((slide.bullets || []).length / 2)));
+    }
+    if (/(expand|longer|more detail|more context|more info|talk more|elaborate|explain more)/.test(lower)) {
+      const expanded = expansionBulletsForAgent(slide);
+      if (expanded.length) {
+        patch.updatedBullets = expanded;
+      } else {
+        patch.needsClarification = true;
+      }
+    }
+    if (/(remove|delete).*(bullet|point|last)/.test(lower)) patch.removeLastBullet = true;
+
+    if (!Object.keys(patch).length) patch.needsClarification = true;
+    return patch;
+  };
+
   const simulateAgentResponse = (userText, idx) => {
-    const t = userText.toLowerCase();
-    setLocalSlides((prev) => {
-      const next = prev.map((s) => ({ ...s, bullets: [...s.bullets] }));
-      const s = next[idx];
-      if (t.includes('title') || t.includes('heading')) {
-        const words = userText.replace(/title|heading|change|make|to|the|be/gi, '').trim();
-        if (words.length > 2) s.title = words.charAt(0).toUpperCase() + words.slice(1);
-        return next;
-      }
-      if (t.includes('concise') || t.includes('shorter') || t.includes('shorten')) {
-        s.bullets = s.bullets.slice(0, Math.max(1, Math.ceil(s.bullets.length / 2)));
-        return next;
-      }
-      if (t.includes('expand') || t.includes('longer') || t.includes('more detail')) {
-        const extra = ['This is key to success', 'Consider the broader implications', 'Teams should align on this priority'];
-        s.bullets = [...s.bullets, ...extra.slice(0, 2)];
-        return next;
-      }
-      if (t.includes('add bullet') || t.includes('add point')) {
-        const newPoint = userText.replace(/add\s+(a\s+)?(bullet|point)\s*(about|on|for|:)?/i, '').trim();
-        s.bullets.push(newPoint.length > 2 ? newPoint.charAt(0).toUpperCase() + newPoint.slice(1) : 'New key point');
-        return next;
-      }
-      if (t.includes('remove') && (t.includes('bullet') || t.includes('point') || t.includes('last'))) {
-        if (s.bullets.length > 1) s.bullets.pop();
-        return next;
-      }
-      return next;
-    });
-    const replies = [
-      `Done — slide ${idx + 1} is updated.`,
-      `Updated. Anything else on slide ${idx + 1}?`,
-      `Live now. The change is in.`,
-    ];
-    return replies[Math.floor(Math.random() * replies.length)];
+    const targetIdx = agentTargetSlideIndex(userText, idx);
+    const patch = localAgentPatch(userText, targetIdx);
+    if (patch.needsClarification) {
+      setAgentSlideIndex(targetIdx);
+      return `I can edit slide ${targetIdx + 1}, but I need a clearer change. Ask me to rename the title, add or remove a bullet, shorten the slide, or switch to a layout like Split, Quote, Timeline, or Summary.`;
+    }
+    applyAgentPatch(targetIdx, patch);
+    const layoutName = patch.updatedLayout ? (LAYOUTS.find((l) => l.key === patch.updatedLayout)?.name || patch.updatedLayout) : '';
+    if (patch.updatedLayout && (patch.updatedTitle || patch.updatedBullets || patch.addBullets || patch.removeLastBullet)) {
+      return `Done — slide ${targetIdx + 1} updated and switched to ${layoutName} layout.`;
+    }
+    if (patch.updatedLayout) return `Done — slide ${targetIdx + 1} is now using the ${layoutName} layout.`;
+    return `Done — slide ${targetIdx + 1} is updated.`;
   };
 
   const handleAgentSend = async () => {
@@ -905,32 +1210,55 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     let reply = null;
     let usedRealApi = false;
 
+    const requestedSlideIndex = agentTargetSlideIndex(text, agentSlideIndex);
+    const requestedLayout = layoutFromAgentText(text);
+
     try {
       if (window.firebase?.app) {
         const agentEditFn = firebase.app().functions('us-central1').httpsCallable('agentEdit');
-        const slide = localSlides[agentSlideIndex] || {};
+        const slide = localSlides[requestedSlideIndex] || {};
         const { data } = await agentEditFn({
+          slideIndex: requestedSlideIndex,
+          slideCount: localSlides.length,
           slideTitle: slide.title || '',
           bullets: slide.bullets || [],
+          slideContent: slide.content || slide.summary || '',
+          components: slide.components || [],
+          currentLayout: getLayout(requestedSlideIndex),
+          availableLayouts: LAYOUTS.map((l) => ({ key: l.key, name: l.name, desc: l.desc })),
+          deckTitles: localSlides.map((s) => s.title || ''),
+          deckSlides: localSlides.map((s, i) => compactSlideForAgent(s, i)),
+          sourceContext: {
+            prompt: compactAgentText(config?.inputText, 80),
+            parsedFileText: compactAgentText(config?.parsedFileText || config?.sourceText, 120),
+            sourceDocumentName: config?.uploadedFile?.name || config?.sourceDocumentName || '',
+          },
           userMessage: text,
-          history: agentMessages.map(m => ({ role: m.role, text: m.text })),
+          history: agentMessages.slice(-20).map(m => ({ role: m.role, text: m.text })),
         });
-        if (data.updatedTitle || data.updatedBullets) {
-          setLocalSlides((prev) => {
-            const next = prev.map((s) => ({ ...s, bullets: [...s.bullets] }));
-            const s = next[agentSlideIndex];
-            if (data.updatedTitle) s.title = data.updatedTitle;
-            if (data.updatedBullets) s.bullets = data.updatedBullets;
-            return next;
-          });
-          reply = data.assistantReply || `Done — slide ${agentSlideIndex + 1} updated.`;
+        const responseSlideIndex = Number.isInteger(data?.targetSlideIndex)
+          ? Math.max(0, Math.min(localSlides.length - 1, data.targetSlideIndex))
+          : requestedSlideIndex;
+        const responsePatch = {
+          ...(data || {}),
+          updatedLayout: data?.updatedLayout || requestedLayout || undefined,
+        };
+        if (responsePatch.updatedTitle || responsePatch.updatedBullets || responsePatch.updatedLayout) {
+          applyAgentPatch(responseSlideIndex, responsePatch);
+          const layoutName = responsePatch.updatedLayout ? (LAYOUTS.find((l) => l.key === normalizeAgentLayout(responsePatch.updatedLayout))?.name || responsePatch.updatedLayout) : '';
+          reply = responsePatch.updatedLayout && !data?.updatedLayout
+            ? `Done — slide ${responseSlideIndex + 1} is now using the ${layoutName} layout.`
+            : (data.assistantReply || `Done — slide ${responseSlideIndex + 1} updated.`);
+          usedRealApi = true;
+        } else if (data?.needsClarification && data?.assistantReply) {
+          reply = data.assistantReply;
           usedRealApi = true;
         }
       }
     } catch (_) {}
 
     if (!usedRealApi) {
-      reply = simulateAgentResponse(text, agentSlideIndex);
+      reply = simulateAgentResponse(text, requestedSlideIndex);
     }
 
     setAgentMessages((p) => [...p, { role: 'assistant', text: reply }]);
@@ -1496,6 +1824,13 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     transition: `all 140ms ${qxEase}`, letterSpacing: '0.005em',
   });
 
+  const agentQuickPrompts = [
+    { label: 'Split layout', text: `make slide ${agentSlideIndex + 1} split layout` },
+    { label: 'Add detail', text: `add more information to slide ${agentSlideIndex + 1}` },
+    { label: 'Shorten title', text: `make the title of slide ${agentSlideIndex + 1} shorter` },
+    { label: 'Summarise', text: `make slide ${agentSlideIndex + 1} a summary layout` },
+  ];
+
   // ─── JSX ─────────────────────────────────────────────────
   return (
     <div style={{ height: '100vh', background: '#0B0118', display: 'flex', flexDirection: 'column', fontFamily: qxType.body, userSelect: 'none', overflow: 'hidden' }}
@@ -1900,33 +2235,37 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
       {/* ══════════ GEMINI MODAL ══════════ */}
       {/* ══════════ AGENT MODAL ══════════ */}
       {agentOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)', zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: `sgFadeIn 200ms ${qxEase}` }}
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(5,0,12,0.68)', backdropFilter: 'blur(8px)', zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: `sgFadeIn 200ms ${qxEase}` }}
           onClick={() => setAgentOpen(false)}>
-          <div style={{ width: 480, maxHeight: 600, background: '#0F031F', border: '1px solid rgba(246,241,251,0.10)', borderRadius: 16, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 30px 90px rgba(0,0,0,0.7)', animation: `sgZoomIn 220ms ${qxEase}` }}
+          <div style={{ width: 'min(640px, calc(100vw - 32px))', height: 'min(720px, calc(100vh - 48px))', background: 'linear-gradient(180deg,#120323 0%,#0C0218 100%)', border: '1px solid rgba(246,241,251,0.12)', borderRadius: 18, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 34px 110px rgba(0,0,0,0.74)', animation: `sgZoomIn 220ms ${qxEase}` }}
             onClick={(e) => e.stopPropagation()}>
 
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(246,241,251,0.08)', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: `linear-gradient(135deg, ${QX.lime}, ${QX.purple[300]})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <div style={{ padding: '16px 18px', borderBottom: '1px solid rgba(246,241,251,0.09)', display: 'flex', alignItems: 'center', gap: 13, background: 'rgba(246,241,251,0.025)' }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg, ${QX.lime}, ${QX.purple[300]})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 10px 26px rgba(212,255,63,0.18)' }}>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1l1.2 3.3L11.5 5.5 8.2 6.7 7 10l-1.2-3.3L2.5 5.5l3.3-1.2L7 1z" stroke="#1A0530" strokeWidth="1.3" strokeLinejoin="round" fill="#1A0530" fillOpacity="0.15" /></svg>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.45)' }}>Agent · Slide {agentSlideIndex + 1}</div>
-                <div style={{ fontFamily: qxType.display, fontSize: 14, fontWeight: 600, color: '#F6F1FB', letterSpacing: '-0.012em', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{localSlides[agentSlideIndex]?.title}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                  <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.45)' }}>Agent · Slide {agentSlideIndex + 1}</div>
+                  <span style={{ width: 4, height: 4, borderRadius: '50%', background: QX.lime, opacity: 0.8 }} />
+                  <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.38)' }}>{LAYOUTS.find((l) => l.key === getLayout(agentSlideIndex))?.name || 'Standard'}</div>
+                </div>
+                <div style={{ fontFamily: qxType.display, fontSize: 15, fontWeight: 600, color: '#F6F1FB', letterSpacing: '-0.012em', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{localSlides[agentSlideIndex]?.title}</div>
               </div>
-              <button onClick={() => setAgentOpen(false)} style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: 'rgba(246,241,251,0.06)', color: 'rgba(246,241,251,0.55)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <button onClick={() => setAgentOpen(false)} title="Close" style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'rgba(246,241,251,0.06)', color: 'rgba(246,241,251,0.55)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
               </button>
             </div>
 
-            <div ref={agentScrollRef} style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div ref={agentScrollRef} style={{ flex: 1, overflowY: 'auto', padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 12, background: 'radial-gradient(circle at 50% 0%,rgba(123,47,190,0.14),transparent 45%)' }}>
               {agentMessages.map((m, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                  <div style={{ maxWidth: '82%', padding: '9px 13px', borderRadius: m.role === 'user' ? '14px 14px 4px 14px' : '14px 14px 14px 4px', background: m.role === 'user' ? QX.lime : 'rgba(246,241,251,0.06)', color: m.role === 'user' ? '#1A0530' : 'rgba(246,241,251,0.92)', fontFamily: qxType.body, fontSize: 13, lineHeight: 1.5, fontWeight: m.role === 'user' ? 500 : 400 }}>{m.text}</div>
+                  <div style={{ maxWidth: m.role === 'user' ? '76%' : '82%', padding: '11px 14px', borderRadius: m.role === 'user' ? '15px 15px 5px 15px' : '15px 15px 15px 5px', background: m.role === 'user' ? QX.lime : 'rgba(246,241,251,0.07)', border: m.role === 'user' ? '1px solid rgba(212,255,63,0.6)' : '1px solid rgba(246,241,251,0.055)', color: m.role === 'user' ? '#1A0530' : 'rgba(246,241,251,0.92)', fontFamily: qxType.body, fontSize: 13.5, lineHeight: 1.5, fontWeight: m.role === 'user' ? 600 : 400, boxShadow: m.role === 'user' ? '0 10px 24px rgba(212,255,63,0.12)' : 'none', overflowWrap: 'anywhere' }}>{m.text}</div>
                 </div>
               ))}
               {agentThinking && (
                 <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-                  <div style={{ padding: '10px 14px', borderRadius: '14px 14px 14px 4px', background: 'rgba(246,241,251,0.06)', display: 'flex', gap: 5, alignItems: 'center' }}>
+                  <div style={{ padding: '10px 14px', borderRadius: '14px 14px 14px 4px', background: 'rgba(246,241,251,0.07)', border: '1px solid rgba(246,241,251,0.055)', display: 'flex', gap: 5, alignItems: 'center' }}>
                     {[0, 1, 2].map((i) => (
                       <div key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: 'rgba(246,241,251,0.50)', animation: `sgBounce 1s ease-in-out ${i * 0.15}s infinite` }} />
                     ))}
@@ -1935,15 +2274,54 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
               )}
             </div>
 
-            <div style={{ padding: '12px 16px', borderTop: '1px solid rgba(246,241,251,0.08)', display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-              <textarea ref={agentInputRef} value={agentInput} onChange={(e) => setAgentInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAgentSend(); } }}
-                placeholder="Make the title shorter, add a bullet about pricing…" rows={2}
-                style={{ flex: 1, padding: '10px 12px', borderRadius: 9, border: '1px solid rgba(246,241,251,0.10)', background: 'rgba(246,241,251,0.04)', color: '#F6F1FB', fontFamily: qxType.body, fontSize: 13, outline: 'none', resize: 'none', lineHeight: 1.45 }} />
-              <button onClick={handleAgentSend} disabled={!agentInput.trim() || agentThinking}
-                style={{ width: 38, height: 38, borderRadius: 9, border: 'none', flexShrink: 0, background: agentInput.trim() && !agentThinking ? QX.lime : 'rgba(246,241,251,0.06)', color: agentInput.trim() && !agentThinking ? '#1A0530' : 'rgba(246,241,251,0.30)', cursor: agentInput.trim() && !agentThinking ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: `all 160ms ${qxEase}` }}>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M7 2l5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              </button>
+            <div style={{ padding: '12px 16px 14px', borderTop: '1px solid rgba(246,241,251,0.09)', background: 'rgba(5,0,12,0.78)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ minWidth: 0, fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  Target · Slide {agentSlideIndex + 1} · {LAYOUTS.find((l) => l.key === getLayout(agentSlideIndex))?.name || 'Standard'}
+                </div>
+                <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button onClick={() => setAgentHistoryOpen((p) => !p)} disabled={!agentHistorySessions.length} style={{ border: 'none', background: 'transparent', color: agentHistorySessions.length ? 'rgba(246,241,251,0.64)' : 'rgba(246,241,251,0.24)', cursor: agentHistorySessions.length ? 'pointer' : 'default', fontFamily: qxType.body, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2a4 4 0 1 1-3.2 1.6M2.5 2v2.6h2.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    History
+                  </button>
+                  <button onClick={() => resetAgentChat(agentSlideIndex)} style={{ border: 'none', background: 'transparent', color: 'rgba(212,255,63,0.84)', cursor: 'pointer', fontFamily: qxType.body, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v9M1 5.5h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                    New chat
+                  </button>
+                </div>
+              </div>
+              {agentHistoryOpen && (
+                <div style={{ border: '1px solid rgba(246,241,251,0.10)', background: 'rgba(246,241,251,0.04)', borderRadius: 12, padding: 8, display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 180, overflowY: 'auto' }}>
+                  <div style={{ padding: '2px 4px 6px', fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.20em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)' }}>Previous chats</div>
+                  {agentHistorySessions.map((session) => (
+                    <button key={session.id} onClick={() => restoreAgentHistory(session)} style={{ width: '100%', border: '1px solid rgba(246,241,251,0.08)', background: 'rgba(5,0,12,0.30)', borderRadius: 9, padding: '8px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, textAlign: 'left' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontFamily: qxType.body, fontSize: 12.5, fontWeight: 600, color: 'rgba(246,241,251,0.88)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.title}</div>
+                        <div style={{ marginTop: 2, fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.38)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Slide {session.slideIndex + 1} · {LAYOUTS.find((l) => l.key === session.layout)?.name || 'Layout'}</div>
+                      </div>
+                      <span style={{ flexShrink: 0, fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.08em', color: 'rgba(246,241,251,0.34)' }}>{session.updatedAt}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 1 }}>
+                {agentQuickPrompts.map((item) => (
+                  <button key={item.label} onClick={() => { setAgentInput(item.text); setTimeout(() => agentInputRef.current?.focus(), 20); }} style={{ flexShrink: 0, padding: '6px 9px', borderRadius: 999, border: '1px solid rgba(246,241,251,0.10)', background: 'rgba(246,241,251,0.045)', color: 'rgba(246,241,251,0.76)', cursor: 'pointer', fontFamily: qxType.body, fontSize: 12 }}>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                <textarea ref={agentInputRef} value={agentInput} onChange={(e) => setAgentInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAgentSend(); } }}
+                  placeholder="Ask Agent to change slide 2 to split layout, expand feature 1, rewrite the title…" rows={2}
+                  style={{ flex: 1, minHeight: 48, maxHeight: 120, padding: '12px 13px', borderRadius: 12, border: '1px solid rgba(246,241,251,0.13)', background: 'rgba(246,241,251,0.045)', color: '#F6F1FB', fontFamily: qxType.body, fontSize: 13.5, outline: 'none', resize: 'vertical', lineHeight: 1.45, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.08)' }} />
+                <button onClick={handleAgentSend} disabled={!agentInput.trim() || agentThinking}
+                  title="Send"
+                  style={{ width: 44, height: 44, borderRadius: 12, border: 'none', flexShrink: 0, background: agentInput.trim() && !agentThinking ? QX.lime : 'rgba(246,241,251,0.07)', color: agentInput.trim() && !agentThinking ? '#1A0530' : 'rgba(246,241,251,0.30)', cursor: agentInput.trim() && !agentThinking ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: `all 160ms ${qxEase}`, boxShadow: agentInput.trim() && !agentThinking ? '0 12px 30px rgba(212,255,63,0.18)' : 'none' }}>
+                  <svg width="15" height="15" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M7 2l5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>

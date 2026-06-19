@@ -105,6 +105,7 @@ const wordCount = (value) => compactText(value, Number.MAX_SAFE_INTEGER)
   .filter(Boolean)
   .length;
 
+// Mirrors app.jsx SOURCE_REVIEW_STOP_WORDS — keep in sync
 const KEYWORD_STOP_WORDS = new Set([
   'this', 'that', 'with', 'from', 'have', 'will', 'your', 'about', 'into', 'their', 'there', 'where',
   'when', 'what', 'were', 'been', 'being', 'they', 'them', 'than', 'then', 'also', 'should', 'could',
@@ -112,11 +113,13 @@ const KEYWORD_STOP_WORDS = new Set([
   'slide', 'slides', 'deck', 'cover', 'make', 'create', 'generate', 'build', 'please', 'need', 'want',
 ]);
 
+// Mirrors app.jsx sourceReviewKeywords — keep in sync
 const keywordsFrom = (value) => {
   const words = String(value || '').toLowerCase().match(/[a-z0-9]{4,}/g) || [];
   return [...new Set(words.filter((word) => !KEYWORD_STOP_WORDS.has(word)))].slice(0, 40);
 };
 
+// Mirrors app.jsx hasSourceConflict — keep in sync
 const keywordOverlap = (brief, source) => {
   const sourceKeywords = keywordsFrom(source);
   return keywordsFrom(brief).filter((keyword) =>
@@ -124,6 +127,7 @@ const keywordOverlap = (brief, source) => {
   );
 };
 
+// Mirrors app.jsx hasTangibleSourceInfo — keep in sync
 const hasTangibleSourceInfo = (value, kind = 'brief') => {
   const text = compactText(value, Number.MAX_SAFE_INTEGER).replace(/\s+/g, ' ').trim();
   if (!text) return false;
@@ -240,9 +244,38 @@ const trimWords = (value, maxWords) => String(value || '')
   .join(' ');
 
 const normalizeLayout = (value, fallback = 'standard') => {
-  const allowed = new Set(['standard', 'split', 'bigTitle', 'stat', 'quote', 'image', 'minimal', 'centered']);
+  const allowed = new Set([
+    'standard', 'split', 'bigTitle', 'stat', 'quote', 'image', 'minimal', 'centered',
+    'process_flow', 'comparison', 'timeline', 'statistics', 'hierarchy', 'image_focus',
+    'roadmap', 'problem_solution', 'feature_breakdown', 'summary',
+  ]);
   const layout = String(value || '').trim();
-  return allowed.has(layout) ? layout : fallback;
+  if (allowed.has(layout)) return layout;
+  const alias = layout.toLowerCase().replace(/[_/-]+/g, ' ').replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const aliases = {
+    'big title': 'bigTitle',
+    bigtitle: 'bigTitle',
+    bold: 'bigTitle',
+    'bold title': 'bigTitle',
+    headline: 'bigTitle',
+    'image led': 'image',
+    photo: 'image',
+    flow: 'process_flow',
+    'process flow': 'process_flow',
+    process: 'process_flow',
+    compare: 'comparison',
+    kpi: 'statistics',
+    metrics: 'statistics',
+    'image focus': 'image_focus',
+    'problem solution': 'problem_solution',
+    'problem and solution': 'problem_solution',
+    'problem vs solution': 'problem_solution',
+    features: 'feature_breakdown',
+    'feature breakdown': 'feature_breakdown',
+    takeaways: 'summary',
+    recap: 'summary',
+  };
+  return aliases[alias] || fallback;
 };
 
 const normalizeBoolean = (value, fallback = false) => {
@@ -870,20 +903,70 @@ exports.agentEdit = onCall(
     if (!apiKey) throw new HttpsError('internal', 'Anthropic API key is not configured.');
     const anthropic = new AnthropicClient({ apiKey });
 
-    const { slideTitle, bullets, userMessage, history = [] } = request.data;
+    const {
+      slideIndex = 0,
+      slideCount = 1,
+      slideTitle,
+      bullets,
+      slideContent = '',
+      components = [],
+      currentLayout = 'standard',
+      availableLayouts = [],
+      deckTitles = [],
+      deckSlides = [],
+      sourceContext = {},
+      userMessage,
+      history = [],
+    } = request.data;
+    const safeSlideIndex = Math.max(0, Math.min(Math.max(0, Number(slideCount) - 1), Number(slideIndex) || 0));
+    const layoutList = Array.isArray(availableLayouts) && availableLayouts.length
+      ? availableLayouts.map((l) => `${l.key}: ${l.name || l.key} - ${l.desc || ''}`).join('\n')
+      : 'standard, split, bigTitle, stat, quote, image, minimal, centered, process_flow, comparison, timeline, statistics, hierarchy, image_focus, roadmap, problem_solution, feature_breakdown, summary';
+    const historyText = Array.isArray(history)
+      ? history
+          .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && m.text)
+          .slice(-20)
+          .map((m) => `${m.role}: ${trimWords(m.text, 80)}`)
+          .join('\n')
+      : '';
 
     const systemPrompt = `You are an expert presentation editor for Quidax, a crypto exchange.
-The user is editing a slide. Respond with a JSON object:
+The user is editing a slide deck. Apply the request to the intended slide. Respond with a JSON object:
 {
+  "targetSlideIndex": 0,
   "updatedTitle": "...",
   "updatedBullets": ["...", "..."],
+  "updatedLayout": "standard|split|bigTitle|stat|quote|image|minimal|centered|process_flow|comparison|timeline|statistics|hierarchy|image_focus|roadmap|problem_solution|feature_breakdown|summary|null",
+  "needsClarification": false,
   "assistantReply": "One sentence confirming the change."
 }
 Only output valid JSON — no markdown, no explanation.
-Current slide: title="${slideTitle}", bullets=${JSON.stringify(bullets)}`;
+Rules:
+- targetSlideIndex is zero-based. If the user says "slide 2", return 1.
+- If the user does not specify a slide, use ${safeSlideIndex}.
+- Preserve existing content unless the user asked to change it.
+- Return updatedLayout only when the user asks to change layout or visual treatment.
+- If the user asks for split view, two columns, quote, summary, timeline, roadmap, problem/solution, comparison, image focus, or any listed layout, return the matching updatedLayout. Do not tell the user to change layout manually.
+- For requests like "add more info", "talk more about this", "expand", or "more detail", use the current slide content, slide components, deck outline, source prompt, and chat history to return updatedBullets with richer visible content.
+- Return updatedBullets whenever the visible wording should change. Keep each bullet under 22 words.
+- If you cannot make a concrete edit because the user gave no actionable request or there is no relevant content, set needsClarification true and do not claim you changed anything.
+- Do not say you changed the slide unless updatedTitle, updatedBullets, or updatedLayout is present.
+- Use only one of the allowed layout keys below.
+
+Allowed layouts:
+${layoutList}
+
+Current slide index: ${safeSlideIndex}
+Current slide: title="${slideTitle}", layout="${currentLayout}", bullets=${JSON.stringify(bullets)}
+Current slide body: ${JSON.stringify(slideContent)}
+Current slide components: ${JSON.stringify(components)}
+Deck slide titles: ${JSON.stringify(deckTitles)}
+Deck outline: ${JSON.stringify(deckSlides)}
+Source context: ${JSON.stringify(sourceContext)}
+Previous conversation:
+${historyText || 'None'}`;
 
     const messages = [
-      ...history.map(m => ({ role: m.role, content: m.text })),
       { role: 'user', content: userMessage },
     ];
 
@@ -903,7 +986,18 @@ Current slide: title="${slideTitle}", bullets=${JSON.stringify(bullets)}`;
       throw new HttpsError('internal', 'Edit failed: ' + e.message);
     }
 
-    return result;
+    const targetSlideIndex = Math.max(0, Math.min(Math.max(0, Number(slideCount) - 1), Number(result.targetSlideIndex) || safeSlideIndex));
+    const updatedLayout = result.updatedLayout ? normalizeLayout(result.updatedLayout, '') : undefined;
+    return {
+      targetSlideIndex,
+      updatedTitle: result.updatedTitle ? String(result.updatedTitle).trim() : undefined,
+      updatedBullets: Array.isArray(result.updatedBullets)
+        ? result.updatedBullets.map((b) => String(b || '').trim()).filter(Boolean).slice(0, 6)
+        : undefined,
+      updatedLayout: updatedLayout || undefined,
+      needsClarification: normalizeBoolean(result.needsClarification, false),
+      assistantReply: result.assistantReply ? String(result.assistantReply).trim() : undefined,
+    };
   }
 );
 

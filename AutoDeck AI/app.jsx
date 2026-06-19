@@ -96,6 +96,7 @@ const callFn = (name, payload = {}, timeoutMs = 30000) => {
   return fn(payload).then((result) => result.data);
 };
 
+// Mirrors functions/index.js KEYWORD_STOP_WORDS — keep in sync
 const SOURCE_REVIEW_STOP_WORDS = new Set([
   'this', 'that', 'with', 'from', 'have', 'will', 'your', 'about', 'into', 'their', 'there', 'where',
   'when', 'what', 'were', 'been', 'being', 'they', 'them', 'than', 'then', 'also', 'should', 'could',
@@ -103,13 +104,22 @@ const SOURCE_REVIEW_STOP_WORDS = new Set([
   'slide', 'slides', 'deck', 'cover', 'make', 'create', 'generate', 'build', 'please', 'need', 'want',
 ]);
 
-const sourceReviewKeywords = (value) => [...new Set(
-  (String(value || '').toLowerCase().match(/[a-z0-9]{4,}/g) || [])
-    .filter((word) => !SOURCE_REVIEW_STOP_WORDS.has(word))
-)].slice(0, 40);
+// Mirrors functions/index.js keywordsFrom — keep in sync
+const sourceReviewKeywords = (value) => {
+  const words = String(value || '').toLowerCase().match(/[a-z0-9]{4,}/g) || [];
+  return [...new Set(words.filter((word) => !SOURCE_REVIEW_STOP_WORDS.has(word)))].slice(0, 40);
+};
+
+// Mirrors functions/index.js hasTangibleSourceInfo — keep in sync
+const compactTextSimple = (value, limit) => String(value || '')
+  .replace(/\u0000/g, '')
+  .replace(/[ \t]+\n/g, '\n')
+  .replace(/\n{4,}/g, '\n\n\n')
+  .trim()
+  .slice(0, limit);
 
 const hasTangibleSourceInfo = (value, kind = 'brief') => {
-  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  const text = compactTextSimple(value, Number.MAX_SAFE_INTEGER).replace(/\s+/g, ' ').trim();
   if (!text) return false;
   const words = text.split(/\s+/).filter(Boolean);
   const keywords = sourceReviewKeywords(text);
@@ -178,7 +188,7 @@ const App = () => {
   const [conflictConfig, setConflictConfig] = React.useState(null);
   const [conflictRechecking, setConflictRechecking] = React.useState(false);
 
-  // Client-side keyword overlap check (mirrors backend sourceFitGuide)
+  // Mirrors functions/index.js keywordOverlap + sourceFitGuide — keep in sync
   const hasSourceConflict = (brief, source) => {
     if (!brief || !source) return false;
     const bkw = sourceReviewKeywords(brief);
@@ -234,7 +244,7 @@ const App = () => {
       const parseFn = window.firebase.app().functions('us-central1').httpsCallable('parseFile', { timeout: 120000 });
       const { data } = await parseFn({ storagePath, fileName: file.name });
       return data?.text || '';
-    } catch (_) { return ''; } finally { ref.delete().catch(()=>{}); }
+    } catch (err) { console.warn('[AutoDeck] parseReplacementFile failed:', err); return ''; } finally { ref.delete().catch((delErr) => { if (delErr) console.warn('[AutoDeck] temp file delete failed:', delErr); }); }
   };
 
   const userRole = isAdminUser(currentUser) ? 'admin' : 'employee';
@@ -301,7 +311,7 @@ const App = () => {
     if (!window.firebase?.app) return;
     callFn('getBrand', {})
       .then(data => { if (data?.brand) setBrandConfig(data.brand); })
-      .catch(() => {});
+      .catch((err) => { console.warn('[AutoDeck] getBrand failed:', err); });
   }, []);
 
   React.useEffect(() => {
@@ -445,7 +455,7 @@ const App = () => {
       if (generationRunRef.current !== runId) return;
       const message = `AI generation exceeded the ${Math.round(GENERATION_CLIENT_DEADLINE_MS / 1000)} second client deadline before generated slides were returned. No local draft was used.`;
       if (deckRef) {
-        callFn('markDeckError', { deckId: deckRef.id, error: message, stage: 'client-deadline' }).catch(() => {});
+        callFn('markDeckError', { deckId: deckRef.id, error: message, stage: 'client-deadline' }).catch((err) => { console.warn('[AutoDeck] markDeckError (deadline) failed:', err); });
       }
       setGenerationTrace((prev) => ({
         ...prev,
@@ -486,7 +496,7 @@ const App = () => {
       activeDeckIdRef.current = resolvedDeckId;
       setActiveDeckId(resolvedDeckId);
       setGenerationTrace((prev) => ({ ...prev, stage: 'deck-id-created', deckId: resolvedDeckId }));
-      uploadSourceFile(resolvedDeckId, config).catch(() => {});
+      uploadSourceFile(resolvedDeckId, config).catch((err) => { console.warn('[AutoDeck] uploadSourceFile failed:', err); });
 
       generationDeckUnsubRef.current = deckRef.onSnapshot(async (snap) => {
         if (generationRunRef.current !== runId || !snap.exists) return;
@@ -573,7 +583,7 @@ const App = () => {
         message,
       }));
       if (deckRef) {
-        callFn('markDeckError', { deckId: deckRef.id, error: err?.message || message, stage: 'client-error' }).catch(() => {});
+        callFn('markDeckError', { deckId: deckRef.id, error: err?.message || message, stage: 'client-error' }).catch((markErr) => { console.warn('[AutoDeck] markDeckError (client-error) failed:', markErr); });
       }
       if (/too few usable slides|returned no slides|no slides/i.test(err?.message || '')) {
         setConflictConfig(config);
@@ -664,7 +674,7 @@ const App = () => {
         handleGenerate({ ...updatedConfig, conflictAcknowledged: true });
         return;
       }
-    } catch (_) {}
+    } catch (err) { console.warn('[AutoDeck] handleConflictReupload failed:', err); }
     setConflictRechecking(false);
   };
 
@@ -781,8 +791,8 @@ const App = () => {
                     activeDeckIdRef.current = resolvedId;
                     setActiveDeckId(resolvedId);
                   }
-                  if (resolvedId) uploadSourceFile(resolvedId, deckConfig).catch(() => {});
-                } catch (_) {}
+                  if (resolvedId) uploadSourceFile(resolvedId, deckConfig).catch((srcErr) => { console.warn('[AutoDeck] onViewSlideshow uploadSourceFile failed:', srcErr); });
+                } catch (viewErr) { console.warn('[AutoDeck] onViewSlideshow finalizeDeck failed:', viewErr); }
               }
             }}
             tweaks={tweaks}
