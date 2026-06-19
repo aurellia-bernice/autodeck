@@ -16,6 +16,7 @@ const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
   const [userModeOverride, setUserModeOverride] = React.useState(() => restoredInputMode); // null | 'brief' | 'content'
   const [templateMode, setTemplateMode] = React.useState('Prompt'); // 'Prompt' | 'Layout'
   const [layoutTemplateId, setLayoutTemplateId] = React.useState(null);
+  const [seedsOpen, setSeedsOpen] = React.useState(false);
 
   const SLIDE_TEMPLATES = [
     { id: 'product-launch', kicker: 'Launch',    name: 'Product launch announcement', slides: ['Cover', 'The Problem', 'Our Solution', 'Key Features', 'Pricing & Timeline', 'Next Steps'] },
@@ -402,34 +403,64 @@ const HomeScreenA = ({ onGenerate, tweaks, initialConfig }) => {
         </div>
         </div>
 
-        {/* Seeds sidebar — right column */}
+        {/* Seeds sidebar — right column, collapsed by default */}
         <div>
-          <div style={{ fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: T.inkMute, marginBottom: 14 }}>
-            Or start from
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {promptIdeas.map((p, i) => (
-              <button key={p.label}
-                onClick={() => { setInputText(p.seed); setUserModeOverride('brief'); }}
-                onMouseEnter={() => setActivePrompt(i)}
-                style={{
-                  padding: '14px 16px', borderRadius: qxRadius.md,
-                  border: `1px solid ${activePrompt === i ? T.primary : T.border}`,
-                  background: activePrompt === i ? T.surface : 'transparent',
-                  color: T.ink, fontFamily: qxType.body,
-                  cursor: 'pointer', transition: `all 240ms ${qxEase}`, textAlign: 'left',
-                  boxShadow: activePrompt === i ? qxShadow(tweaks?.darkMode).sm : 'none',
-                  transform: activePrompt === i ? 'translateY(-1px)' : 'translateY(0)',
-                }}>
-                <div style={{ fontFamily: qxType.mono, fontSize: 9.5, letterSpacing: '0.20em', textTransform: 'uppercase', color: activePrompt === i ? T.primary : T.inkMute, marginBottom: 5 }}>
-                  {p.kicker}
-                </div>
-                <div style={{ fontFamily: qxType.display, fontSize: 14, fontWeight: 500, letterSpacing: '-0.01em', lineHeight: 1.25, color: T.ink }}>
-                  {p.label}
-                </div>
-              </button>
-            ))}
-          </div>
+          <button
+            onClick={() => setSeedsOpen(o => !o)}
+            style={{
+              width: '100%', padding: '13px 16px',
+              borderRadius: seedsOpen ? `${qxRadius.md} ${qxRadius.md} 0 0` : qxRadius.md,
+              border: `1px solid ${seedsOpen ? T.primary : T.border}`,
+              background: seedsOpen ? T.surface : 'transparent',
+              cursor: 'pointer', textAlign: 'left',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              transition: `all 200ms ${qxEase}`,
+            }}>
+            <div>
+              <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.20em', textTransform: 'uppercase', color: T.inkMute, marginBottom: 3 }}>
+                Not sure where to start?
+              </div>
+              <div style={{ fontFamily: qxType.display, fontSize: 13.5, fontWeight: 500, letterSpacing: '-0.01em', color: T.ink }}>
+                Pick a brief starter
+              </div>
+            </div>
+            <svg
+              width="14" height="14" viewBox="0 0 14 14" fill="none"
+              style={{ flexShrink: 0, color: T.inkMute, transform: seedsOpen ? 'rotate(180deg)' : 'rotate(0)', transition: `transform 200ms ${qxEase}` }}>
+              <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+
+          {seedsOpen && (
+            <div style={{
+              border: `1px solid ${T.primary}`, borderTop: 'none',
+              borderRadius: `0 0 ${qxRadius.md} ${qxRadius.md}`,
+              background: T.surface, overflow: 'hidden',
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0, padding: '6px 8px 8px' }}>
+                {promptIdeas.map((p, i) => (
+                  <button key={p.label}
+                    onClick={() => { setInputText(p.seed); setUserModeOverride('brief'); setSeedsOpen(false); }}
+                    onMouseEnter={() => setActivePrompt(i)}
+                    onMouseLeave={() => setActivePrompt(null)}
+                    style={{
+                      padding: '10px 10px', borderRadius: qxRadius.sm,
+                      border: 'none',
+                      background: activePrompt === i ? (tweaks?.darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(95,42,145,0.06)') : 'transparent',
+                      color: T.ink, cursor: 'pointer',
+                      transition: `background 140ms ${qxEase}`, textAlign: 'left',
+                    }}>
+                    <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.20em', textTransform: 'uppercase', color: activePrompt === i ? T.primary : T.inkMute, marginBottom: 3 }}>
+                      {p.kicker}
+                    </div>
+                    <div style={{ fontFamily: qxType.display, fontSize: 13.5, fontWeight: 500, letterSpacing: '-0.01em', lineHeight: 1.25, color: T.ink }}>
+                      {p.label}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         </div>)}
 
