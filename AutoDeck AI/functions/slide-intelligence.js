@@ -14,6 +14,7 @@
     'section_break',
     'process_flow',
     'comparison',
+    'table_matrix',
     'timeline',
     'statistics',
     'hierarchy',
@@ -62,6 +63,15 @@
       needsChart: false,
       needsImage: false,
       storytellingNote: 'Make the contrast explicit so the audience can scan the tradeoffs quickly.',
+    },
+    table_matrix: {
+      layout: 'editable_table_matrix',
+      renderLayout: 'table_matrix',
+      visualization: 'table_matrix',
+      needsIcons: false,
+      needsChart: false,
+      needsImage: false,
+      storytellingNote: 'Use an editable table when the content is best scanned across rows and columns.',
     },
     timeline: {
       layout: 'chronological_timeline',
@@ -229,6 +239,7 @@
     if (SLIDE_TYPES.includes(raw)) return raw;
     if (raw === 'metrics' || raw === 'kpis' || raw === 'statistic') return 'statistics';
     if (raw === 'process' || raw === 'flow' || raw === 'flowchart') return 'process_flow';
+    if (raw === 'table' || raw === 'matrix' || raw === 'comparison_table') return 'table_matrix';
     if (raw === 'features') return 'feature_breakdown';
     if (raw === 'image' || raw === 'photo') return 'image_focus';
     return '';
@@ -246,6 +257,7 @@
     if (hasAny(text, [/\bproblem\b.*\bsolution\b/, /\bchallenge\b.*\bmitigation\b/, /\bpain\b.*\banswer\b/])) return 'problem_solution';
     if (hasAny(text, [/\broadmap\b/, /\bphase\s+\d+\b/, /\bnow\s+next\s+later\b/, /\bq[1-4]\b.*\bq[1-4]\b/])) return 'roadmap';
     if (hasAny(text, [/\btimeline\b/, /\bchronolog/, /\b\d{4}\b/, /\bjan(uary)?\b|\bfeb(ruary)?\b|\bmar(ch)?\b|\bapr(il)?\b|\bmay\b|\bjun(e)?\b|\bjul(y)?\b|\baug(ust)?\b|\bsep(t)?\b|\boct(ober)?\b|\bnov(ember)?\b|\bdec(ember)?\b/])) return 'timeline';
+    if (hasAny(text, [/\btable\b/, /\bmatrix\b/, /\bpricing\b/, /\bpackages?\b/, /\btiers?\b/, /\bfeature\s+comparison\b/, /\bcolumns?\b/, /\brows?\b/])) return 'table_matrix';
     if (metricCount(slide) >= 2 || hasAny(text, [/\bkpis?\b/, /\bmetrics?\b/, /\bby the numbers\b/, /\bstats?\b/, /\bscore\b/, /\bvolume\b/])) return 'statistics';
     if (hasAny(text, [/\bversus\b/, /\bvs\.?\b/, /\bbefore\b.*\bafter\b/, /\bpros?\b.*\bcons?\b/, /\bcompare\b/, /\btradeoffs?\b/])) return 'comparison';
     if (hasAny(text, [/\bhierarchy\b/, /\borg chart\b/, /\breporting\b/, /\blayers?\b/, /\blevels?\b/, /\bownership\b/, /\broles?\b/])) return 'hierarchy';
@@ -326,6 +338,12 @@
       return [
         { type: 'comparison_column', label: 'Current', icon: 'alert-triangle', items: (left.length ? left : bullets.slice(0, Math.ceil(bullets.length / 2))).map((b) => cleanLabel(b, 10)) },
         { type: 'comparison_column', label: 'Future', icon: 'check-circle', items: (right.length ? right : bullets.slice(Math.ceil(bullets.length / 2))).map((b) => cleanLabel(b, 10)) },
+      ];
+    }
+    if (slideType === 'table_matrix') {
+      return [
+        { type: 'table_column', label: 'Item', icon: 'table', items: bullets.map((_, i) => `Point ${i + 1}`) },
+        { type: 'table_column', label: cleanLabel(slide?.title, 6) || 'Detail', icon: 'list', items: bullets.map((b) => cleanLabel(b, 14)) },
       ];
     }
     if (slideType === 'problem_solution') {
