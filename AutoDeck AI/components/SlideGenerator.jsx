@@ -1,13 +1,12 @@
 // ============================================================
-// SlideGenerator — editorial slideshow editor
-// Crafted-editor personality: hairline chrome, 12-col grid,
-// magazine-feel slide layouts, mono labels, lime as primary CTA.
+// SlideGenerator - object-based presentation editor
+// Every visible slide element is represented by slide.objects[].
 // ============================================================
 
 const DEMO_SLIDES = [
-  { title: 'Q2 Sales Strategy', bullets: ['Strong Q2 performance across all verticals', 'New markets entered: Ghana, Senegal', 'Revenue up 34% YoY'] },
-  { title: 'Market Overview', bullets: ['Africa crypto market growing at 18% CAGR', 'Quidax positioned in top 3 exchanges', 'User base crossed 2M milestone'] },
-  { title: 'Key Metrics', bullets: ['Monthly active users: 1.2M', 'Transaction volume: $280M', 'NPS score: 72'] },
+  { title: 'Q2 Sales Strategy', renderLayout: 'standard', bullets: ['Strong Q2 performance across all verticals', 'New markets entered: Ghana, Senegal', 'Revenue up 34% YoY'] },
+  { title: 'Market Overview', renderLayout: 'image', imagePrompt: 'African fintech team reviewing product growth dashboard', needsImage: true, bullets: ['Africa crypto market growing at 18% CAGR', 'Quidax positioned in top 3 exchanges', 'User base crossed 2M milestone'] },
+  { title: 'Pricing And Feature Matrix', renderLayout: 'table_matrix', slideType: 'table_matrix', bullets: ['Starter package covers essentials', 'Growth package adds automation', 'Enterprise package includes dedicated support'] },
 ];
 
 const deriveBrandColors = (brandConfig) => {
@@ -25,8 +24,8 @@ const deriveBrandColors = (brandConfig) => {
   return {
     primary,
     secondary: find('secondary') || brandConfig.colorRows[1]?.value || primary,
-    accent: find('accent', 'lime', 'cta') || '#D4FF3F',
-    lime: find('lime') || '#D4FF3F',
+    accent: find('accent', 'lime', 'cta') || QX.lime,
+    lime: find('lime') || QX.lime,
     bgDark: find('dark canvas', 'dark') || '#0F031F',
     bgLight: find('light canvas', 'light') || '#F6F1FB',
   };
@@ -42,822 +41,432 @@ const pptFontName = (family, fallback, role = 'body') => {
   return role === 'display' ? 'Aptos Display' : 'Aptos';
 };
 
-const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, onBack }) => {
+const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, onBack, activeDeckId }) => {
   const isDemo = !Array.isArray(initialSlides) || initialSlides.length === 0;
   const safeInitial = isDemo ? DEMO_SLIDES : initialSlides;
   if (isDemo && typeof console !== 'undefined') {
     console.warn('[AutoDeck] SlideGenerator: no slides provided, falling back to demo data.');
   }
-  const preparedInitial = window.AutoDeckTemplatePresets?.enhanceSlides
-    ? window.AutoDeckTemplatePresets.enhanceSlides(safeInitial, config?.templateStyle)
-    : safeInitial;
-  const templatePreset = window.AutoDeckTemplatePresets?.getTemplatePreset?.(config?.templateStyle);
+
   const brandColors = deriveBrandColors(brandConfig);
-
-  // ─── state ───────────────────────────────────────────────
-  const [localSlides, setLocalSlides] = React.useState(() => preparedInitial.map((s) => ({ ...s })));
-  const [currentIndex, setCurrentIndex] = React.useState(0);
-  const [globalTheme, setGlobalTheme] = React.useState(brandColors ? 'custom' : templatePreset?.theme || 'purple');
-  const [slideThemeOverrides, setSlideThemeOverrides] = React.useState({});
-  const [slideLayoutOverrides, setSlideLayoutOverrides] = React.useState({});
-  const [slideAlignments, setSlideAlignments] = React.useState({});
-  const [slideImages, setSlideImages] = React.useState({});
-  const [editPanelOpen, setEditPanelOpen] = React.useState(false);
-  const [editTab, setEditTab] = React.useState('layout');
-  const [imgQuery, setImgQuery] = React.useState('');
-  const [imgResults, setImgResults] = React.useState([]);
-  const [imgGenerating, setImgGenerating] = React.useState(false);
-  const [imgPage, setImgPage] = React.useState(1);
-  const [showMenu, setShowMenu] = React.useState(false);
-  const [showThemePop, setShowThemePop] = React.useState(false);
-  const [showGrid, setShowGrid] = React.useState(false);
-  const [toast, setToast] = React.useState(null);
-  const [transitionKey, setTransitionKey] = React.useState(0);
-  const [editingField, setEditingField] = React.useState(null); // { field: 'title'|'bullet', bi?: number }
-
-  const commitEdit = (value) => {
-    if (!editingField) return;
-    const trimmed = value.trim();
-    setLocalSlides(prev => prev.map((s, i) => {
-      if (i !== currentIndex) return s;
-      if (editingField.field === 'title') return { ...s, title: trimmed || s.title };
-      if (editingField.field === 'eyebrow') return { ...s, eyebrow: trimmed || s.eyebrow };
-      if (editingField.field === 'figure') return { ...s, figure: trimmed || s.figure };
-      if (editingField.field === 'stat-num') {
-        const bullets = [...s.bullets]; bullets[0] = trimmed || bullets[0]; return { ...s, bullets };
-      }
-      const bullets = [...s.bullets];
-      bullets[editingField.bi] = trimmed || bullets[editingField.bi];
-      return { ...s, bullets };
-    }));
-    setEditingField(null);
-  };
-
-  // agent state
-  const [agentOpen, setAgentOpen] = React.useState(false);
-  const [agentSlideIndex, setAgentSlideIndex] = React.useState(0);
-  const [agentMessages, setAgentMessages] = React.useState([]);
-  const [agentHistorySessions, setAgentHistorySessions] = React.useState([]);
-  const [agentHistoryOpen, setAgentHistoryOpen] = React.useState(false);
-  const [agentInput, setAgentInput] = React.useState('');
-  const [agentThinking, setAgentThinking] = React.useState(false);
-  const agentScrollRef = React.useRef(null);
-  const agentInputRef = React.useRef(null);
-
-
-  // ─── theme palette (per-slide) ───────────────────────────
   const customTheme = brandColors ? {
     name: 'Brand',
     swatch: brandColors.primary,
     gradient: `linear-gradient(155deg,${brandColors.bgDark || '#0F031F'} 0%,${brandColors.primary} 55%,${brandColors.secondary || brandColors.primary} 100%)`,
     title: brandColors.bgLight || '#F6F1FB',
     text: `${brandColors.bgLight || '#F6F1FB'}c7`,
-    accent: brandColors.lime || brandColors.accent || '#D4FF3F',
+    accent: brandColors.lime || brandColors.accent || QX.lime,
     rule: `${brandColors.bgLight || '#F6F1FB'}2e`,
   } : null;
 
   const THEMES = {
     ...(customTheme ? { custom: customTheme } : {}),
-    purple:   { name: 'Quidax',   swatch: '#7B2FBE', gradient: 'linear-gradient(155deg,#1A0530 0%,#2D0F4E 50%,#451B6E 100%)', title: '#F6F1FB', text: 'rgba(246,241,251,0.78)', accent: '#D4FF3F', rule: 'rgba(246,241,251,0.18)' },
-    midnight: { name: 'Midnight', swatch: '#312E81', gradient: 'linear-gradient(155deg,#0F0A24 0%,#1E1B4B 55%,#312E81 100%)', title: '#F5F3FF', text: 'rgba(245,243,255,0.78)', accent: '#A5B4FC', rule: 'rgba(245,243,255,0.18)' },
-    soft:     { name: 'Soft',     swatch: '#E9D5FF', gradient: 'linear-gradient(155deg,#FAF5FF 0%,#F3E8FF 55%,#FCE7F3 100%)', title: '#1A0530', text: 'rgba(26,5,48,0.72)',     accent: '#7B2FBE', rule: 'rgba(26,5,48,0.18)'    },
-    ocean:    { name: 'Ocean',    swatch: '#0369A1', gradient: 'linear-gradient(155deg,#0C2B4E 0%,#0369A1 55%,#0891B2 100%)', title: '#F0F9FF', text: 'rgba(240,249,255,0.78)', accent: '#7DD3FC', rule: 'rgba(240,249,255,0.20)' },
-    forest:   { name: 'Forest',   swatch: '#065F46', gradient: 'linear-gradient(155deg,#022C22 0%,#065F46 55%,#047857 100%)', title: '#ECFDF5', text: 'rgba(236,253,245,0.78)', accent: '#6EE7B7', rule: 'rgba(236,253,245,0.20)' },
-    sunset:   { name: 'Sunset',   swatch: '#C2410C', gradient: 'linear-gradient(155deg,#431407 0%,#7C2D12 50%,#C2410C 100%)', title: '#FFF7ED', text: 'rgba(255,247,237,0.80)', accent: '#FED7AA', rule: 'rgba(255,247,237,0.20)' },
-    slate:    { name: 'Slate',    swatch: '#334155', gradient: 'linear-gradient(155deg,#0F172A 0%,#1E293B 55%,#334155 100%)', title: '#F8FAFC', text: 'rgba(248,250,252,0.78)', accent: '#CBD5E1', rule: 'rgba(248,250,252,0.18)' },
-    rose:     { name: 'Rose',     swatch: '#BE123C', gradient: 'linear-gradient(155deg,#4C0519 0%,#881337 55%,#BE123C 100%)', title: '#FFF1F2', text: 'rgba(255,241,242,0.80)', accent: '#FECACA', rule: 'rgba(255,241,242,0.20)' },
-  };
-
-  // ─── layouts ─────────────────────────────────────────────
-  const layoutSwatch = (variant, t) => {
-    const fg = t.title;
-    const acc = t.accent;
-    const rule = t.rule;
-    const common = { width: 40, height: 23, viewBox: '0 0 40 23', fill: 'none' };
-    if (variant === 'standard') return (
-      <svg {...common}><rect x="2" y="3" width="14" height="2" rx=".5" fill={fg} opacity=".95" /><rect x="2" y="6" width="6" height=".8" rx=".4" fill={acc} /><rect x="2" y="10" width="20" height=".7" fill={fg} opacity=".55" /><rect x="2" y="12.5" width="16" height=".7" fill={fg} opacity=".4" /><rect x="2" y="15" width="22" height=".7" fill={fg} opacity=".55" /><rect x="2" y="20" width="6" height=".5" fill={rule} /></svg>);
-    if (variant === 'split') return (
-      <svg {...common}><rect x="2" y="4" width="13" height="2.5" rx=".5" fill={fg} opacity=".95" /><rect x="2" y="8" width="6" height=".8" rx=".4" fill={acc} /><line x1="20" y1="3" x2="20" y2="20" stroke={rule} strokeWidth=".5" /><rect x="22" y="5" width="14" height=".7" fill={fg} opacity=".6" /><rect x="22" y="7.5" width="11" height=".7" fill={fg} opacity=".55" /><rect x="22" y="10" width="14" height=".7" fill={fg} opacity=".55" /><rect x="22" y="12.5" width="9" height=".7" fill={fg} opacity=".55" /></svg>);
-    if (variant === 'bigTitle') return (
-      <svg {...common}><rect x="2" y="3" width="36" height="3.5" rx=".7" fill={fg} opacity=".95" /><rect x="2" y="8.5" width="28" height="3.5" rx=".7" fill={fg} opacity=".85" /><rect x="2" y="14" width="6" height=".8" rx=".4" fill={acc} /><rect x="2" y="17" width="22" height=".7" fill={fg} opacity=".5" /></svg>);
-    if (variant === 'quote') return (
-      <svg {...common}><text x="3" y="9" fontSize="9" fontFamily="Georgia" fill={acc}>"</text><rect x="9" y="6" width="28" height="1.2" rx=".5" fill={fg} opacity=".85" /><rect x="9" y="9" width="24" height="1.2" rx=".5" fill={fg} opacity=".85" /><rect x="9" y="12" width="20" height="1.2" rx=".5" fill={fg} opacity=".85" /><rect x="9" y="17" width="10" height=".6" rx=".3" fill={fg} opacity=".5" /></svg>);
-    if (variant === 'minimal') return (
-      <svg {...common}><rect x="2" y="10" width="22" height="2" rx=".5" fill={fg} opacity=".95" /><rect x="2" y="14" width="4" height=".7" rx=".3" fill={acc} /></svg>);
-    if (variant === 'centered') return (
-      <svg {...common}><rect x="8" y="7" width="24" height="2.4" rx=".6" fill={fg} opacity=".95" /><rect x="14" y="12" width="12" height=".8" rx=".4" fill={acc} /><rect x="10" y="15" width="20" height=".7" fill={fg} opacity=".45" /></svg>);
-    if (variant === 'stat') return (
-      <svg {...common}><text x="2" y="16" fontSize="14" fontWeight="600" fontFamily="serif" fill={fg}>34</text><text x="14" y="16" fontSize="14" fontWeight="600" fontFamily="serif" fill={acc}>%</text><rect x="22" y="6" width="14" height=".7" fill={fg} opacity=".5" /><rect x="22" y="8.5" width="12" height=".7" fill={fg} opacity=".5" /><rect x="22" y="11" width="14" height=".7" fill={fg} opacity=".5" /></svg>);
-    if (variant === 'image') return (
-      <svg {...common}><rect x="2" y="3" width="17" height="17" rx="1" fill={fg} opacity=".18" /><line x1="3" y1="4" x2="18" y2="19" stroke={fg} strokeWidth=".4" opacity=".4" /><circle cx="14" cy="7" r="1.2" fill={fg} opacity=".5" /><rect x="22" y="6" width="14" height="1.2" rx=".5" fill={fg} opacity=".9" /><rect x="22" y="9" width="6" height=".7" rx=".3" fill={acc} /><rect x="22" y="12" width="14" height=".7" fill={fg} opacity=".5" /><rect x="22" y="14.5" width="11" height=".7" fill={fg} opacity=".5" /></svg>);
-    if (variant === 'process_flow') return (
-      <svg {...common}><circle cx="7" cy="11" r="3" fill={acc} opacity=".9" /><circle cx="20" cy="11" r="3" fill={fg} opacity=".32" /><circle cx="33" cy="11" r="3" fill={fg} opacity=".32" /><path d="M10.5 11h5.5M23.5 11h5.5" stroke={fg} strokeWidth=".8" opacity=".6" /><path d="M15 9.5l1.5 1.5-1.5 1.5M28 9.5l1.5 1.5-1.5 1.5" stroke={fg} strokeWidth=".8" strokeLinecap="round" strokeLinejoin="round" opacity=".7" /></svg>);
-    if (variant === 'comparison' || variant === 'problem_solution') return (
-      <svg {...common}><rect x="3" y="5" width="14" height="13" rx="1.2" fill={fg} opacity=".18" /><rect x="23" y="5" width="14" height="13" rx="1.2" fill={acc} opacity=".30" /><path d="M18.5 11.5h3M20.5 9.5l2 2-2 2" stroke={fg} strokeWidth=".8" strokeLinecap="round" strokeLinejoin="round" opacity=".7" /><rect x="6" y="8" width="8" height=".7" fill={fg} opacity=".55" /><rect x="26" y="8" width="8" height=".7" fill={fg} opacity=".55" /></svg>);
-    if (variant === 'timeline' || variant === 'roadmap') return (
-      <svg {...common}><path d="M5 12h30" stroke={fg} strokeWidth=".8" opacity=".45" /><circle cx="8" cy="12" r="2" fill={acc} /><circle cx="20" cy="12" r="2" fill={fg} opacity=".45" /><circle cx="32" cy="12" r="2" fill={fg} opacity=".45" /><rect x="5" y="6" width="8" height=".8" fill={fg} opacity=".55" /><rect x="17" y="16" width="8" height=".8" fill={fg} opacity=".55" /><rect x="29" y="6" width="8" height=".8" fill={fg} opacity=".55" /></svg>);
-    if (variant === 'statistics') return (
-      <svg {...common}><rect x="3" y="5" width="10" height="13" rx="1.2" fill={fg} opacity=".16" /><rect x="15" y="5" width="10" height="13" rx="1.2" fill={fg} opacity=".16" /><rect x="27" y="5" width="10" height="13" rx="1.2" fill={fg} opacity=".16" /><text x="5" y="14" fontSize="6" fontWeight="700" fontFamily="sans-serif" fill={acc}>72</text><text x="17" y="14" fontSize="6" fontWeight="700" fontFamily="sans-serif" fill={fg}>34</text><text x="29" y="14" fontSize="6" fontWeight="700" fontFamily="sans-serif" fill={fg}>2M</text></svg>);
-    if (variant === 'hierarchy') return (
-      <svg {...common}><rect x="14" y="4" width="12" height="4" rx="1" fill={acc} opacity=".8" /><path d="M20 8v3M9 11h22M9 11v3M20 11v3M31 11v3" stroke={fg} strokeWidth=".6" opacity=".6" /><rect x="4" y="14" width="10" height="4" rx="1" fill={fg} opacity=".22" /><rect x="15" y="14" width="10" height="4" rx="1" fill={fg} opacity=".22" /><rect x="26" y="14" width="10" height="4" rx="1" fill={fg} opacity=".22" /></svg>);
-    if (variant === 'feature_breakdown' || variant === 'summary') return (
-      <svg {...common}><rect x="4" y="5" width="14" height="6" rx="1.2" fill={fg} opacity=".18" /><rect x="22" y="5" width="14" height="6" rx="1.2" fill={fg} opacity=".18" /><rect x="4" y="13" width="14" height="6" rx="1.2" fill={fg} opacity=".18" /><rect x="22" y="13" width="14" height="6" rx="1.2" fill={acc} opacity=".28" /><circle cx="8" cy="8" r="1.3" fill={acc} /></svg>);
-    if (variant === 'image_focus') return (
-      <svg {...common}><rect x="2" y="3" width="36" height="17" rx="1.2" fill={fg} opacity=".18" /><path d="M5 17l8-7 5 4 4-3 11 6" stroke={fg} strokeWidth=".6" opacity=".55" fill="none" /><circle cx="30" cy="8" r="2" fill={acc} opacity=".8" /><rect x="5" y="6" width="14" height="1.1" rx=".4" fill={fg} opacity=".75" /></svg>);
-    return null;
+    purple:   { name: 'Quidax',   swatch: '#7B2FBE', gradient: 'linear-gradient(155deg,#1A0530 0%,#2D0F4E 50%,#451B6E 100%)', title: '#F6F1FB', text: 'rgba(246,241,251,0.78)', accent: QX.lime, rule: 'rgba(246,241,251,0.18)' },
+    midnight: { name: 'Midnight', swatch: '#312E81', gradient: 'linear-gradient(155deg,#0F0A24 0%,#1E1B4B 55%,#312E81 100%)', title: '#F5F3FF', text: 'rgba(245,243,255,0.80)', accent: '#A5B4FC', rule: 'rgba(245,243,255,0.18)' },
+    soft:     { name: 'Soft',     swatch: '#E9D5FF', gradient: 'linear-gradient(155deg,#FAF5FF 0%,#F3E8FF 55%,#FCE7F3 100%)', title: '#1A0530', text: 'rgba(26,5,48,0.72)', accent: '#7B2FBE', rule: 'rgba(26,5,48,0.18)' },
+    ocean:    { name: 'Ocean',    swatch: '#0369A1', gradient: 'linear-gradient(155deg,#0C2B4E 0%,#0369A1 55%,#0891B2 100%)', title: '#F0F9FF', text: 'rgba(240,249,255,0.80)', accent: '#7DD3FC', rule: 'rgba(240,249,255,0.20)' },
+    forest:   { name: 'Forest',   swatch: '#065F46', gradient: 'linear-gradient(155deg,#022C22 0%,#065F46 55%,#047857 100%)', title: '#ECFDF5', text: 'rgba(236,253,245,0.80)', accent: '#6EE7B7', rule: 'rgba(236,253,245,0.20)' },
+    rose:     { name: 'Rose',     swatch: '#BE123C', gradient: 'linear-gradient(155deg,#4C0519 0%,#881337 55%,#BE123C 100%)', title: '#FFF1F2', text: 'rgba(255,241,242,0.82)', accent: '#FECACA', rule: 'rgba(255,241,242,0.20)' },
   };
 
   const LAYOUTS = [
-    { key: 'standard', name: 'Standard',  desc: 'Title + bullets' },
-    { key: 'split',    name: 'Split',      desc: 'Title left · list right' },
-    { key: 'bigTitle', name: 'Bold',       desc: 'Oversized headline' },
-    { key: 'stat',     name: 'Stat',       desc: 'Hero number + context' },
-    { key: 'quote',    name: 'Quote',      desc: 'Pull quote, attributed' },
-    { key: 'image',    name: 'Image-led',  desc: 'Photo + text panel' },
-    { key: 'minimal',  name: 'Minimal',    desc: 'Title alone' },
-    { key: 'centered', name: 'Centered',   desc: 'Centered title + points' },
-    { key: 'process_flow', name: 'Flow', desc: 'Steps + arrows' },
+    { key: 'standard', name: 'Standard', desc: 'Title + body' },
+    { key: 'split', name: 'Split', desc: 'Two zones' },
+    { key: 'bigTitle', name: 'Bold', desc: 'Oversized title' },
+    { key: 'stat', name: 'Stat', desc: 'Hero number' },
+    { key: 'quote', name: 'Quote', desc: 'Pull quote' },
+    { key: 'image', name: 'Image-led', desc: 'Image + text' },
+    { key: 'minimal', name: 'Minimal', desc: 'Title only' },
+    { key: 'centered', name: 'Centered', desc: 'Centered message' },
+    { key: 'process_flow', name: 'Flow', desc: 'Steps' },
     { key: 'comparison', name: 'Compare', desc: 'Two sides' },
+    { key: 'table_matrix', name: 'Table', desc: 'Editable rows' },
     { key: 'timeline', name: 'Timeline', desc: 'Chronology' },
     { key: 'statistics', name: 'KPI cards', desc: 'Numbers' },
     { key: 'hierarchy', name: 'Hierarchy', desc: 'Levels' },
     { key: 'roadmap', name: 'Roadmap', desc: 'Phases' },
     { key: 'problem_solution', name: 'Problem/Solution', desc: 'Tension + answer' },
-    { key: 'feature_breakdown', name: 'Features', desc: 'Icon cards' },
+    { key: 'feature_breakdown', name: 'Features', desc: 'Cards' },
     { key: 'summary', name: 'Summary', desc: 'Takeaways' },
-    { key: 'image_focus', name: 'Image focus', desc: 'Visual anchor' },
+    { key: 'image_focus', name: 'Image focus', desc: 'Full bleed image' },
   ];
+
+  const normalizeSlideList = (slides) => {
+    const enhanced = window.AutoDeckTemplatePresets?.enhanceSlides
+      ? window.AutoDeckTemplatePresets.enhanceSlides(slides, config?.templateStyle)
+      : slides;
+    return window.AutoDeckSlideObjects?.ensureSlidesObjects
+      ? window.AutoDeckSlideObjects.ensureSlidesObjects(enhanced)
+      : enhanced;
+  };
+
+  const [localSlides, setLocalSlides] = React.useState(() => normalizeSlideList(safeInitial));
+  const [currentIndex, setCurrentIndex] = React.useState(0);
+  const [globalTheme, setGlobalTheme] = React.useState(brandColors ? 'custom' : (window.AutoDeckTemplatePresets?.getTemplatePreset?.(config?.templateStyle)?.theme || 'purple'));
+  const [slideThemeOverrides, setSlideThemeOverrides] = React.useState({});
+  const [slideLayoutOverrides, setSlideLayoutOverrides] = React.useState({});
+  const [selectedObjectId, setSelectedObjectId] = React.useState(null);
+  const [selectedCell, setSelectedCell] = React.useState(null);
+  const [editingObjectId, setEditingObjectId] = React.useState(null);
+  const [editPanelOpen, setEditPanelOpen] = React.useState(true);
+  const [editTab, setEditTab] = React.useState('style');
+  const [showGrid, setShowGrid] = React.useState(false);
+  const [showMenu, setShowMenu] = React.useState(false);
+  const [showThemePop, setShowThemePop] = React.useState(false);
+  const [showAddMenu, setShowAddMenu] = React.useState(false);
+  const [toast, setToast] = React.useState(null);
+  const [imgQuery, setImgQuery] = React.useState('');
+  const [imgUrl, setImgUrl] = React.useState('');
+  const [imgResults, setImgResults] = React.useState([]);
+  const [imgGenerating, setImgGenerating] = React.useState(false);
+  const [imgPage, setImgPage] = React.useState(1);
+  const [agentOpen, setAgentOpen] = React.useState(false);
+  const [agentSlideIndex, setAgentSlideIndex] = React.useState(0);
+  const [agentMessages, setAgentMessages] = React.useState([]);
+  const [agentInput, setAgentInput] = React.useState('');
+  const [agentThinking, setAgentThinking] = React.useState(false);
+  const [agentHistorySessions, setAgentHistorySessions] = React.useState([]);
+  const [agentHistoryOpen, setAgentHistoryOpen] = React.useState(false);
+  const stageRef = React.useRef(null);
+  const agentInputRef = React.useRef(null);
+  const agentScrollRef = React.useRef(null);
+  const saveTimerRef = React.useRef(null);
+  const suppressSaveRef = React.useRef(true);
+
   const layoutKeys = LAYOUTS.map((l) => l.key);
   const layoutAliases = [
-    { key: 'standard', patterns: [/standard/, /default/, /title\s*\+\s*bullets?/, /bullet\s+list/] },
-    { key: 'split', patterns: [/split/, /two[-\s]?column/, /2[-\s]?column/, /side\s+by\s+side/] },
-    { key: 'bigTitle', patterns: [/big\s*title/, /bold\s*title/, /hero\s*title/, /large\s*headline/, /bold\s*headline/] },
-    { key: 'stat', patterns: [/\bstat\b/, /\bmetric\b/, /number\s*slide/, /hero\s*number/] },
-    { key: 'quote', patterns: [/\bquote\b/, /pull\s*quote/, /testimonial/] },
-    { key: 'image', patterns: [/image[-\s]?led/, /photo\s*\+\s*text/, /picture\s*\+\s*text/] },
-    { key: 'minimal', patterns: [/minimal/, /simple/, /clean/] },
-    { key: 'centered', patterns: [/centered?/, /centre/, /middle/] },
-    { key: 'process_flow', patterns: [/process/, /\bflow\b/, /step[s]?/, /journey\s*(?:layout|flow|map)/] },
-    { key: 'comparison', patterns: [/comparison/, /compare/, /versus/, /\bvs\b/] },
-    { key: 'timeline', patterns: [/timeline/, /chronolog/, /sequence/] },
-    { key: 'statistics', patterns: [/kpi/, /statistics?/, /metrics?\s*cards?/, /numbers?\s*cards?/] },
-    { key: 'hierarchy', patterns: [/hierarchy/, /org\s*chart/, /levels?/] },
-    { key: 'roadmap', patterns: [/roadmap/, /phases?/, /milestones?/] },
-    { key: 'problem_solution', patterns: [/problem\s*solution/, /problem\s*(?:and|&|vs)\s*solution/, /tension\s*(?:and|&)\s*answer/] },
-    { key: 'feature_breakdown', patterns: [/feature/, /icon\s*cards?/, /breakdown/] },
+    { key: 'standard', patterns: [/standard/, /default/] },
+    { key: 'split', patterns: [/split/, /two\s*column/, /side\s*by\s*side/] },
+    { key: 'bigTitle', patterns: [/big\s*title/, /bold/, /hero\s*title/, /headline/] },
+    { key: 'stat', patterns: [/\bstat\b/, /metric/, /number/] },
+    { key: 'quote', patterns: [/quote/, /pull\s*quote/] },
+    { key: 'image', patterns: [/image[-\s]?led/, /photo\s*\+\s*text/] },
+    { key: 'table_matrix', patterns: [/table/, /matrix/, /pricing/, /rows?/, /columns?/] },
+    { key: 'process_flow', patterns: [/process/, /\bflow\b/, /steps?/] },
+    { key: 'comparison', patterns: [/comparison/, /compare/, /\bvs\b/, /versus/] },
+    { key: 'timeline', patterns: [/timeline/, /chronolog/] },
+    { key: 'roadmap', patterns: [/roadmap/, /phase/, /milestone/] },
+    { key: 'problem_solution', patterns: [/problem\s*solution/, /problem.*solution/] },
     { key: 'summary', patterns: [/summary/, /takeaways?/, /recap/] },
-    { key: 'image_focus', patterns: [/image\s*focus/, /full\s*bleed/, /visual\s*anchor/] },
+    { key: 'image_focus', patterns: [/image\s*focus/, /full\s*bleed/, /visual/] },
   ];
   const ordinalSlideWords = {
     first: 0, second: 1, third: 2, fourth: 3, fifth: 4, sixth: 5, seventh: 6, eighth: 7, ninth: 8, tenth: 9,
   };
 
-  // ─── derived ─────────────────────────────────────────────
-  const getTheme  = (i) => THEMES[slideThemeOverrides[i] || globalTheme || localSlides[i]?.theme] || THEMES[localSlides[i]?.theme] || THEMES.purple;
-  const getLayout = (i) => slideLayoutOverrides[i] || window.AutoDeckTemplatePresets?.resolveTemplateLayout?.(localSlides[i], i, config?.templateStyle) || localSlides[i]?.renderLayout || localSlides[i]?.layout || 'standard';
-  const getAlign  = (i) => slideAlignments[i] || 'left';
-  const theme  = getTheme(currentIndex);
-  const layout = getLayout(currentIndex);
-  const align  = getAlign(currentIndex);
-  const slide  = localSlides[currentIndex] || localSlides[0];
-  const total  = localSlides.length;
-  const deckTitleRaw = localSlides[0]?.title || (config?.inputText ? config.inputText.trim() : 'Untitled deck');
-  const deckTitle = deckTitleRaw.split(/\s+/).slice(0, 6).join(' ') + (deckTitleRaw.split(/\s+/).length > 6 ? '…' : '');
-
-  // ─── helpers ─────────────────────────────────────────────
-  const showToast = (msg, type = 'info') => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3200);
-  };
-
-  const goTo = (i) => {
-    setEditingField(null);
-    const next = Math.max(0, Math.min(localSlides.length - 1, i));
-    setCurrentIndex(next);
-    setTransitionKey((k) => k + 1);
-  };
-
-
-  // keyboard
   React.useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === 'Escape') { setEditPanelOpen(false); setShowMenu(false); setShowThemePop(false); setAgentOpen(false); }
-      if (editPanelOpen || agentOpen || editingField) return;
-      if (e.key === 'ArrowRight') goTo(currentIndex + 1);
-      if (e.key === 'ArrowLeft')  goTo(currentIndex - 1);
-      if (e.key === 'g') setShowGrid((s) => !s);
-      if (e.key === 'f') handlePresent();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [currentIndex, localSlides.length, editPanelOpen, agentOpen, editingField]);
+    setLocalSlides(normalizeSlideList(safeInitial));
+    setCurrentIndex(0);
+    setSelectedObjectId(null);
+    setSelectedCell(null);
+    suppressSaveRef.current = true;
+    setTimeout(() => { suppressSaveRef.current = false; }, 500);
+  }, [JSON.stringify((safeInitial || []).map((s) => ({ title: s.title, bullets: s.bullets, objects: s.objects?.length })))] );
 
-  // scroll agent chat
   React.useEffect(() => {
     if (agentScrollRef.current) agentScrollRef.current.scrollTop = agentScrollRef.current.scrollHeight;
   }, [agentMessages, agentThinking]);
 
-  // ─── action handlers ─────────────────────────────────────
-  const handlePresent = () => {
-    setShowMenu(false);
-    const el = document.documentElement;
-    if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
-    showToast('Press Esc to exit presentation', 'info');
-  };
-  const handleExportPDF    = () => { setShowMenu(false); window.print(); };
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        setShowMenu(false);
+        setShowThemePop(false);
+        setAgentOpen(false);
+        setEditingObjectId(null);
+      }
+      if (agentOpen || editingObjectId || e.target?.tagName === 'INPUT' || e.target?.tagName === 'TEXTAREA' || e.target?.isContentEditable) return;
+      if (e.key === 'ArrowRight') goTo(currentIndex + 1);
+      if (e.key === 'ArrowLeft') goTo(currentIndex - 1);
+      if (e.key.toLowerCase() === 'g') setShowGrid((s) => !s);
+      if (e.key.toLowerCase() === 'f') handlePresent();
+      if ((e.key === 'Backspace' || e.key === 'Delete') && selectedObjectId) deleteSelected();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [currentIndex, localSlides.length, agentOpen, editingObjectId, selectedObjectId]);
 
-  const handleDownloadPPTX = async () => {
-    setShowMenu(false);
-    showToast('Generating .pptx…', 'loading');
-    try {
-      const pptx = new PptxGenJS();
-      pptx.layout = 'LAYOUT_WIDE';
-      pptx.author = 'AutoDeck AI';
-      pptx.subject = config?.templateStyle || 'Quidax internal deck';
-      const displayFont = pptFontName(brandConfig?.displayFont, qxType.display, 'display');
-      const bodyFont = pptFontName(brandConfig?.bodyFont, qxType.body, 'body');
-      pptx.theme = {
-        headFontFace: displayFont,
-        bodyFontFace: bodyFont,
-        lang: 'en-US',
-      };
-      const toPptHex = (value, fallback = 'FFFFFF') => {
-        const text = String(value || '');
-        const longHex = text.match(/#([0-9a-f]{6})/i)?.[1];
-        if (longHex) return longHex.toUpperCase();
-        const shortHex = text.match(/#([0-9a-f]{3})(?![0-9a-f])/i)?.[1];
-        if (shortHex) return shortHex.split('').map((c) => c + c).join('').toUpperCase();
-        return String(fallback || 'FFFFFF').replace('#', '').toUpperCase();
-      };
-      const gradientStops = (t) => {
-        const stops = String(t.gradient || '').match(/#[0-9a-f]{6}/gi) || [];
-        return stops.length ? stops.map((c) => toPptHex(c)) : [toPptHex(t.swatch, '1A0530')];
-      };
-      const pptPalette = (t) => {
-        const title = toPptHex(t.title, 'F6F1FB');
-        const accent = toPptHex(t.accent, 'D4FF3F');
-        const byName = {
-          Brand:   { bg: toPptHex(t.swatch, '1A0530'), panel: toPptHex(t.swatch, '2D0F4E'), band: toPptHex(t.accent, 'D4FF3F'), title, text: title === '1A0530' ? '4B345F' : 'E8DDF4', accent, rule: 'C8B6DA' },
-          Quidax:  { bg: '1A0530', panel: '2D0F4E', band: '451B6E', title: 'F6F1FB', text: 'E8DDF4', accent: 'D4FF3F', rule: 'B891DC' },
-          Midnight:{ bg: '0F0A24', panel: '1E1B4B', band: '312E81', title: 'F5F3FF', text: 'DDD6FE', accent: 'A5B4FC', rule: '818CF8' },
-          Soft:    { bg: 'FAF5FF', panel: 'F3E8FF', band: 'FCE7F3', title: '1A0530', text: '4B345F', accent: '7B2FBE', rule: 'D8B4FE' },
-          Ocean:   { bg: '0C2B4E', panel: '0369A1', band: '0891B2', title: 'F0F9FF', text: 'DFF6FF', accent: '7DD3FC', rule: '38BDF8' },
-          Forest:  { bg: '022C22', panel: '065F46', band: '047857', title: 'ECFDF5', text: 'D1FAE5', accent: '6EE7B7', rule: '34D399' },
-          Sunset:  { bg: '431407', panel: '7C2D12', band: 'C2410C', title: 'FFF7ED', text: 'FFEDD5', accent: 'FED7AA', rule: 'FDBA74' },
-          Slate:   { bg: '0F172A', panel: '1E293B', band: '334155', title: 'F8FAFC', text: 'E2E8F0', accent: 'CBD5E1', rule: '94A3B8' },
-          Rose:    { bg: '4C0519', panel: '881337', band: 'BE123C', title: 'FFF1F2', text: 'FFE4E6', accent: 'FECACA', rule: 'FDA4AF' },
-        }[t.name];
-        if (byName) return byName;
-        const stops = gradientStops(t);
-        return {
-          bg: stops[0] || toPptHex(t.swatch, '1A0530'),
-          panel: stops[1] || stops[0] || toPptHex(t.swatch, '2D0F4E'),
-          band: stops[2] || stops[1] || toPptHex(t.swatch, '451B6E'),
-          title,
-          text: title === '1A0530' ? '4B345F' : 'E8DDF4',
-          accent,
-          rule: toPptHex(t.rule, title === '1A0530' ? 'D8B4FE' : 'B891DC'),
-        };
-      };
-      const addThemedBackground = (pSlide, t) => {
-        const p = pptPalette(t);
-        pSlide.background = { color: p.bg };
-        pSlide.addShape(pptx.ShapeType.rect, {
-          x: 0, y: 0, w: 13.333, h: 7.5,
-          fill: { color: p.bg },
-          line: { color: p.bg, transparency: 100 },
-        });
-        pSlide.addShape(pptx.ShapeType.rect, {
-          x: 7.55, y: 0, w: 5.783, h: 7.5,
-          fill: { color: p.panel },
-          line: { color: p.panel, transparency: 100 },
-        });
-        pSlide.addShape(pptx.ShapeType.rect, {
-          x: 12.86, y: 0, w: 0.47, h: 7.5,
-          fill: { color: p.band },
-          line: { color: p.band, transparency: 100 },
-        });
-        pSlide.addShape(pptx.ShapeType.ellipse, {
-          x: 9.5, y: -1.35, w: 4.7, h: 4.7,
-          fill: { color: p.band, transparency: 80 },
-          line: { color: p.band, transparency: 100 },
-        });
-      };
-      const addChrome = (pSlide, t, i) => {
-        const p = pptPalette(t);
-        pSlide.addText('QUIDAX', {
-          x: 0.42, y: 0.26, w: 1.2, h: 0.2,
-          fontFace: bodyFont,
-          fontSize: 8,
-          color: p.accent,
-          charSpace: 2,
-          bold: true,
-        });
-        pSlide.addText(String(i + 1).padStart(2, '0'), {
-          x: 12.25, y: 0.24, w: 0.45, h: 0.2,
-          fontFace: bodyFont,
-          fontSize: 8,
-          color: p.title,
-          align: 'right',
-        });
-        pSlide.addShape(pptx.ShapeType.line, {
-          x: 0.42, y: 0.58, w: 12.45, h: 0,
-          line: { color: p.rule, transparency: 35, width: 0.5 },
-        });
-        pSlide.addText('Internal · Confidential', {
-          x: 0.42, y: 6.95, w: 2.5, h: 0.18,
-          fontFace: bodyFont,
-          fontSize: 7,
-          color: p.text,
-          transparency: 25,
-        });
-      };
-      const addBullets = (pSlide, s, t, box) => {
-        if (!s.bullets?.length) return;
-        const textHex = pptPalette(t).text;
-        pSlide.addText(s.bullets.map(b => ({ text: b, options: { bullet: { type: 'ul' } } })), {
-          ...box,
-          fontSize: box.fontSize || 17,
-          color: textHex,
-          fontFace: bodyFont,
-          breakLine: false,
-          fit: 'shrink',
-          valign: 'mid',
-          paraSpaceAfterPt: 8,
-          margin: 0.08,
-        });
-      };
-      const visualItemsFor = (s) => {
-        const fromComponents = Array.isArray(s.components) ? s.components.filter((item) => item && (item.label || item.value || item.items?.length)) : [];
-        if (fromComponents.length) return fromComponents.slice(0, 6);
-        return (s.bullets || []).map((bullet, idx) => ({
-          type: 'card',
-          label: bullet,
-          icon: window.AutoDeckSlideIntelligence?.iconFor?.(bullet) || 'circle-dot',
-          level: idx + 1,
-        })).slice(0, 6);
-      };
-      const componentLabel = (item, fallback = '') => String(item?.label || item?.title || item?.name || fallback || '').trim();
-      const componentDetail = (item) => String(item?.detail || item?.description || '').trim();
-      const componentMetric = (item) => String(item?.value || componentLabel(item).match(/(?:[$#])?\d+(?:\.\d+)?\s*(?:%|x|M|K|B|bn|m)?/i)?.[0] || '').trim();
-      const addVisualHeading = (pSlide, s, p, label = 'Visual story') => {
-        pSlide.addText(label.toUpperCase(), {
-          x: 0.65, y: 0.86, w: 4.2, h: 0.22,
-          fontFace: bodyFont,
-          fontSize: 7.5,
-          bold: true,
-          charSpace: 1.8,
-          color: p.accent,
-        });
-        pSlide.addText(s.title || '', {
-          x: 0.65, y: 1.18, w: 8.8, h: 0.82,
-          fontSize: 27,
-          bold: true,
-          color: p.title,
-          fontFace: displayFont,
-          fit: 'shrink',
-        });
-      };
-      const addIconBadge = (pSlide, text, x, y, p, active = false) => {
-        pSlide.addShape(pptx.ShapeType.ellipse, {
-          x, y, w: 0.45, h: 0.45,
-          fill: { color: active ? p.accent : p.panel, transparency: active ? 0 : 15 },
-          line: { color: active ? p.accent : p.rule, transparency: active ? 0 : 30, width: 0.6 },
-        });
-        pSlide.addText(String(text || '').slice(0, 2).toUpperCase(), {
-          x: x + 0.08, y: y + 0.13, w: 0.3, h: 0.12,
-          fontFace: bodyFont,
-          fontSize: 6,
-          bold: true,
-          color: active ? '1A0530' : p.accent,
-          align: 'center',
-          fit: 'shrink',
-        });
-      };
-      localSlides.forEach((s, i) => {
-        const t = getTheme(i);
-        const layoutKey = getLayout(i);
-        const pSlide = pptx.addSlide();
-        const p = pptPalette(t);
-        const titleHex = p.title;
-        const textHex = p.text;
-        const accentHex = p.accent;
-        const ruleHex = p.rule;
-        addThemedBackground(pSlide, t);
-        addChrome(pSlide, t, i);
-
-        if (layoutKey === 'process_flow') {
-          const items = visualItemsFor(s).slice(0, 5);
-          addVisualHeading(pSlide, s, p, 'Process flow');
-          const gap = 0.18;
-          const cardW = (11.7 - gap * Math.max(0, items.length - 1)) / Math.max(1, items.length);
-          items.forEach((item, idx) => {
-            const x = 0.65 + idx * (cardW + gap);
-            const active = idx === 0;
-            pSlide.addShape(pptx.ShapeType.rect, {
-              x, y: 2.55, w: cardW, h: 2.25,
-              fill: { color: active ? p.accent : p.panel, transparency: active ? 4 : 10 },
-              line: { color: active ? p.accent : p.rule, transparency: active ? 0 : 35, width: 0.7 },
-              radius: 0.08,
-            });
-            addIconBadge(pSlide, idx + 1, x + 0.18, 2.78, p, active);
-            pSlide.addText(componentLabel(item, `Step ${idx + 1}`), {
-              x: x + 0.2, y: 3.35, w: cardW - 0.35, h: 0.45,
-              fontFace: displayFont,
-              fontSize: 15,
-              bold: true,
-              color: active ? '1A0530' : titleHex,
-              fit: 'shrink',
-            });
-            if (componentDetail(item)) {
-              pSlide.addText(componentDetail(item), {
-                x: x + 0.2, y: 3.9, w: cardW - 0.35, h: 0.42,
-                fontFace: bodyFont,
-                fontSize: 9,
-                color: active ? '1A0530' : textHex,
-                fit: 'shrink',
-              });
-            }
-            if (idx < items.length - 1) {
-              pSlide.addShape(pptx.ShapeType.line, {
-                x: x + cardW + 0.03, y: 3.66, w: gap - 0.06, h: 0,
-                line: { color: p.accent, width: 1.2, endArrowType: 'triangle' },
-              });
-            }
-          });
-        } else if (layoutKey === 'comparison' || layoutKey === 'problem_solution') {
-          const items = visualItemsFor(s);
-          const columns = layoutKey === 'problem_solution'
-            ? [
-                items.find((item) => item.type === 'problem') || { label: s.bullets?.[0] || 'Problem', type: 'problem', icon: 'alert' },
-                items.find((item) => item.type === 'solution') || { label: s.bullets?.[1] || 'Solution', type: 'solution', icon: 'check' },
-              ]
-            : (items.filter((item) => item.type === 'comparison_column').length
-                ? items.filter((item) => item.type === 'comparison_column').slice(0, 2)
-                : [
-                    { label: 'Current', type: 'comparison_column', items: (s.bullets || []).slice(0, Math.ceil((s.bullets || []).length / 2)) },
-                    { label: 'Future', type: 'comparison_column', items: (s.bullets || []).slice(Math.ceil((s.bullets || []).length / 2)) },
-                  ]);
-          addVisualHeading(pSlide, s, p, layoutKey === 'problem_solution' ? 'Problem / Solution' : 'Comparison');
-          columns.forEach((item, idx) => {
-            const x = idx === 0 ? 0.75 : 7.0;
-            const active = idx === 1;
-            pSlide.addShape(pptx.ShapeType.rect, {
-              x, y: 2.35, w: 5.45, h: 3.35,
-              fill: { color: active ? p.accent : p.panel, transparency: active ? 7 : 8 },
-              line: { color: active ? p.accent : p.rule, transparency: active ? 0 : 35, width: 0.7 },
-            });
-            addIconBadge(pSlide, item.icon || item.type, x + 0.25, 2.65, p, active);
-            pSlide.addText(componentLabel(item), {
-              x: x + 0.85, y: 2.68, w: 4.25, h: 0.32,
-              fontFace: displayFont,
-              fontSize: 16,
-              bold: true,
-              color: active ? '1A0530' : titleHex,
-              fit: 'shrink',
-            });
-            const points = (Array.isArray(item.items) && item.items.length ? item.items : [componentDetail(item) || componentLabel(item)]).filter(Boolean).slice(0, 4);
-            pSlide.addText(points.map((point) => ({ text: point, options: { bullet: { type: 'ul' } } })), {
-              x: x + 0.35, y: 3.35, w: 4.85, h: 1.75,
-              fontFace: bodyFont,
-              fontSize: 10.5,
-              color: active ? '1A0530' : textHex,
-              fit: 'shrink',
-              paraSpaceAfterPt: 5,
-            });
-          });
-          pSlide.addText('>', {
-            x: 6.28, y: 3.55, w: 0.4, h: 0.3,
-            fontFace: displayFont,
-            fontSize: 22,
-            bold: true,
-            color: accentHex,
-            align: 'center',
-          });
-        } else if (layoutKey === 'timeline' || layoutKey === 'roadmap') {
-          const items = visualItemsFor(s).slice(0, 5);
-          addVisualHeading(pSlide, s, p, layoutKey === 'roadmap' ? 'Roadmap' : 'Timeline');
-          pSlide.addShape(pptx.ShapeType.line, {
-            x: 0.95, y: 3.35, w: 11.25, h: 0,
-            line: { color: ruleHex, transparency: 35, width: 1 },
-          });
-          const stepW = 11.25 / Math.max(1, items.length - 1 || 1);
-          items.forEach((item, idx) => {
-            const x = items.length === 1 ? 6.0 : 0.95 + idx * stepW;
-            addIconBadge(pSlide, idx + 1, x - 0.2, 3.12, p, idx === 0);
-            pSlide.addText(componentLabel(item, `${layoutKey === 'roadmap' ? 'Phase' : 'Moment'} ${idx + 1}`), {
-              x: Math.max(0.65, x - 0.75), y: idx % 2 ? 3.78 : 2.45, w: 1.55, h: 0.26,
-              fontFace: bodyFont,
-              fontSize: 8,
-              bold: true,
-              color: accentHex,
-              align: 'center',
-              fit: 'shrink',
-            });
-            pSlide.addText(componentDetail(item) || s.bullets?.[idx] || '', {
-              x: Math.max(0.45, x - 0.95), y: idx % 2 ? 4.12 : 2.78, w: 1.95, h: 0.72,
-              fontFace: bodyFont,
-              fontSize: 8,
-              color: textHex,
-              align: 'center',
-              fit: 'shrink',
-            });
-          });
-        } else if (layoutKey === 'statistics') {
-          const items = visualItemsFor(s).slice(0, 4);
-          addVisualHeading(pSlide, s, p, 'By the numbers');
-          items.forEach((item, idx) => {
-            const x = 0.75 + idx * 3.05;
-            const active = idx === 0;
-            const value = componentMetric(item) || String(idx + 1).padStart(2, '0');
-            pSlide.addShape(pptx.ShapeType.rect, {
-              x, y: 2.45, w: 2.65, h: 2.6,
-              fill: { color: active ? p.accent : p.panel, transparency: active ? 5 : 8 },
-              line: { color: active ? p.accent : p.rule, transparency: active ? 0 : 35, width: 0.7 },
-            });
-            pSlide.addText(value, {
-              x: x + 0.18, y: 2.88, w: 2.25, h: 0.65,
-              fontFace: displayFont,
-              fontSize: 32,
-              bold: true,
-              color: active ? '1A0530' : accentHex,
-              fit: 'shrink',
-            });
-            pSlide.addText(componentLabel(item).replace(value, '').trim() || s.bullets?.[idx] || 'Metric', {
-              x: x + 0.22, y: 3.78, w: 2.18, h: 0.72,
-              fontFace: bodyFont,
-              fontSize: 9.5,
-              color: active ? '1A0530' : textHex,
-              fit: 'shrink',
-            });
-          });
-        } else if (layoutKey === 'hierarchy') {
-          const items = visualItemsFor(s);
-          addVisualHeading(pSlide, s, p, 'Hierarchy');
-          const top = items[0] || { label: s.title };
-          pSlide.addShape(pptx.ShapeType.rect, {
-            x: 4.35, y: 2.25, w: 4.65, h: 0.85,
-            fill: { color: p.accent, transparency: 5 },
-            line: { color: p.accent, width: 0.7 },
-          });
-          pSlide.addText(componentLabel(top), {
-            x: 4.55, y: 2.48, w: 4.25, h: 0.25,
-            fontFace: displayFont,
-            fontSize: 15,
-            bold: true,
-            color: '1A0530',
-            fit: 'shrink',
-            align: 'center',
-          });
-          pSlide.addShape(pptx.ShapeType.line, { x: 6.68, y: 3.1, w: 0, h: 0.55, line: { color: ruleHex, width: 0.8 } });
-          const children = (items.slice(1, 5).length ? items.slice(1, 5) : visualItemsFor({ bullets: s.bullets || [] }).slice(0, 3));
-          children.forEach((item, idx) => {
-            const w = 2.65;
-            const x = 0.8 + idx * 3.05;
-            pSlide.addShape(pptx.ShapeType.rect, {
-              x, y: 3.85, w, h: 1.4,
-              fill: { color: p.panel, transparency: 9 },
-              line: { color: p.rule, transparency: 35, width: 0.7 },
-            });
-            pSlide.addText(componentLabel(item), {
-              x: x + 0.16, y: 4.2, w: w - 0.32, h: 0.35,
-              fontFace: bodyFont,
-              fontSize: 10.5,
-              bold: true,
-              color: titleHex,
-              fit: 'shrink',
-              align: 'center',
-            });
-          });
-        } else if (layoutKey === 'feature_breakdown' || layoutKey === 'summary') {
-          const items = visualItemsFor(s).slice(0, 6);
-          addVisualHeading(pSlide, s, p, layoutKey === 'summary' ? 'Key takeaways' : 'Feature breakdown');
-          items.forEach((item, idx) => {
-            const col = idx % 3;
-            const row = Math.floor(idx / 3);
-            const x = 0.75 + col * 4.05;
-            const y = 2.35 + row * 1.68;
-            const active = idx === 0;
-            pSlide.addShape(pptx.ShapeType.rect, {
-              x, y, w: 3.55, h: 1.35,
-              fill: { color: active ? p.accent : p.panel, transparency: active ? 7 : 8 },
-              line: { color: active ? p.accent : p.rule, transparency: active ? 0 : 35, width: 0.7 },
-            });
-            addIconBadge(pSlide, item.icon || idx + 1, x + 0.18, y + 0.18, p, active);
-            pSlide.addText(componentLabel(item), {
-              x: x + 0.75, y: y + 0.23, w: 2.55, h: 0.42,
-              fontFace: bodyFont,
-              fontSize: 10.5,
-              bold: true,
-              color: active ? '1A0530' : titleHex,
-              fit: 'shrink',
-            });
-            if (componentDetail(item)) {
-              pSlide.addText(componentDetail(item), {
-                x: x + 0.75, y: y + 0.73, w: 2.55, h: 0.28,
-                fontFace: bodyFont,
-                fontSize: 7.8,
-                color: active ? '1A0530' : textHex,
-                fit: 'shrink',
-              });
-            }
-          });
-        } else if (layoutKey === 'image_focus') {
-          const img = slideImages[i];
-          if (img) {
-            pSlide.addImage({ path: img, x: 0, y: 0, w: 13.333, h: 7.5 });
-            pSlide.addShape(pptx.ShapeType.rect, {
-              x: 0, y: 0, w: 7.2, h: 7.5,
-              fill: { color: '000000', transparency: 25 },
-              line: { color: '000000', transparency: 100 },
-            });
-          } else {
-            pSlide.addShape(pptx.ShapeType.rect, {
-              x: 6.75, y: 0.9, w: 5.6, h: 5.35,
-              fill: { color: p.accent, transparency: 70 },
-              line: { color: p.rule, transparency: 35, width: 0.7 },
-            });
-            pSlide.addText(s.imagePrompt || 'Image focus', {
-              x: 7.05, y: 3.18, w: 5.0, h: 0.35,
-              fontFace: bodyFont,
-              fontSize: 12,
-              color: textHex,
-              align: 'center',
-              fit: 'shrink',
-            });
-          }
-          pSlide.addText((s.kicker || 'Image focus').toUpperCase(), {
-            x: 0.65, y: 1.5, w: 3.8, h: 0.22,
-            fontFace: bodyFont,
-            fontSize: 7.5,
-            bold: true,
-            charSpace: 1.8,
-            color: accentHex,
-          });
-          pSlide.addText(s.title || '', {
-            x: 0.65, y: 1.9, w: 5.6, h: 1.35,
-            fontSize: 34,
-            bold: true,
-            color: titleHex,
-            fontFace: displayFont,
-            fit: 'shrink',
-          });
-          addBullets(pSlide, s, t, { x: 0.78, y: 3.55, w: 5.1, h: 1.6, fontSize: 13 });
-        } else if (layoutKey === 'bigTitle' || layoutKey === 'minimal' || layoutKey === 'centered') {
-          pSlide.addText(s.title || '', {
-            x: 0.65, y: layoutKey === 'minimal' ? 2.45 : 2.1, w: 11.8, h: 1.35,
-            fontSize: layoutKey === 'minimal' ? 44 : 48,
-            bold: true,
-            color: titleHex,
-            fontFace: displayFont,
-            fit: 'shrink',
-            align: layoutKey === 'centered' ? 'center' : 'left',
-          });
-          if (s.bullets?.[0] && layoutKey !== 'minimal') {
-            pSlide.addText(s.bullets[0], {
-              x: 0.7, y: 3.65, w: 7.8, h: 0.75,
-              fontSize: 17,
-              color: textHex,
-              fontFace: bodyFont,
-              fit: 'shrink',
-              align: layoutKey === 'centered' ? 'center' : 'left',
-            });
-          }
-        } else if (layoutKey === 'split') {
-          pSlide.addText(s.title || '', {
-            x: 0.65, y: 1.75, w: 5.0, h: 1.4,
-            fontSize: 34,
-            bold: true,
-            color: titleHex,
-            fontFace: displayFont,
-            fit: 'shrink',
-          });
-          pSlide.addShape(pptx.ShapeType.line, {
-            x: 6.2, y: 1.25, w: 0, h: 4.75,
-            line: { color: ruleHex, transparency: 65, width: 0.8 },
-          });
-          addBullets(pSlide, s, t, { x: 6.65, y: 1.7, w: 5.7, h: 3.9, fontSize: 16 });
-        } else if (layoutKey === 'stat') {
-          const m = (s.bullets?.[0] || '').match(/(\d+(?:\.\d+)?)\s*(%|x|M|K|B|bn|m)?/i);
-          pSlide.addText(m ? `${m[1]}${m[2] || ''}` : s.title || '', {
-            x: 0.65, y: 1.35, w: 5.7, h: 2.2,
-            fontSize: m ? 82 : 34,
-            bold: true,
-            color: accentHex,
-            fontFace: displayFont,
-            fit: 'shrink',
-          });
-          pSlide.addText(s.title || '', {
-            x: 6.7, y: 1.65, w: 5.4, h: 0.8,
-            fontSize: 26,
-            bold: true,
-            color: titleHex,
-            fontFace: displayFont,
-            fit: 'shrink',
-          });
-          addBullets(pSlide, s, t, { x: 6.7, y: 2.75, w: 5.4, h: 2.5, fontSize: 15 });
-        } else if (layoutKey === 'quote') {
-          pSlide.addText(`"${s.bullets?.[0] || s.title || ''}"`, {
-            x: 1.25, y: 2.0, w: 10.8, h: 1.6,
-            fontSize: 30,
-            italic: true,
-            color: titleHex,
-            fontFace: displayFont,
-            fit: 'shrink',
-            align: 'center',
-          });
-          pSlide.addText(s.title || '', {
-            x: 3.4, y: 4.0, w: 6.5, h: 0.35,
-            fontSize: 11,
-            color: accentHex,
-            fontFace: bodyFont,
-            align: 'center',
-            charSpace: 1.5,
-          });
-        } else if (layoutKey === 'image') {
-          const img = slideImages[i];
-          if (img) {
-            pSlide.addImage({ path: img, x: 0.65, y: 1.1, w: 6.35, h: 4.85 });
-          } else {
-            pSlide.addShape(pptx.ShapeType.rect, {
-              x: 0.65, y: 1.1, w: 6.35, h: 4.85,
-              fill: { color: accentHex, transparency: 72 },
-              line: { color: ruleHex, transparency: 45, width: 0.6 },
-            });
-            pSlide.addText(s.imagePrompt || 'Image area', {
-              x: 1.0, y: 3.1, w: 5.65, h: 0.45,
-              fontFace: bodyFont,
-              fontSize: 13,
-              color: textHex,
-              align: 'center',
-              fit: 'shrink',
-            });
-          }
-          pSlide.addText(s.title || '', {
-            x: 7.35, y: 1.65, w: 5.1, h: 0.95,
-            fontSize: 28,
-            bold: true,
-            color: titleHex,
-            fontFace: displayFont,
-            fit: 'shrink',
-          });
-          addBullets(pSlide, s, t, { x: 7.35, y: 2.85, w: 5.05, h: 2.65, fontSize: 14 });
-        } else {
-          pSlide.addText(s.title || '', {
-            x: 0.65, y: 1.15, w: 11.6, h: 1.0,
-            fontSize: 34,
-            bold: true,
-            color: titleHex,
-            fontFace: displayFont,
-            fit: 'shrink',
-          });
-          addBullets(pSlide, s, t, { x: 0.8, y: 2.55, w: 10.9, h: 3.2, fontSize: 17 });
-        }
-        if (s.speakerNotes && pSlide.addNotes) pSlide.addNotes(s.speakerNotes);
-      });
-      await pptx.writeFile({ fileName: `${deckTitle || 'AutoDeck'}.pptx` });
-      showToast('✓ PPTX downloaded', 'success');
-    } catch (err) {
-      showToast('Export failed — try again', 'info');
+  React.useEffect(() => {
+    if (selectedObjectId) {
+      setEditPanelOpen(true);
+      setEditTab('style');
+    } else {
+      setEditTab('layout');
     }
+  }, [selectedObjectId]);
+
+  React.useEffect(() => {
+    if (suppressSaveRef.current || !activeDeckId || !window.firebase?.app) return;
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        const saveFn = firebase.app().functions('us-central1').httpsCallable('saveDeckEdits', { timeout: 60000 });
+        await saveFn({ deckId: activeDeckId, slides: localSlides, editorVersion: window.AutoDeckSlideObjects?.EDITOR_VERSION || 2 });
+        showToast('Saved', 'success', 1200);
+      } catch (_) {
+        showToast('Autosave unavailable', 'info', 1600);
+      }
+    }, 1200);
+    return () => clearTimeout(saveTimerRef.current);
+  }, [JSON.stringify(localSlides), activeDeckId]);
+
+  const total = localSlides.length;
+  const slide = localSlides[currentIndex] || localSlides[0] || {};
+  const selectedObject = (slide.objects || []).find((obj) => obj.id === selectedObjectId) || null;
+  const theme = THEMES[slideThemeOverrides[currentIndex] || globalTheme || slide.theme] || THEMES.purple;
+  const layout = slideLayoutOverrides[currentIndex] || slide.renderLayout || slide.layout || 'standard';
+  const deckTitleRaw = localSlides[0]?.title || config?.inputText || 'Untitled deck';
+  const deckTitle = deckTitleRaw.split(/\s+/).slice(0, 6).join(' ') + (deckTitleRaw.split(/\s+/).length > 6 ? '...' : '');
+
+  const showToast = (msg, type = 'info', ms = 2600) => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), ms);
   };
 
-  const handleDownloadPNG = async () => {
-    setShowMenu(false);
-    showToast('Saving slide as PNG…', 'loading');
-    try {
-      const el = document.getElementById('main-slide');
-      if (!el) { showToast('Slide not found', 'info'); return; }
-      const canvas = await html2canvas(el, { useCORS: true, scale: 2, backgroundColor: null });
-      const a = document.createElement('a');
-      a.href = canvas.toDataURL('image/png');
-      a.download = `slide-${currentIndex + 1}.png`;
-      a.click();
-      showToast('✓ Slide saved as PNG', 'success');
-    } catch (err) {
-      showToast('Export failed — try again', 'info');
-    }
+  const updateSlideAt = (idx, updater) => {
+    setLocalSlides((prev) => prev.map((s, i) => {
+      if (i !== idx) return s;
+      const next = typeof updater === 'function' ? updater(s) : updater;
+      return window.AutoDeckSlideObjects?.ensureSlideObjects
+        ? window.AutoDeckSlideObjects.ensureSlideObjects(next, i, prev.length)
+        : next;
+    }));
   };
-  const handleShare        = () => { setShowMenu(false); const link = `autodeck.quidax.com/d/${Math.random().toString(36).slice(2, 8)}`; navigator.clipboard?.writeText(link).catch(() => {}); showToast('Link copied · ' + link, 'success'); };
-  const handleDuplicate    = () => { setShowMenu(false); showToast('Deck duplicated to your library', 'success'); };
+
+  const updateCurrentSlide = (updater) => updateSlideAt(currentIndex, updater);
+
+  const updateObject = (objectId, patchOrUpdater) => {
+    updateCurrentSlide((s) => ({
+      ...s,
+      objects: (s.objects || []).map((obj) => {
+        if (obj.id !== objectId) return obj;
+        const patch = typeof patchOrUpdater === 'function' ? patchOrUpdater(obj) : patchOrUpdater;
+        return { ...obj, ...patch, style: { ...(obj.style || {}), ...(patch.style || {}) } };
+      }),
+    }));
+  };
+
+  const stagePoint = (event) => {
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * 100,
+      y: ((event.clientY - rect.top) / rect.height) * 56.25,
+    };
+  };
+
+  const snapValue = (value, step = showGrid ? 1 : 0.25) => Math.round(value / step) * step;
+  const clampBox = (box) => ({
+    x: Math.max(0, Math.min(99, snapValue(box.x))),
+    y: Math.max(0, Math.min(55.25, snapValue(box.y))),
+    w: Math.max(2, Math.min(100 - Math.max(0, box.x), snapValue(box.w))),
+    h: Math.max(2, Math.min(56.25 - Math.max(0, box.y), snapValue(box.h))),
+  });
+
+  const beginMove = (event, obj) => {
+    if (obj.locked || editingObjectId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedObjectId(obj.id);
+    setSelectedCell(null);
+    const start = stagePoint(event);
+    const origin = { x: obj.x, y: obj.y, w: obj.w, h: obj.h };
+    const onMove = (moveEvent) => {
+      const point = stagePoint(moveEvent);
+      updateObject(obj.id, clampBox({
+        ...origin,
+        x: origin.x + point.x - start.x,
+        y: origin.y + point.y - start.y,
+      }));
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  const beginResize = (event, obj) => {
+    if (obj.locked || editingObjectId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedObjectId(obj.id);
+    const start = stagePoint(event);
+    const origin = { x: obj.x, y: obj.y, w: obj.w, h: obj.h };
+    const onMove = (moveEvent) => {
+      const point = stagePoint(moveEvent);
+      updateObject(obj.id, clampBox({
+        ...origin,
+        w: origin.w + point.x - start.x,
+        h: origin.h + point.y - start.y,
+      }));
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  const syncLegacyFields = (s) => {
+    const derived = window.AutoDeckSlideObjects?.deriveLegacyFields?.(s) || s;
+    return {
+      ...s,
+      title: derived.title || s.title,
+      bullets: derived.bullets || s.bullets || [],
+    };
+  };
+
+  const addObject = (obj) => {
+    const id = obj.id || `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    updateCurrentSlide((s) => ({ ...s, objects: [...(s.objects || []), { ...obj, id }] }));
+    setSelectedObjectId(id);
+    setSelectedCell(null);
+    setEditPanelOpen(true);
+    setEditTab(obj.type === 'image' ? 'image' : obj.type === 'table' ? 'table' : 'style');
+    return id;
+  };
+
+  const addTextbox = () => {
+    const id = addObject({
+      type: 'text',
+      role: 'textbox',
+      content: 'New textbox',
+      x: 18,
+      y: 18,
+      w: 34,
+      h: 8,
+      z: nextZ(),
+      locked: false,
+      style: { fontFamily: brandConfig?.bodyFont || qxType.body, fontSize: 16, bold: false, italic: false, align: 'left', color: theme.title, lineHeight: 1.2 },
+    });
+    setEditingObjectId(id);
+    showToast('Textbox added', 'success');
+  };
+
+  const addTable = () => {
+    addObject({
+      type: 'table',
+      role: 'table',
+      x: 12,
+      y: 18,
+      w: 76,
+      h: 24,
+      z: nextZ(),
+      locked: false,
+      rows: [
+        [{ text: 'Column 1', style: { bold: true, align: 'left', color: '#232126', fill: QX.lime } }, { text: 'Column 2', style: { bold: true, align: 'left', color: '#232126', fill: QX.lime } }, { text: 'Column 3', style: { bold: true, align: 'left', color: '#232126', fill: QX.lime } }],
+        [{ text: 'Row 1', style: {} }, { text: 'Add detail', style: {} }, { text: 'Add detail', style: {} }],
+        [{ text: 'Row 2', style: {} }, { text: 'Add detail', style: {} }, { text: 'Add detail', style: {} }],
+      ],
+      style: { fontFamily: brandConfig?.bodyFont || qxType.body, fontSize: 10, borderColor: 'rgba(246,241,251,0.20)' },
+    });
+    showToast('Table added', 'success');
+  };
+
+  const addImagePlaceholder = () => {
+    const existingFrame = (slide.objects || []).find((obj) => obj.type === 'image' && !obj.src && !obj.locked);
+    if (existingFrame) {
+      openImageTools(existingFrame);
+      showToast('Image frame selected', 'success');
+      return existingFrame.id;
+    }
+    const prompt = slide.imagePrompt || slide.title || '';
+    const id = addObject({
+      type: 'image',
+      role: 'image',
+      x: 62,
+      y: 17,
+      w: 29,
+      h: 24,
+      z: nextZ(),
+      locked: false,
+      src: '',
+      prompt,
+      alt: '',
+      credit: '',
+      creditUrl: '',
+      fit: 'cover',
+      style: { fill: '#320067', stroke: theme.rule, radius: 4 },
+    });
+    setImgQuery(prompt);
+    setSelectedObjectId(id);
+    setEditPanelOpen(true);
+    setEditTab('image');
+    showToast('Image placeholder added', 'success');
+  };
+
+  const nextZ = () => Math.max(0, ...(slide.objects || []).map((obj) => Number(obj.z) || 0)) + 1;
+
+  const deleteSelected = () => {
+    if (!selectedObjectId) return;
+    updateCurrentSlide((s) => syncLegacyFields({ ...s, objects: (s.objects || []).filter((obj) => obj.id !== selectedObjectId) }));
+    setSelectedObjectId(null);
+    setSelectedCell(null);
+  };
+
+  const duplicateSelected = () => {
+    if (!selectedObject) return;
+    const id = `dup-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    addObject({ ...selectedObject, id, x: Math.min(92, selectedObject.x + 2), y: Math.min(52, selectedObject.y + 2), z: nextZ() });
+  };
+
+  const bringForward = () => selectedObject && updateObject(selectedObject.id, { z: (selectedObject.z || 0) + 1 });
+  const sendBackward = () => selectedObject && updateObject(selectedObject.id, { z: (selectedObject.z || 0) - 1 });
+
+  const updateSelectedStyle = (patch) => {
+    if (!selectedObject) return;
+    if (selectedObject.type === 'table' && selectedCell) {
+      updateObject(selectedObject.id, (obj) => ({
+        rows: obj.rows.map((row, ri) => row.map((cell, ci) => (
+          ri === selectedCell.row && ci === selectedCell.col
+            ? { ...cell, style: { ...(cell.style || {}), ...patch } }
+            : cell
+        ))),
+      }));
+      return;
+    }
+    updateObject(selectedObject.id, { style: patch });
+  };
+
+  const updateSelectedFontSize = (value) => {
+    const fontSize = Math.max(6, Math.min(96, parseInt(value, 10) || 16));
+    updateSelectedStyle({ fontSize });
+  };
+
+  const applyLayout = (key) => {
+    const base = { ...slide, renderLayout: key, layout: key, visualLayout: key, objects: undefined };
+    const compiled = window.AutoDeckSlideObjects?.ensureSlideObjects
+      ? window.AutoDeckSlideObjects.ensureSlideObjects(base, currentIndex, total)
+      : base;
+    updateSlideAt(currentIndex, compiled);
+    setSlideLayoutOverrides((prev) => ({ ...prev, [currentIndex]: key }));
+    setSelectedObjectId(null);
+    setSelectedCell(null);
+  };
+
+  const goTo = (i) => {
+    const next = Math.max(0, Math.min(localSlides.length - 1, i));
+    setCurrentIndex(next);
+    setSelectedObjectId(null);
+    setSelectedCell(null);
+    setEditingObjectId(null);
+  };
 
   const normalizeAgentLayout = (value) => {
     const raw = String(value || '').trim();
     if (!raw) return null;
     if (layoutKeys.includes(raw)) return raw;
     const lower = raw.toLowerCase().replace(/[_/-]+/g, ' ').replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
-    const direct = LAYOUTS.find((l) => {
-      const key = l.key.toLowerCase().replace(/[_/-]+/g, ' ').replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
-      const name = l.name.toLowerCase().replace(/[_/-]+/g, ' ').replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
-      return key === lower || name === lower;
-    });
-    if (direct) return direct.key;
-    return layoutAliases.find((entry) => entry.patterns.some((pattern) => pattern.test(lower)))?.key || null;
+    const direct = LAYOUTS.find((l) => l.key.toLowerCase().replace(/[_/-]+/g, ' ') === lower || l.name.toLowerCase().replace(/[_/-]+/g, ' ') === lower);
+    return direct?.key || layoutAliases.find((entry) => entry.patterns.some((pattern) => pattern.test(lower)))?.key || null;
   };
 
   const layoutFromAgentText = (value) => {
     const lower = String(value || '').toLowerCase().replace(/[_/-]+/g, ' ').replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
-    if (!/(layout|slide|make|change|convert|switch|turn|use|as|into)/.test(lower)) return null;
+    if (!/(layout|slide|make|change|convert|switch|turn|use|as|into|table|matrix)/.test(lower)) return null;
     return layoutAliases.find((entry) => entry.patterns.some((pattern) => pattern.test(lower)))?.key || null;
   };
 
@@ -867,245 +476,106 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     if (numbered) return Math.max(0, Math.min(localSlides.length - 1, parseInt(numbered[1], 10) - 1));
     const word = Object.entries(ordinalSlideWords).find(([label]) => new RegExp(`\\b${label}\\s+(?:slide|page)\\b`).test(text));
     if (word) return Math.max(0, Math.min(localSlides.length - 1, word[1]));
-    if (/\bnext\s+(?:slide|page)\b/.test(text)) return Math.max(0, Math.min(localSlides.length - 1, fallback + 1));
-    if (/\b(previous|prev|last)\s+(?:slide|page)\b/.test(text)) return Math.max(0, Math.min(localSlides.length - 1, fallback - 1));
     return Math.max(0, Math.min(localSlides.length - 1, fallback));
   };
 
-  const compactAgentText = (value, maxWords = 24) => String(value || '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, maxWords)
-    .join(' ');
-
-  const uniqueAgentTexts = (values) => {
-    const seen = new Set();
-    return values
-      .map((value) => compactAgentText(value, 28))
-      .filter((value) => value.length > 3)
-      .filter((value) => {
-        const key = value.toLowerCase();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
+  const quotedAgentValue = (value) => String(value || '').match(/["']([^"']{3,})["']/)?.[1]?.trim() || '';
+  const titleFromAgentText = (value, currentTitle = '') => {
+    const text = String(value || '').trim();
+    if (!/(title|heading|headline|rename)/i.test(text)) return '';
+    const quoted = quotedAgentValue(text);
+    if (quoted) return quoted;
+    if (/(shorter|shorten|concise|tighter)/i.test(text) && currentTitle) return currentTitle.split(/\s+/).slice(0, 6).join(' ');
+    return text.match(/(?:rename|change|set|make|update).{0,24}(?:title|heading|headline)?\s*(?:to|as|:)\s*(.+)$/i)?.[1]?.trim() || '';
   };
-
-  const componentTextsForAgent = (components = []) => {
-    if (!Array.isArray(components)) return [];
-    return components.flatMap((component) => [
-      component?.label,
-      component?.title,
-      component?.value,
-      component?.detail,
-      ...(Array.isArray(component?.items) ? component.items : []),
-    ]).filter(Boolean);
+  const bulletFromAgentText = (value) => {
+    const text = String(value || '').trim();
+    const quoted = quotedAgentValue(text);
+    if (quoted && /bullet|point/i.test(text)) return quoted;
+    return text.match(/add\s+(?:a\s+)?(?:bullet|point)\s*(?:about|on|for|that|:)?\s*(.+)$/i)?.[1]?.replace(/\b(?:to|on|for)?\s*(?:slide|page)\s*\d{1,2}\b/ig, '').trim() || '';
   };
-
-  const slideFactsForAgent = (targetSlide = {}) => uniqueAgentTexts([
-    ...(Array.isArray(targetSlide.bullets) ? targetSlide.bullets : []),
-    targetSlide.content,
-    targetSlide.summary,
-    ...componentTextsForAgent(targetSlide.components),
-  ]);
-
-  const sourceFactsForAgent = () => uniqueAgentTexts([
-    config?.inputText,
-    config?.parsedFileText,
-    config?.sourceText,
-    config?.uploadedFile?.name,
-  ]).slice(0, 3);
-
-  const expansionBulletsForAgent = (targetSlide = {}) => {
-    const topic = compactAgentText(targetSlide.title || 'this slide', 10);
-    const facts = slideFactsForAgent(targetSlide);
-    const sourceFacts = sourceFactsForAgent();
-    if (!facts.length && !sourceFacts.length && !topic) return [];
-    const first = facts[0] || sourceFacts[0] || topic;
-    const second = facts[1] || sourceFacts[1] || `Connect ${topic} to one concrete source detail`;
-    const third = facts[2] || sourceFacts[2] || `Add an example, metric, or quote that supports ${topic}`;
-    return uniqueAgentTexts([
-      `What this means: ${first}`,
-      `Why it matters: ${second}`,
-      `What to show next: ${third}`,
-      `Decision point: confirm the source detail that should anchor ${topic}`,
-    ]).slice(0, 4);
-  };
-
-  const agentComponentsForLayout = (targetSlide = {}, layoutKey) => {
-    const bullets = uniqueAgentTexts(Array.isArray(targetSlide.bullets) ? targetSlide.bullets : []).slice(0, 6);
-    if (!bullets.length) return undefined;
-    if (layoutKey === 'problem_solution') {
-      const splitAt = Math.max(1, Math.ceil(bullets.length / 2));
-      return [
-        { type: 'problem', label: 'Problem', icon: 'alert-triangle', items: bullets.slice(0, splitAt) },
-        { type: 'solution', label: 'Solution', icon: 'check-circle', items: bullets.slice(splitAt) },
-      ];
-    }
-    if (layoutKey === 'comparison') {
-      const splitAt = Math.max(1, Math.ceil(bullets.length / 2));
-      return [
-        { type: 'comparison_column', label: 'Current', icon: 'alert-triangle', items: bullets.slice(0, splitAt) },
-        { type: 'comparison_column', label: 'Future', icon: 'check-circle', items: bullets.slice(splitAt) },
-      ];
-    }
-    if (['process_flow', 'timeline', 'roadmap', 'feature_breakdown', 'summary', 'hierarchy', 'statistics'].includes(layoutKey)) {
-      return bullets.map((bullet, i) => ({
-        type: layoutKey === 'process_flow' ? `step ${i + 1}` : 'item',
-        label: bullet,
-        detail: i === 0 ? compactAgentText(targetSlide.title, 12) : undefined,
-        icon: i === 0 ? 'check-circle' : 'circle-dot',
-        level: i + 1,
-      }));
-    }
-    return undefined;
-  };
-
-  const compactSlideForAgent = (targetSlide = {}, idx) => ({
-    index: idx,
-    title: compactAgentText(targetSlide.title, 16),
-    layout: getLayout(idx),
-    bullets: (Array.isArray(targetSlide.bullets) ? targetSlide.bullets : []).map((b) => compactAgentText(b, 26)).filter(Boolean).slice(0, 6),
-    content: compactAgentText(targetSlide.content || targetSlide.summary, 36),
-    components: componentTextsForAgent(targetSlide.components).map((value) => compactAgentText(value, 18)).filter(Boolean).slice(0, 8),
-  });
 
   const applyAgentPatch = (idx, patch = {}) => {
     const targetIdx = Math.max(0, Math.min(localSlides.length - 1, idx));
     const normalizedLayout = normalizeAgentLayout(patch.updatedLayout || patch.layout);
-    const targetLayout = normalizedLayout || getLayout(targetIdx);
-    if (normalizedLayout) {
-      setSlideLayoutOverrides((p) => ({ ...p, [targetIdx]: normalizedLayout }));
-    }
-    setLocalSlides((prev) => prev.map((slide, i) => {
-      if (i !== targetIdx) return slide;
-      const bulletsChanged = Array.isArray(patch.updatedBullets)
-        || (Array.isArray(patch.addBullets) && patch.addBullets.length)
-        || patch.removeLastBullet;
-      const next = {
-        ...slide,
-        bullets: Array.isArray(slide.bullets) ? [...slide.bullets] : [],
-      };
-      if (typeof patch.updatedTitle === 'string' && patch.updatedTitle.trim()) {
-        next.title = patch.updatedTitle.trim();
-      }
-      if (Array.isArray(patch.updatedBullets)) {
-        next.bullets = patch.updatedBullets.map((b) => String(b || '').trim()).filter(Boolean).slice(0, 6);
-      }
-      if (Array.isArray(patch.addBullets) && patch.addBullets.length) {
-        next.bullets = [...next.bullets, ...patch.addBullets.map((b) => String(b || '').trim()).filter(Boolean)].slice(0, 6);
-      }
-      if (patch.removeLastBullet && next.bullets.length > 1) {
-        next.bullets = next.bullets.slice(0, -1);
+    updateSlideAt(targetIdx, (s) => {
+      let next = { ...s, bullets: Array.isArray(s.bullets) ? [...s.bullets] : [] };
+      const bulletChanged = Array.isArray(patch.updatedBullets) || Array.isArray(patch.addBullets) || patch.removeLastBullet;
+      if (patch.updatedTitle) next.title = String(patch.updatedTitle).trim();
+      if (Array.isArray(patch.updatedBullets)) next.bullets = patch.updatedBullets.map(String).filter(Boolean).slice(0, 6);
+      if (Array.isArray(patch.addBullets)) next.bullets = [...next.bullets, ...patch.addBullets.map(String).filter(Boolean)].slice(0, 6);
+      if (patch.removeLastBullet && next.bullets.length > 1) next.bullets = next.bullets.slice(0, -1);
+      if (bulletChanged) {
+        next = {
+          ...next,
+          components: [],
+        };
+        delete next.tableRows;
       }
       if (normalizedLayout) {
         next.layout = normalizedLayout;
         next.visualLayout = normalizedLayout;
         next.renderLayout = normalizedLayout;
-      }
-      if (bulletsChanged || normalizedLayout) {
-        const nextComponents = agentComponentsForLayout(next, targetLayout);
-        if (nextComponents) next.components = nextComponents;
-        else delete next.components;
+        next.objects = undefined;
+      } else if (bulletChanged) {
+        next.objects = undefined;
+      } else {
+        const titleObj = (next.objects || []).find((obj) => obj.type === 'text' && obj.role === 'title');
+        const bodyObj = (next.objects || []).find((obj) => obj.type === 'text' && obj.role === 'body');
+        next.objects = (next.objects || []).map((obj) => {
+          if (obj.id === titleObj?.id && patch.updatedTitle) return { ...obj, content: next.title };
+          if (obj.id === bodyObj?.id && (patch.updatedBullets || patch.addBullets || patch.removeLastBullet)) return { ...obj, content: next.bullets.join('\n') };
+          return obj;
+        });
       }
       return next;
-    }));
+    });
+    if (normalizedLayout) setSlideLayoutOverrides((prev) => ({ ...prev, [targetIdx]: normalizedLayout }));
     if (targetIdx !== currentIndex) goTo(targetIdx);
     setAgentSlideIndex(targetIdx);
   };
 
-  const applyLayoutForSlide = (idx, key) => applyAgentPatch(idx, { updatedLayout: key });
-  const applyLayout     = (key) => applyLayoutForSlide(currentIndex, key);
-  const applyAlign      = (val) => setSlideAlignments((p) => ({ ...p, [currentIndex]: val }));
-  const applyImage      = (url) => { setSlideImages((p) => ({ ...p, [currentIndex]: url })); setEditTab('layout'); };
-  const removeImage     = ()    => setSlideImages((p) => { const n = { ...p }; delete n[currentIndex]; return n; });
-  const applySlideTheme = (key) => setSlideThemeOverrides((p) => {
-    const n = { ...p };
-    if (n[currentIndex] === key) delete n[currentIndex]; else n[currentIndex] = key;
-    return n;
-  });
-
-  // ─── image generation logic ──────────────────────────────────
-  const fetchImages = async (page) => {
-    const q = imgQuery.trim();
-    if (!q || imgGenerating) return;
-    setImgGenerating(true);
-    setImgResults([]);
-
-    try {
-      const searchImagesFn = firebase.app().functions('us-central1').httpsCallable('searchImages', { timeout: 30000 });
-      const { data } = await searchImagesFn({ query: q, count: 6, orientation: 'landscape', page });
-      const photos = data?.images || [];
-      if (photos.length) {
-        setImgResults(photos);
-      } else {
-        showToast('No photos found — try a different prompt', 'info');
-      }
-    } catch (err) {
-      showToast(err.message || 'Image search failed', 'info');
-    } finally {
-      setImgGenerating(false);
+  const localAgentPatch = (userText, idx) => {
+    const targetSlide = localSlides[idx] || {};
+    const patch = {};
+    const layoutKey = layoutFromAgentText(userText);
+    const title = titleFromAgentText(userText, targetSlide.title);
+    const bullet = bulletFromAgentText(userText);
+    if (layoutKey) patch.updatedLayout = layoutKey;
+    if (title) patch.updatedTitle = title.charAt(0).toUpperCase() + title.slice(1);
+    if (bullet) patch.addBullets = [bullet.charAt(0).toUpperCase() + bullet.slice(1)];
+    if (/(remove|delete).*(bullet|point|last)/i.test(userText)) patch.removeLastBullet = true;
+    if (/(concise|shorter|shorten|tighten|fewer)/i.test(userText)) patch.updatedBullets = (targetSlide.bullets || []).slice(0, Math.max(1, Math.ceil((targetSlide.bullets || []).length / 2)));
+    if (/(expand|longer|more detail|more context|more info|talk more|elaborate|explain more)/i.test(userText)) {
+      const facts = [...(targetSlide.bullets || []), targetSlide.title].filter(Boolean);
+      patch.updatedBullets = [
+        `What this means: ${facts[0] || 'Clarify the core idea'}`,
+        `Why it matters: ${facts[1] || 'Connect it to the audience decision'}`,
+        `What to show next: ${facts[2] || 'Add a concrete supporting detail'}`,
+      ];
     }
+    if (!Object.keys(patch).length) patch.needsClarification = true;
+    return patch;
   };
 
-  const handleGeminiImageGenerate = () => { setImgPage(1); fetchImages(1); };
-  const handleRegenerateImages    = () => { const next = imgPage + 1; setImgPage(next); fetchImages(next); };
-
-  // ─── agent logic ─────────────────────────────────────────
-  const agentIntroMessage = (idx, isFresh = false) => {
-    const targetIdx = Math.max(0, Math.min(localSlides.length - 1, idx));
-    return {
-      role: 'assistant',
-      text: `${isFresh ? 'New chat started. ' : ''}I’m looking at slide ${targetIdx + 1} — "${localSlides[targetIdx]?.title || 'Untitled slide'}". Ask me to rewrite text, add more detail from deck context, target another slide, or switch layout. What should I change?`,
-    };
+  const simulateAgentResponse = (userText, fallbackIdx) => {
+    const targetIdx = agentTargetSlideIndex(userText, fallbackIdx);
+    const patch = localAgentPatch(userText, targetIdx);
+    if (patch.needsClarification) {
+      setAgentSlideIndex(targetIdx);
+      return `I can edit slide ${targetIdx + 1}, but I need a clearer change. Ask me to rename the title, add a bullet, or switch to a layout like Split, Table, Timeline, or Summary.`;
+    }
+    applyAgentPatch(targetIdx, patch);
+    const layoutName = patch.updatedLayout ? (LAYOUTS.find((l) => l.key === patch.updatedLayout)?.name || patch.updatedLayout) : '';
+    if (patch.updatedLayout && (patch.updatedTitle || patch.updatedBullets || patch.addBullets || patch.removeLastBullet)) return `Done - slide ${targetIdx + 1} updated and switched to ${layoutName} layout.`;
+    if (patch.updatedLayout) return `Done - slide ${targetIdx + 1} is now using the ${layoutName} layout.`;
+    return `Done - slide ${targetIdx + 1} is updated.`;
   };
 
-  const hasUserAgentMessages = (messages = agentMessages) => messages.some((m) => m.role === 'user' && String(m.text || '').trim());
-
-  const agentHistoryTitle = (messages = agentMessages, idx = agentSlideIndex) => {
-    const firstUser = messages.find((m) => m.role === 'user' && String(m.text || '').trim())?.text;
-    return compactAgentText(firstUser || localSlides[idx]?.title || 'Agent chat', 9) || `Slide ${idx + 1}`;
-  };
-
-  const archiveAgentChat = (messages = agentMessages, idx = agentSlideIndex) => {
-    if (!hasUserAgentMessages(messages)) return;
-    const targetIdx = Math.max(0, Math.min(localSlides.length - 1, idx));
-    const session = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      title: agentHistoryTitle(messages, targetIdx),
-      slideIndex: targetIdx,
-      slideTitle: localSlides[targetIdx]?.title || 'Untitled slide',
-      layout: getLayout(targetIdx),
-      updatedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      messages: messages.map((m) => ({ role: m.role, text: m.text })),
-    };
-    setAgentHistorySessions((prev) => [session, ...prev].slice(0, 12));
-  };
-
-  const resetAgentChat = (idx = agentSlideIndex) => {
-    const targetIdx = Math.max(0, Math.min(localSlides.length - 1, idx));
-    archiveAgentChat(agentMessages, targetIdx);
-    setAgentSlideIndex(targetIdx);
-    setAgentMessages([agentIntroMessage(targetIdx, true)]);
-    setAgentHistoryOpen(false);
-    setAgentInput('');
-    setAgentThinking(false);
-    setTimeout(() => agentInputRef.current?.focus(), 60);
-  };
-
-  const restoreAgentHistory = (session) => {
-    if (!session) return;
-    archiveAgentChat(agentMessages, agentSlideIndex);
-    const targetIdx = Math.max(0, Math.min(localSlides.length - 1, Number(session.slideIndex) || 0));
-    setAgentSlideIndex(targetIdx);
-    setAgentMessages(Array.isArray(session.messages) && session.messages.length ? session.messages : [agentIntroMessage(targetIdx)]);
-    setAgentHistoryOpen(false);
-    setAgentInput('');
-    setAgentThinking(false);
-    setTimeout(() => agentInputRef.current?.focus(), 60);
-  };
+  const agentIntroMessage = (idx, fresh = false) => ({
+    role: 'assistant',
+    text: `${fresh ? 'New chat started. ' : ''}I am looking at slide ${idx + 1} - "${localSlides[idx]?.title || 'Untitled slide'}". Ask me to rewrite text, add detail, target another slide, or switch layout. What should I change?`,
+  });
 
   const openAgent = (idx) => {
     setAgentSlideIndex(idx);
@@ -1115,140 +585,44 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     setTimeout(() => agentInputRef.current?.focus(), 80);
   };
 
-  const quotedAgentValue = (value) => {
-    const match = String(value || '').match(/["“”']([^"“”']{3,})["“”']/);
-    return match ? match[1].trim() : '';
-  };
-
-  const titleFromAgentText = (value, currentTitle = '') => {
-    const text = String(value || '').trim();
-    const lower = text.toLowerCase();
-    if (!/(title|heading|headline|rename)/.test(lower)) return '';
-    const quoted = quotedAgentValue(text);
-    if (quoted) return quoted;
-    const explicit = text.match(/(?:rename|change|set|make|update).{0,24}(?:title|heading|headline)?\s*(?:to|as|:)\s*(.+)$/i)
-      || text.match(/(?:title|heading|headline)\s*(?:to|as|:)\s*(.+)$/i);
-    if (explicit?.[1]) {
-      return explicit[1]
-        .replace(/\b(?:and|also)\s+(?:make|change|set|turn|switch|convert)\b.*$/i, '')
-        .replace(/\b(?:slide|page)\s*\d{1,2}\b/ig, '')
-        .trim()
-        .replace(/[.!]+$/, '');
-    }
-    if (/(shorter|shorten|concise|tighter)/.test(lower) && currentTitle) {
-      return currentTitle.split(/\s+/).slice(0, 6).join(' ').replace(/[.,;:!]+$/, '');
-    }
-    return '';
-  };
-
-  const bulletFromAgentText = (value) => {
-    const text = String(value || '').trim();
-    const quoted = quotedAgentValue(text);
-    if (quoted && /bullet|point/.test(text.toLowerCase())) return quoted;
-    const match = text.match(/add\s+(?:a\s+)?(?:bullet|point)\s*(?:about|on|for|that|:)?\s*(.+)$/i);
-    if (!match?.[1]) return '';
-    return match[1]
-      .replace(/\b(?:to|on|for)?\s*(?:slide|page)\s*\d{1,2}\b/ig, '')
-      .replace(/\b(?:and|also)\s+(?:make|change|set|turn|switch|convert)\b.*$/i, '')
-      .trim()
-      .replace(/^[,.:;-]+|[,.:;-]+$/g, '');
-  };
-
-  const localAgentPatch = (userText, idx) => {
-    const slide = localSlides[idx] || {};
-    const text = String(userText || '');
-    const lower = text.toLowerCase();
-    const patch = {};
-    const layoutKey = layoutFromAgentText(text);
-    const title = titleFromAgentText(text, slide.title);
-    const addBullet = bulletFromAgentText(text);
-
-    if (layoutKey) patch.updatedLayout = layoutKey;
-    if (title) patch.updatedTitle = title.charAt(0).toUpperCase() + title.slice(1);
-    if (addBullet) patch.addBullets = [addBullet.charAt(0).toUpperCase() + addBullet.slice(1)];
-    if (/(concise|shorter|shorten|tighten|fewer)/.test(lower)) {
-      patch.updatedBullets = (slide.bullets || []).slice(0, Math.max(1, Math.ceil((slide.bullets || []).length / 2)));
-    }
-    if (/(expand|longer|more detail|more context|more info|talk more|elaborate|explain more)/.test(lower)) {
-      const expanded = expansionBulletsForAgent(slide);
-      if (expanded.length) {
-        patch.updatedBullets = expanded;
-      } else {
-        patch.needsClarification = true;
-      }
-    }
-    if (/(remove|delete).*(bullet|point|last)/.test(lower)) patch.removeLastBullet = true;
-
-    if (!Object.keys(patch).length) patch.needsClarification = true;
-    return patch;
-  };
-
-  const simulateAgentResponse = (userText, idx) => {
-    const targetIdx = agentTargetSlideIndex(userText, idx);
-    const patch = localAgentPatch(userText, targetIdx);
-    if (patch.needsClarification) {
-      setAgentSlideIndex(targetIdx);
-      return `I can edit slide ${targetIdx + 1}, but I need a clearer change. Ask me to rename the title, add or remove a bullet, shorten the slide, or switch to a layout like Split, Quote, Timeline, or Summary.`;
-    }
-    applyAgentPatch(targetIdx, patch);
-    const layoutName = patch.updatedLayout ? (LAYOUTS.find((l) => l.key === patch.updatedLayout)?.name || patch.updatedLayout) : '';
-    if (patch.updatedLayout && (patch.updatedTitle || patch.updatedBullets || patch.addBullets || patch.removeLastBullet)) {
-      return `Done — slide ${targetIdx + 1} updated and switched to ${layoutName} layout.`;
-    }
-    if (patch.updatedLayout) return `Done — slide ${targetIdx + 1} is now using the ${layoutName} layout.`;
-    return `Done — slide ${targetIdx + 1} is updated.`;
-  };
-
   const handleAgentSend = async () => {
     const text = agentInput.trim();
     if (!text || agentThinking) return;
-    const updatedHistory = [...agentMessages, { role: 'user', text }];
-    setAgentMessages(updatedHistory);
+    const nextHistory = [...agentMessages, { role: 'user', text }];
+    setAgentMessages(nextHistory);
     setAgentInput('');
     setAgentThinking(true);
-
-    let reply = null;
-    let usedRealApi = false;
-
     const requestedSlideIndex = agentTargetSlideIndex(text, agentSlideIndex);
     const requestedLayout = layoutFromAgentText(text);
-
+    let reply = null;
+    let usedRealApi = false;
     try {
       if (window.firebase?.app) {
         const agentEditFn = firebase.app().functions('us-central1').httpsCallable('agentEdit');
-        const slide = localSlides[requestedSlideIndex] || {};
+        const s = localSlides[requestedSlideIndex] || {};
         const { data } = await agentEditFn({
           slideIndex: requestedSlideIndex,
           slideCount: localSlides.length,
-          slideTitle: slide.title || '',
-          bullets: slide.bullets || [],
-          slideContent: slide.content || slide.summary || '',
-          components: slide.components || [],
-          currentLayout: getLayout(requestedSlideIndex),
+          slideTitle: s.title || '',
+          bullets: s.bullets || [],
+          slideContent: (s.objects || []).filter((obj) => obj.type === 'text').map((obj) => obj.content).join('\n'),
+          components: s.components || [],
+          currentLayout: s.renderLayout || s.layout || 'standard',
           availableLayouts: LAYOUTS.map((l) => ({ key: l.key, name: l.name, desc: l.desc })),
-          deckTitles: localSlides.map((s) => s.title || ''),
-          deckSlides: localSlides.map((s, i) => compactSlideForAgent(s, i)),
-          sourceContext: {
-            prompt: compactAgentText(config?.inputText, 80),
-            parsedFileText: compactAgentText(config?.parsedFileText || config?.sourceText, 120),
-            sourceDocumentName: config?.uploadedFile?.name || config?.sourceDocumentName || '',
-          },
+          deckTitles: localSlides.map((item) => item.title || ''),
+          deckSlides: localSlides.map((item, i) => ({ index: i, title: item.title, layout: item.renderLayout || item.layout, bullets: item.bullets || [] })),
+          sourceContext: { prompt: config?.inputText || '', parsedFileText: config?.parsedFileText || '' },
           userMessage: text,
-          history: agentMessages.slice(-20).map(m => ({ role: m.role, text: m.text })),
+          history: agentMessages.slice(-20).map((m) => ({ role: m.role, text: m.text })),
         });
-        const responseSlideIndex = Number.isInteger(data?.targetSlideIndex)
-          ? Math.max(0, Math.min(localSlides.length - 1, data.targetSlideIndex))
-          : requestedSlideIndex;
-        const responsePatch = {
-          ...(data || {}),
-          updatedLayout: data?.updatedLayout || requestedLayout || undefined,
-        };
+        const responseSlideIndex = Number.isInteger(data?.targetSlideIndex) ? Math.max(0, Math.min(localSlides.length - 1, data.targetSlideIndex)) : requestedSlideIndex;
+        const responsePatch = { ...(data || {}), updatedLayout: data?.updatedLayout || requestedLayout || undefined };
         if (responsePatch.updatedTitle || responsePatch.updatedBullets || responsePatch.updatedLayout) {
           applyAgentPatch(responseSlideIndex, responsePatch);
           const layoutName = responsePatch.updatedLayout ? (LAYOUTS.find((l) => l.key === normalizeAgentLayout(responsePatch.updatedLayout))?.name || responsePatch.updatedLayout) : '';
           reply = responsePatch.updatedLayout && !data?.updatedLayout
-            ? `Done — slide ${responseSlideIndex + 1} is now using the ${layoutName} layout.`
-            : (data.assistantReply || `Done — slide ${responseSlideIndex + 1} updated.`);
+            ? `Done - slide ${responseSlideIndex + 1} is now using the ${layoutName} layout.`
+            : (data.assistantReply || `Done - slide ${responseSlideIndex + 1} updated.`);
           usedRealApi = true;
         } else if (data?.needsClarification && data?.assistantReply) {
           reply = data.assistantReply;
@@ -1256,964 +630,1035 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
         }
       }
     } catch (_) {}
-
-    if (!usedRealApi) {
-      reply = simulateAgentResponse(text, requestedSlideIndex);
-    }
-
-    setAgentMessages((p) => [...p, { role: 'assistant', text: reply }]);
+    if (!usedRealApi) reply = simulateAgentResponse(text, requestedSlideIndex);
+    setAgentMessages((prev) => [...prev, { role: 'assistant', text: reply }]);
     setAgentThinking(false);
     setTimeout(() => agentInputRef.current?.focus(), 30);
   };
 
-  // ─── slide chrome (inside the slide canvas) ──────────────
-  const SlideFrame = ({ t, hasImg, index, total, isLight }) => {
-    const fg   = hasImg ? '#fff' : t.title;
-    const rule = hasImg ? 'rgba(255,255,255,0.22)' : t.rule;
-    const dim  = hasImg ? 'rgba(255,255,255,0.55)' : isLight ? 'rgba(26,5,48,0.5)' : 'rgba(246,241,251,0.5)';
+  const fetchImages = async (page = 1, queryOverride = '') => {
+    const q = String(queryOverride || imgQuery || selectedObject?.prompt || slide.imagePrompt || slide.title || '').trim();
+    if (!q || imgGenerating) return;
+    if (queryOverride) setImgQuery(q);
+    setImgGenerating(true);
+    setImgResults([]);
+    try {
+      const searchImagesFn = firebase.app().functions('us-central1').httpsCallable('searchImages', { timeout: 30000 });
+      const { data } = await searchImagesFn({ query: q, count: 6, orientation: 'landscape', page });
+      const photos = data?.images || [];
+      if (photos.length) setImgResults(photos);
+      else showToast('No photos found', 'info');
+    } catch (err) {
+      showToast(err.message || 'Unsplash search failed', 'info');
+    } finally {
+      setImgGenerating(false);
+    }
+  };
+
+  const applyImage = (image) => {
+    const src = image.src || image;
+    if (!src) return;
+    const prompt = imgQuery.trim() || selectedObject?.prompt || slide.imagePrompt || slide.title || '';
+    if (selectedObject?.type === 'image') {
+      updateObject(selectedObject.id, {
+        src,
+        prompt,
+        alt: image.alt || prompt || '',
+        credit: image.credit || '',
+        creditUrl: image.creditUrl || '',
+      });
+    } else {
+      const id = addObject({
+        type: 'image',
+        role: 'image',
+        x: 14,
+        y: 12,
+        w: 44,
+        h: 30,
+        z: nextZ(),
+        locked: false,
+        src,
+        prompt,
+        alt: image.alt || prompt || '',
+        credit: image.credit || '',
+        creditUrl: image.creditUrl || '',
+        fit: 'cover',
+        style: { radius: 4 },
+      });
+      setSelectedObjectId(id);
+    }
+    setEditTab('image');
+    showToast('Image applied', 'success');
+  };
+
+  const applyImageUrl = () => {
+    const url = imgUrl.trim();
+    if (!url) return;
+    applyImage({ src: url, thumb: url, alt: imgQuery.trim() || selectedObject?.alt || slide.title || 'Slide image' });
+    setImgUrl('');
+  };
+
+  const removeImage = () => {
+    if (!selectedObject || selectedObject.type !== 'image') return;
+    updateObject(selectedObject.id, { src: '', credit: '', creditUrl: '' });
+    setEditTab('image');
+    showToast('Image cleared', 'success');
+  };
+
+  const openImageTools = (obj, shouldSearch = false) => {
+    const prompt = obj?.prompt || slide.imagePrompt || slide.title || '';
+    if (obj?.id) setSelectedObjectId(obj.id);
+    setSelectedCell(null);
+    setEditPanelOpen(true);
+    setEditTab('image');
+    if (prompt) setImgQuery((current) => current || prompt);
+    if (shouldSearch) {
+      setImgPage(1);
+      setTimeout(() => fetchImages(1, prompt), 0);
+    }
+  };
+
+  const handlePresent = () => {
+    setShowMenu(false);
+    document.documentElement.requestFullscreen?.().catch(() => {});
+    showToast('Press Esc to exit presentation', 'info');
+  };
+
+  const toHex = (value, fallback = 'FFFFFF') => {
+    const longHex = String(value || '').match(/#([0-9a-f]{6})/i)?.[1];
+    return (longHex || fallback).replace('#', '').toUpperCase();
+  };
+
+  const pptBox = (obj) => ({
+    x: (obj.x / 100) * 13.333,
+    y: (obj.y / 56.25) * 7.5,
+    w: (obj.w / 100) * 13.333,
+    h: (obj.h / 56.25) * 7.5,
+  });
+
+  const handleDownloadPPTX = async () => {
+    setShowMenu(false);
+    showToast('Generating .pptx...', 'loading');
+    try {
+      const pptx = new PptxGenJS();
+      pptx.layout = 'LAYOUT_WIDE';
+      pptx.author = 'AutoDeck AI';
+      pptx.subject = config?.templateStyle || 'Quidax internal deck';
+      const displayFont = pptFontName(brandConfig?.displayFont, qxType.display, 'display');
+      const bodyFont = pptFontName(brandConfig?.bodyFont, qxType.body, 'body');
+      pptx.theme = { headFontFace: displayFont, bodyFontFace: bodyFont, lang: 'en-US' };
+
+      localSlides.forEach((s) => {
+        const pSlide = pptx.addSlide();
+        [...(s.objects || [])].sort((a, b) => (a.z || 0) - (b.z || 0)).forEach((obj) => {
+          const box = pptBox(obj);
+          if (obj.type === 'shape') {
+            pSlide.addShape(obj.style?.shape === 'ellipse' ? pptx.ShapeType.ellipse : pptx.ShapeType.rect, {
+              ...box,
+              fill: { color: toHex(obj.style?.fill, '1A0530'), transparency: Math.round((1 - (obj.style?.opacity ?? 1)) * 100) },
+              line: { color: obj.style?.stroke === 'transparent' ? toHex(obj.style?.fill, '1A0530') : toHex(obj.style?.stroke, '1A0530'), transparency: obj.style?.stroke === 'transparent' ? 100 : 0, width: obj.style?.strokeWidth || 0 },
+            });
+          } else if (obj.type === 'image') {
+            if (obj.src) pSlide.addImage({ path: obj.src, ...box });
+            else pSlide.addShape(pptx.ShapeType.rect, { ...box, fill: { color: '320067', transparency: 35 }, line: { color: 'B890FE', transparency: 20 } });
+          } else if (obj.type === 'table') {
+            const rows = (obj.rows || []).map((row) => row.map((cell) => ({
+              text: cell.text || '',
+              options: {
+                bold: cell.style?.bold === true,
+                italic: cell.style?.italic === true,
+                align: cell.style?.align || 'left',
+                color: toHex(cell.style?.color, 'F6F1FB'),
+                fill: { color: toHex(cell.style?.fill, '1A0530') },
+              },
+            })));
+            pSlide.addTable(rows, {
+              ...box,
+              fontFace: pptFontName(obj.style?.fontFamily, bodyFont),
+              fontSize: obj.style?.fontSize || 10,
+              border: { color: toHex(obj.style?.borderColor, 'B890FE'), pt: 0.5 },
+              valign: 'mid',
+              margin: 0.05,
+            });
+          } else {
+            pSlide.addText(obj.content || '', {
+              ...box,
+              fontFace: pptFontName(obj.style?.fontFamily, obj.role === 'title' ? displayFont : bodyFont, obj.role === 'title' ? 'display' : 'body'),
+              fontSize: obj.style?.fontSize || 16,
+              bold: obj.style?.bold === true,
+              italic: obj.style?.italic === true,
+              color: toHex(obj.style?.color, 'F6F1FB'),
+              align: obj.style?.align || 'left',
+              valign: 'mid',
+              fit: 'shrink',
+              breakLine: false,
+            });
+          }
+        });
+        if (s.speakerNotes && pSlide.addNotes) pSlide.addNotes(s.speakerNotes);
+      });
+      await pptx.writeFile({ fileName: `${deckTitle || 'AutoDeck'}.pptx` });
+      showToast('PPTX downloaded', 'success');
+    } catch (err) {
+      showToast('Export failed - try again', 'info');
+    }
+  };
+
+  const handleDownloadPNG = async () => {
+    setShowMenu(false);
+    showToast('Saving slide as PNG...', 'loading');
+    try {
+      const el = document.getElementById('main-slide');
+      if (!el) return showToast('Slide not found', 'info');
+      const canvas = await html2canvas(el, { useCORS: true, scale: 2, backgroundColor: null });
+      const a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png');
+      a.download = `slide-${currentIndex + 1}.png`;
+      a.click();
+      showToast('Slide saved as PNG', 'success');
+    } catch (_) {
+      showToast('Export failed - try again', 'info');
+    }
+  };
+
+  const handleShare = () => {
+    setShowMenu(false);
+    const link = `autodeck.quidax.com/d/${activeDeckId || Math.random().toString(36).slice(2, 8)}`;
+    navigator.clipboard?.writeText(link).catch(() => {});
+    showToast('Link copied', 'success');
+  };
+
+  const handleDuplicate = () => { setShowMenu(false); showToast('Deck duplicated to your library', 'success'); };
+
+  const objectStyle = (obj) => ({
+    position: 'absolute',
+    left: `${obj.x}%`,
+    top: `${(obj.y / 56.25) * 100}%`,
+    width: `${obj.w}%`,
+    height: `${(obj.h / 56.25) * 100}%`,
+    zIndex: obj.z,
+    cursor: obj.locked ? 'default' : editingObjectId === obj.id ? 'text' : 'move',
+  });
+
+  const renderTextObject = (obj) => {
+    const selected = obj.id === selectedObjectId;
+    const editing = editingObjectId === obj.id;
     return (
-      <>
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '18px 32px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 3 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 8, height: 8, background: t.accent, borderRadius: 1 }} />
-            <span style={{ color: fg, fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.32em', textTransform: 'uppercase', opacity: 0.75 }}>Quidax</span>
-          </div>
-          <span style={{ color: fg, fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.18em', opacity: 0.65 }}>{String(index + 1).padStart(2, '0')}</span>
-        </div>
-        <div style={{ position: 'absolute', top: 36, left: 32, right: 32, height: 1, background: rule, zIndex: 3 }} />
-        <div style={{ position: 'absolute', bottom: 30, left: 32, right: 32, height: 1, background: rule, zIndex: 3 }} />
-        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 32px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 3 }}>
-          <span style={{ color: dim, fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.22em', textTransform: 'uppercase' }}>Internal · Confidential</span>
-          <span style={{ color: dim, fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.22em' }}>{String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}</span>
-        </div>
-      </>
+      <div
+        key={obj.id}
+        data-object-id={obj.id}
+        data-object-type={obj.type}
+        data-object-role={obj.role}
+        role={obj.role === 'title' ? 'heading' : undefined}
+        aria-level={obj.role === 'title' ? 2 : undefined}
+        onPointerDown={(e) => beginMove(e, obj)}
+        onClick={(e) => { e.stopPropagation(); setSelectedObjectId(obj.id); setSelectedCell(null); }}
+        onDoubleClick={(e) => { e.stopPropagation(); setSelectedObjectId(obj.id); setSelectedCell(null); setEditingObjectId(obj.id); }}
+        style={{
+          ...objectStyle(obj),
+          color: obj.style?.color || theme.title,
+          fontFamily: obj.style?.fontFamily || qxType.body,
+          fontSize: `${obj.style?.fontSize || 16}px`,
+          fontWeight: obj.style?.fontWeight || (obj.style?.bold ? 700 : 400),
+          fontStyle: obj.style?.italic ? 'italic' : 'normal',
+          textAlign: obj.style?.align || 'left',
+          lineHeight: obj.style?.lineHeight || 1.2,
+          letterSpacing: obj.style?.letterSpacing || 0,
+          textTransform: obj.style?.textTransform || 'none',
+          whiteSpace: 'pre-wrap',
+          overflow: 'hidden',
+          outline: selected ? `2px solid ${QX.lime}` : '1px solid transparent',
+          borderRadius: 4,
+          padding: 4,
+        }}
+        contentEditable={editing}
+        suppressContentEditableWarning
+        onBlur={(e) => {
+          const content = e.currentTarget.textContent || '';
+          updateCurrentSlide((s) => syncLegacyFields({
+            ...s,
+            objects: (s.objects || []).map((item) => item.id === obj.id ? { ...item, content } : item),
+          }));
+          setEditingObjectId(null);
+        }}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Escape') { e.preventDefault(); setEditingObjectId(null); }
+        }}
+      >
+        {obj.content}
+      </div>
     );
   };
 
-  // ─── grid overlay (only when editing) ────────────────────
-  const GridOverlay = ({ visible, color }) => {
-    if (!visible) return null;
+  const renderShapeObject = (obj) => (
+    <div
+      key={obj.id}
+      data-object-id={obj.id}
+      data-object-type={obj.type}
+      data-object-role={obj.role}
+      onPointerDown={(e) => beginMove(e, obj)}
+      onClick={(e) => { e.stopPropagation(); setSelectedObjectId(obj.id); setSelectedCell(null); }}
+      style={{
+        ...objectStyle(obj),
+        background: obj.style?.fill || 'transparent',
+        opacity: obj.style?.opacity ?? 1,
+        border: obj.style?.stroke && obj.style.stroke !== 'transparent' ? `${obj.style?.strokeWidth || 1}px solid ${obj.style.stroke}` : 'none',
+        borderRadius: obj.style?.shape === 'ellipse' ? '50%' : `${obj.style?.radius || 0}px`,
+        outline: obj.id === selectedObjectId ? `2px solid ${QX.lime}` : 'none',
+      }}
+    />
+  );
+
+  const renderImageObject = (obj) => {
+    const selected = obj.id === selectedObjectId;
+    const prompt = obj.prompt || slide.imagePrompt || slide.title || 'Search Unsplash';
     return (
-      <div style={{ position: 'absolute', inset: '48px 32px 48px 32px', display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 16, pointerEvents: 'none', zIndex: 4 }}>
-        {Array.from({ length: 12 }).map((_, i) => (
-          <div key={i} style={{ height: '100%', borderLeft: `1px dashed ${color}`, borderRight: i === 11 ? `1px dashed ${color}` : 'none', opacity: 0.7 }} />
+      <div
+        key={obj.id}
+        data-object-id={obj.id}
+        data-object-type={obj.type}
+        data-object-role={obj.role}
+        onPointerDown={(e) => beginMove(e, obj)}
+        onClick={(e) => { e.stopPropagation(); setSelectedObjectId(obj.id); setSelectedCell(null); }}
+        onDoubleClick={(e) => { e.stopPropagation(); openImageTools(obj); }}
+        style={{
+          ...objectStyle(obj),
+          background: obj.src
+            ? `url(${obj.src}) center/${obj.fit || 'cover'} no-repeat`
+            : 'linear-gradient(135deg, rgba(97,0,165,0.46), rgba(184,144,254,0.12)), rgba(246,241,251,0.035)',
+          border: selected ? `2px solid ${QX.lime}` : `1px solid ${obj.style?.stroke || 'rgba(246,241,251,0.16)'}`,
+          borderRadius: obj.style?.radius || 8,
+          overflow: 'hidden',
+          boxShadow: !obj.src ? 'inset 0 0 0 1px rgba(246,241,251,0.06)' : 'none',
+        }}
+      >
+        {!obj.src && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, textAlign: 'center' }}>
+            <div style={{ width: 'min(78%, 320px)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(212,255,63,0.12)', border: '1px solid rgba(212,255,63,0.28)', color: QX.lime, fontFamily: qxType.display, fontSize: 19, fontWeight: 700 }}>+</div>
+              <div style={{ fontFamily: qxType.display, fontSize: 14, fontWeight: 700, color: '#F6F1FB', lineHeight: 1.15 }}>Add image</div>
+              <div style={{ maxWidth: 260, color: 'rgba(246,241,251,0.62)', fontFamily: qxType.body, fontSize: 10.5, lineHeight: 1.35, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{prompt}</div>
+              <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); openImageTools(obj, true); }}
+                style={{ marginTop: 3, height: 28, padding: '0 11px', borderRadius: 999, border: '1px solid rgba(212,255,63,0.38)', background: QX.lime, color: QX.limeInk, fontFamily: qxType.body, fontSize: 11, fontWeight: 800, cursor: 'pointer', boxShadow: '0 10px 24px rgba(0,0,0,0.22)' }}
+              >
+                Search Unsplash
+              </button>
+            </div>
+          </div>
+        )}
+        {obj.credit && (
+          <div style={{ position: 'absolute', left: 8, bottom: 7, padding: '3px 6px', borderRadius: 4, background: 'rgba(0,0,0,0.55)', color: '#fff', fontFamily: qxType.mono, fontSize: 7 }}>
+            {obj.credit}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const updateTableCell = (objId, row, col, patch) => {
+    updateObject(objId, (obj) => ({
+      rows: obj.rows.map((r, ri) => r.map((cell, ci) => (
+        ri === row && ci === col
+          ? { ...cell, ...patch, style: { ...(cell.style || {}), ...(patch.style || {}) } }
+          : cell
+      ))),
+    }));
+  };
+
+  const renderTableObject = (obj) => {
+    const selected = obj.id === selectedObjectId;
+    const rows = obj.rows || [];
+    return (
+      <div
+        key={obj.id}
+        data-object-id={obj.id}
+        data-object-type={obj.type}
+        data-object-role={obj.role}
+        onPointerDown={(e) => beginMove(e, obj)}
+        onClick={(e) => { e.stopPropagation(); setSelectedObjectId(obj.id); }}
+        style={{
+          ...objectStyle(obj),
+          display: 'grid',
+          gridTemplateRows: `repeat(${Math.max(1, rows.length)}, 1fr)`,
+          border: selected ? `2px solid ${QX.lime}` : `1px solid ${obj.style?.borderColor || 'rgba(246,241,251,0.18)'}`,
+          borderRadius: 5,
+          overflow: 'hidden',
+          background: 'rgba(246,241,251,0.04)',
+          fontFamily: obj.style?.fontFamily || qxType.body,
+          fontSize: `${obj.style?.fontSize || 10}px`,
+        }}
+      >
+        {rows.map((row, ri) => (
+          <div key={ri} style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, row.length)}, 1fr)` }}>
+            {row.map((cell, ci) => {
+              const cellSelected = selectedCell?.objectId === obj.id && selectedCell.row === ri && selectedCell.col === ci;
+              return (
+                <div
+                  key={`${ri}-${ci}`}
+                  data-table-cell={`${ri}:${ci}`}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); setSelectedObjectId(obj.id); setSelectedCell({ objectId: obj.id, row: ri, col: ci }); }}
+                  onBlur={(e) => updateTableCell(obj.id, ri, ci, { text: e.currentTarget.textContent || '' })}
+                  style={{
+                    padding: 7,
+                    minWidth: 0,
+                    overflow: 'hidden',
+                    borderRight: ci < row.length - 1 ? `1px solid ${obj.style?.borderColor || 'rgba(246,241,251,0.16)'}` : 'none',
+                    borderBottom: ri < rows.length - 1 ? `1px solid ${obj.style?.borderColor || 'rgba(246,241,251,0.16)'}` : 'none',
+                    background: cell.style?.fill || (ri === 0
+                      ? (obj.style?.headerFill || QX.lime)
+                      : ((obj.style?.alternateRows && ri % 2 === 0) ? 'rgba(246,241,251,0.07)' : (obj.style?.bodyFill || 'rgba(246,241,251,0.04)'))),
+                    color: cell.style?.color || (ri === 0 ? (obj.style?.headerText || '#1A0530') : (obj.style?.bodyText || theme.title)),
+                    fontWeight: cell.style?.bold ? 700 : 400,
+                    fontStyle: cell.style?.italic ? 'italic' : 'normal',
+                    textAlign: cell.style?.align || 'left',
+                    outline: cellSelected ? `2px solid ${QX.lime}` : 'none',
+                    whiteSpace: 'pre-wrap',
+                    lineHeight: 1.25,
+                  }}
+                >
+                  {cell.text}
+                </div>
+              );
+            })}
+          </div>
         ))}
       </div>
     );
   };
 
-  // ─── slide renderers ─────────────────────────────────────
-  const SlideContent = ({ slide, t, layout, align, bgImg, index, total, gridOn }) => {
-    const dFont = brandConfig?.displayFont || qxType.display;
-    const bFont = brandConfig?.bodyFont    || qxType.body;
-
-    const EditableText = ({ tag: Tag = 'div', field, bi, editValue, style, children, ...rest }) => {
-      const isEditing =
-        field === 'title'    ? editingField?.field === 'title'    :
-        field === 'eyebrow'  ? editingField?.field === 'eyebrow'  :
-        field === 'figure'   ? editingField?.field === 'figure'   :
-        field === 'stat-num' ? editingField?.field === 'stat-num' :
-        editingField?.field === 'bullet' && editingField?.bi === bi;
-      return (
-        <Tag
-          contentEditable={isEditing}
-          suppressContentEditableWarning
-          onDoubleClick={(e) => {
-            e.stopPropagation();
-            const el = e.currentTarget;
-            const ef =
-              field === 'title'    ? { field: 'title' }    :
-              field === 'eyebrow'  ? { field: 'eyebrow' }  :
-              field === 'figure'   ? { field: 'figure' }   :
-              field === 'stat-num' ? { field: 'stat-num' } :
-              { field: 'bullet', bi };
-            setEditingField(ef);
-            requestAnimationFrame(() => {
-              if (editValue !== undefined) el.textContent = editValue;
-              el.focus();
-            });
-          }}
-          onBlur={isEditing ? (e) => commitEdit(e.currentTarget.textContent) : undefined}
-          onKeyDown={isEditing ? (e) => {
-            e.stopPropagation();
-            if (e.key === 'Enter') { e.preventDefault(); commitEdit(e.currentTarget.textContent); }
-            if (e.key === 'Escape') { e.preventDefault(); setEditingField(null); }
-          } : undefined}
-          style={{
-            ...style,
-            cursor: 'text',
-            outline: isEditing ? '2px solid rgba(212,255,63,0.55)' : 'none',
-            borderRadius: isEditing ? 4 : undefined,
-          }}
-          {...rest}
-        >
-          {children}
-        </Tag>
-      );
-    };
-
-    const hasImg  = !!bgImg && layout !== 'image';
-    const isLight = t.swatch === '#E9D5FF';
-    const fg  = hasImg ? '#fff' : t.title;
-    const tx  = hasImg ? 'rgba(255,255,255,0.86)' : t.text;
-    const ac  = t.accent;
-    const ta  = align === 'center' ? 'center' : align === 'right' ? 'right' : 'left';
-    const ai  = align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start';
-    const overlay   = hasImg ? 'linear-gradient(135deg,rgba(0,0,0,0.62),rgba(0,0,0,0.32))' : 'none';
-    const gridColor = isLight ? 'rgba(26,5,48,0.10)' : 'rgba(246,241,251,0.08)';
-    const container = { position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: hasImg ? `url(${bgImg}) center/cover no-repeat` : t.gradient };
-    const bodyInset = { position: 'absolute', top: 64, left: 32, right: 32, bottom: 54, zIndex: 2, display: 'flex' };
-
-    const Eyebrow = ({ children, color }) => (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, justifyContent: ai }}>
-        <div style={{ width: 24, height: 1, background: color || ac }} />
-        <EditableText tag="span" field="eyebrow" style={{ fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.30em', textTransform: 'uppercase', color: color || ac, opacity: 0.95 }}>{children}</EditableText>
-      </div>
-    );
-
-    const fallbackComponents = () => (slide.bullets || []).map((bullet, i) => ({
-      type: 'card',
-      label: bullet,
-      icon: window.AutoDeckSlideIntelligence?.iconFor?.(bullet) || 'circle-dot',
-      value: undefined,
-      detail: undefined,
-      level: i + 1,
-    }));
-    const visualItems = (Array.isArray(slide.components) && slide.components.length ? slide.components : fallbackComponents())
-      .filter((item) => item && (item.label || item.value || item.items?.length))
-      .slice(0, 6);
-    const itemLabel = (item, fallback = '') => String(item?.label || item?.title || item?.name || fallback || '').trim();
-    const itemDetail = (item) => String(item?.detail || item?.description || '').trim();
-    const metricValue = (item) => String(item?.value || itemLabel(item).match(/(?:[$#])?\d+(?:\.\d+)?\s*(?:%|x|M|K|B|bn|m)?/i)?.[0] || '').trim();
-
-    const IconMark = ({ icon, color = ac, size = 34 }) => {
-      const name = String(icon || 'circle-dot').toLowerCase();
-      const stroke = color;
-      const commonSvg = { width: size * 0.58, height: size * 0.58, viewBox: '0 0 24 24', fill: 'none' };
-      let mark = <circle cx="12" cy="12" r="4" stroke={stroke} strokeWidth="2" />;
-      if (name.includes('user')) mark = <><circle cx="10" cy="8" r="3" stroke={stroke} strokeWidth="2" /><path d="M4 20c1.2-4 10.8-4 12 0M18 8v6M15 11h6" stroke={stroke} strokeWidth="2" strokeLinecap="round" /></>;
-      if (name.includes('shield')) mark = <path d="M12 3l7 3v5c0 4.2-2.5 7.4-7 10-4.5-2.6-7-5.8-7-10V6l7-3zM8.5 12l2.2 2.2L16 9" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />;
-      if (name.includes('wallet')) mark = <><rect x="3" y="6" width="18" height="13" rx="3" stroke={stroke} strokeWidth="2" /><path d="M16 12h5v4h-5a2 2 0 010-4z" stroke={stroke} strokeWidth="2" /></>;
-      if (name.includes('trend')) mark = <path d="M4 16l5-5 4 4 7-8M15 7h5v5" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />;
-      if (name.includes('calendar')) mark = <><rect x="4" y="5" width="16" height="15" rx="2" stroke={stroke} strokeWidth="2" /><path d="M8 3v4M16 3v4M4 10h16" stroke={stroke} strokeWidth="2" strokeLinecap="round" /></>;
-      if (name.includes('alert')) mark = <path d="M12 4l9 16H3L12 4zM12 9v5M12 17h.01" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />;
-      if (name.includes('check')) mark = <path d="M20 7L10 17l-5-5" stroke={stroke} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />;
-      if (name.includes('chart')) mark = <><path d="M4 20V4M4 20h17" stroke={stroke} strokeWidth="2" strokeLinecap="round" /><rect x="7" y="11" width="3" height="6" fill={stroke} /><rect x="12" y="7" width="3" height="10" fill={stroke} /><rect x="17" y="9" width="3" height="8" fill={stroke} /></>;
-      if (name.includes('image')) mark = <><rect x="4" y="5" width="16" height="14" rx="2" stroke={stroke} strokeWidth="2" /><path d="M7 16l4-4 3 3 2-2 3 3" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><circle cx="15" cy="9" r="1.5" fill={stroke} /></>;
-      return (
-        <div style={{ width: size, height: size, borderRadius: 10, border: `1px solid ${t.rule}`, background: isLight ? 'rgba(26,5,48,0.04)' : 'rgba(246,241,251,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <svg {...commonSvg}>{mark}</svg>
-        </div>
-      );
-    };
-
-    const VisualTitle = ({ eyebrow, maxWidth = '78%' }) => (
-      <div style={{ marginBottom: 24, maxWidth }}>
-        <Eyebrow>{eyebrow || slide.kicker || slide.slideType || 'Visual story'}</Eyebrow>
-        <EditableText tag="h2" field="title" style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(24px,3.2vw,38px)', color: fg, lineHeight: 1.08, letterSpacing: '-0.024em', margin: 0 }}>{slide.title}</EditableText>
-      </div>
-    );
-
-    const VisualCard = ({ item, children, tone = 'default', style = {} }) => (
-      <div style={{
-        border: `1px solid ${tone === 'accent' ? ac : t.rule}`,
-        background: tone === 'accent'
-          ? (isLight ? 'rgba(123,47,190,0.10)' : 'rgba(212,255,63,0.10)')
-          : (isLight ? 'rgba(255,255,255,0.52)' : 'rgba(246,241,251,0.055)'),
-        borderRadius: 8,
-        padding: 16,
-        minWidth: 0,
-        ...style,
-      }}>
-        {item && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: children ? 12 : 0 }}>
-            <IconMark icon={item.icon} />
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.22em', textTransform: 'uppercase', color: ac, marginBottom: 4 }}>{item.type || 'item'}</div>
-              <div style={{ fontFamily: dFont, fontSize: 'clamp(14px,1.55vw,18px)', fontWeight: 600, color: fg, lineHeight: 1.18 }}>{itemLabel(item)}</div>
-            </div>
-          </div>
-        )}
-        {children}
-      </div>
-    );
-
-    if (layout === 'process_flow') {
-      const steps = visualItems.length ? visualItems : fallbackComponents();
-      return (
-        <div style={container}>
-          {hasImg && <div style={{ position: 'absolute', inset: 0, background: overlay, zIndex: 1 }} />}
-          <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
-          <GridOverlay visible={gridOn} color={gridColor} />
-          <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'center' }}>
-            <VisualTitle eyebrow="Process flow" maxWidth="72%" />
-            <div style={{ display: 'flex', alignItems: 'stretch', gap: 10, width: '100%' }}>
-              {steps.map((item, j) => (
-                <React.Fragment key={j}>
-                  <VisualCard item={{ ...item, type: `Step ${j + 1}` }} tone={j === 0 ? 'accent' : 'default'} style={{ flex: 1, minHeight: 150, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    {itemDetail(item) && <div style={{ fontFamily: bFont, fontSize: 12, lineHeight: 1.45, color: tx }}>{itemDetail(item)}</div>}
-                  </VisualCard>
-                  {j < steps.length - 1 && (
-                    <div style={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ac, opacity: 0.9 }}>
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 12h14M13 7l5 5-5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                    </div>
-                  )}
-                </React.Fragment>
-              ))}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (layout === 'comparison' || layout === 'problem_solution') {
-      const columns = layout === 'problem_solution'
-        ? [
-            visualItems.find((item) => item.type === 'problem') || { type: 'problem', label: slide.bullets?.[0] || 'Problem', icon: 'alert-triangle' },
-            visualItems.find((item) => item.type === 'solution') || { type: 'solution', label: slide.bullets?.[1] || 'Solution', icon: 'check-circle' },
-          ]
-        : (visualItems.filter((item) => item.type === 'comparison_column').length
-            ? visualItems.filter((item) => item.type === 'comparison_column').slice(0, 2)
-            : [
-                { type: 'comparison_column', label: 'Current', icon: 'alert-triangle', items: slide.bullets?.slice(0, Math.ceil((slide.bullets?.length || 0) / 2)) || [] },
-                { type: 'comparison_column', label: 'Future', icon: 'check-circle', items: slide.bullets?.slice(Math.ceil((slide.bullets?.length || 0) / 2)) || [] },
-              ]);
-      return (
-        <div style={container}>
-          {hasImg && <div style={{ position: 'absolute', inset: 0, background: overlay, zIndex: 1 }} />}
-          <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
-          <GridOverlay visible={gridOn} color={gridColor} />
-          <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'center' }}>
-            <VisualTitle eyebrow={layout === 'problem_solution' ? 'Problem / Solution' : 'Comparison'} maxWidth="76%" />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 56px 1fr', gap: 18, alignItems: 'stretch' }}>
-              {columns.map((item, j) => (
-                <React.Fragment key={j}>
-                  {j === 1 && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: ac }}>
-                      <svg width="38" height="38" viewBox="0 0 38 38" fill="none"><circle cx="19" cy="19" r="18" stroke="currentColor" opacity=".45" /><path d="M12 19h13M21 14l5 5-5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                    </div>
-                  )}
-                  <VisualCard item={item} tone={j === 1 ? 'accent' : 'default'} style={{ minHeight: 210 }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                      {(Array.isArray(item.items) && item.items.length ? item.items : [itemDetail(item) || itemLabel(item)]).filter(Boolean).slice(0, 4).map((point, pi) => (
-                        <div key={pi} style={{ display: 'flex', gap: 9, color: tx, fontFamily: bFont, fontSize: 13.5, lineHeight: 1.42 }}>
-                          <span style={{ color: ac, fontFamily: qxType.mono, fontSize: 10, marginTop: 2 }}>{String(pi + 1).padStart(2, '0')}</span>
-                          <span>{point}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </VisualCard>
-                </React.Fragment>
-              ))}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (layout === 'timeline' || layout === 'roadmap') {
-      const items = visualItems.length ? visualItems : fallbackComponents();
-      return (
-        <div style={container}>
-          {hasImg && <div style={{ position: 'absolute', inset: 0, background: overlay, zIndex: 1 }} />}
-          <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
-          <GridOverlay visible={gridOn} color={gridColor} />
-          <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'center' }}>
-            <VisualTitle eyebrow={layout === 'roadmap' ? 'Roadmap' : 'Timeline'} maxWidth="72%" />
-            <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, items.length)}, 1fr)`, gap: 14, paddingTop: 34 }}>
-              <div style={{ position: 'absolute', left: 12, right: 12, top: 49, height: 1, background: t.rule }} />
-              {items.map((item, j) => (
-                <div key={j} style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: j === 0 ? ac : (isLight ? '#F6F1FB' : '#1A0530'), border: `1px solid ${j === 0 ? ac : t.rule}`, color: j === 0 ? '#1A0530' : ac, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: qxType.mono, fontSize: 11, fontWeight: 700, zIndex: 2 }}>{String(j + 1).padStart(2, '0')}</div>
-                  <div style={{ paddingTop: 6 }}>
-                    <div style={{ fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: ac, marginBottom: 8 }}>{itemLabel(item, layout === 'roadmap' ? `Phase ${j + 1}` : `Moment ${j + 1}`)}</div>
-                    <div style={{ fontFamily: bFont, fontSize: 13.5, lineHeight: 1.45, color: tx }}>{itemDetail(item) || (slide.bullets?.[j] || itemLabel(item))}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (layout === 'statistics') {
-      const items = (visualItems.length ? visualItems : fallbackComponents()).slice(0, 4);
-      return (
-        <div style={container}>
-          {hasImg && <div style={{ position: 'absolute', inset: 0, background: overlay, zIndex: 1 }} />}
-          <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
-          <GridOverlay visible={gridOn} color={gridColor} />
-          <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'center' }}>
-            <VisualTitle eyebrow="By the numbers" maxWidth="70%" />
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${items.length > 2 ? 4 : Math.max(1, items.length)}, 1fr)`, gap: 14 }}>
-              {items.map((item, j) => {
-                const value = metricValue(item) || String(j + 1).padStart(2, '0');
-                const label = itemLabel(item).replace(value, '').trim() || slide.bullets?.[j] || 'Metric';
-                return (
-                  <div key={j} style={{ minHeight: 168, borderRadius: 8, border: `1px solid ${j === 0 ? ac : t.rule}`, background: j === 0 ? 'rgba(212,255,63,0.10)' : (isLight ? 'rgba(255,255,255,0.55)' : 'rgba(246,241,251,0.055)'), padding: 18, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(34px,5vw,58px)', color: j === 0 ? ac : fg, lineHeight: 0.95, letterSpacing: '-0.04em' }}>{value}</div>
-                    <div style={{ fontFamily: bFont, fontSize: 13.5, color: tx, lineHeight: 1.4 }}>{label}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (layout === 'hierarchy') {
-      const nodes = visualItems.length ? visualItems : fallbackComponents();
-      const topNode = nodes[0] || { label: slide.title, icon: 'box' };
-      const childNodes = nodes.slice(1, 5);
-      return (
-        <div style={container}>
-          {hasImg && <div style={{ position: 'absolute', inset: 0, background: overlay, zIndex: 1 }} />}
-          <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
-          <GridOverlay visible={gridOn} color={gridColor} />
-          <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
-            <VisualTitle eyebrow="Hierarchy" maxWidth="76%" />
-            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-              <VisualCard item={{ ...topNode, type: 'top level' }} tone="accent" style={{ width: '46%', textAlign: 'left' }} />
-              <div style={{ width: 1, height: 28, background: t.rule }} />
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, childNodes.length)}, 1fr)`, gap: 14, width: '100%' }}>
-                {(childNodes.length ? childNodes : fallbackComponents().slice(0, 3)).map((item, j) => (
-                  <VisualCard key={j} item={{ ...item, type: `Level ${item.level || j + 2}` }} style={{ textAlign: 'left', minHeight: 128 }} />
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (layout === 'feature_breakdown' || layout === 'summary') {
-      const items = visualItems.length ? visualItems : fallbackComponents();
-      return (
-        <div style={container}>
-          {hasImg && <div style={{ position: 'absolute', inset: 0, background: overlay, zIndex: 1 }} />}
-          <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
-          <GridOverlay visible={gridOn} color={gridColor} />
-          <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'center' }}>
-            <VisualTitle eyebrow={layout === 'summary' ? 'Key takeaways' : 'Feature breakdown'} maxWidth="72%" />
-            <div style={{ display: 'grid', gridTemplateColumns: items.length > 3 ? 'repeat(3, 1fr)' : `repeat(${Math.max(1, items.length)}, 1fr)`, gap: 14 }}>
-              {items.map((item, j) => (
-                <VisualCard key={j} item={{ ...item, type: layout === 'summary' ? `Takeaway ${j + 1}` : `Feature ${j + 1}` }} tone={j === 0 ? 'accent' : 'default'} style={{ minHeight: 138 }}>
-                  {itemDetail(item) && <div style={{ fontFamily: bFont, fontSize: 12.5, lineHeight: 1.45, color: tx }}>{itemDetail(item)}</div>}
-                </VisualCard>
-              ))}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (layout === 'image_focus') {
-      const img = bgImg || `https://picsum.photos/seed/${encodeURIComponent(slide.imagePrompt || slide.title)}/1600/900`;
-      return (
-        <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: `url(${img}) center/cover no-repeat` }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg,rgba(0,0,0,0.72) 0%,rgba(0,0,0,0.42) 48%,rgba(0,0,0,0.10) 100%)', zIndex: 1 }} />
-          <SlideFrame t={t} hasImg={true} index={index} total={total} isLight={false} />
-          <GridOverlay visible={gridOn} color="rgba(255,255,255,0.08)" />
-          <div style={{ ...bodyInset, zIndex: 2, flexDirection: 'column', justifyContent: 'flex-end', maxWidth: '58%' }}>
-            <Eyebrow color={ac}>{slide.kicker || 'Image focus'}</Eyebrow>
-            <EditableText tag="h2" field="title" style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(34px,5.2vw,68px)', color: '#fff', lineHeight: 1.0, letterSpacing: '-0.036em', margin: 0 }}>{slide.title}</EditableText>
-            <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {(slide.bullets || []).slice(0, 2).map((b, j) => (
-                <EditableText key={j} tag="div" field="bullet" bi={j} style={{ color: 'rgba(255,255,255,0.84)', fontFamily: bFont, fontSize: 'clamp(13px,1.45vw,16px)', lineHeight: 1.5 }}>{b}</EditableText>
-              ))}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (layout === 'centered') return (
-      <div style={container}>
-        {hasImg && <div style={{ position: 'absolute', inset: 0, background: overlay, zIndex: 1 }} />}
-        <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
-        <GridOverlay visible={gridOn} color={gridColor} />
-        <div style={{ ...bodyInset, alignItems: 'center', justifyContent: 'center', textAlign: 'center', flexDirection: 'column' }}>
-          <Eyebrow>{slide.eyebrow || `Slide ${String(index + 1).padStart(2, '0')}`}</Eyebrow>
-          <EditableText tag="h2" field="title" style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(28px,4.6vw,52px)', color: fg, lineHeight: 1.05, letterSpacing: '-0.025em', margin: 0, maxWidth: '82%' }}>{slide.title}</EditableText>
-          <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 8, maxWidth: '70%' }}>
-            {slide.bullets.slice(0, 3).map((b, j) => (
-              <EditableText key={j} tag="div" field="bullet" bi={j} style={{ color: tx, fontFamily: bFont, fontSize: 'clamp(13px,1.45vw,16px)', lineHeight: 1.6 }}>{b}</EditableText>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-
-    if (layout === 'split') return (
-      <div style={container}>
-        {hasImg && <div style={{ position: 'absolute', inset: 0, background: overlay, zIndex: 1 }} />}
-        <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
-        <GridOverlay visible={gridOn} color={gridColor} />
-        <div style={{ ...bodyInset, gap: 48 }}>
-          <div style={{ flex: '0 0 44%', display: 'flex', flexDirection: 'column', justifyContent: 'center', borderRight: `1px solid ${t.rule}`, paddingRight: 36 }}>
-            <Eyebrow>{slide.eyebrow || `Section · ${String(index + 1).padStart(2, '0')}`}</Eyebrow>
-            <EditableText tag="h2" field="title" style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(26px,3.4vw,40px)', color: fg, lineHeight: 1.06, letterSpacing: '-0.022em', margin: 0, textAlign: ta }}>{slide.title}</EditableText>
-          </div>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 14, paddingLeft: 8 }}>
-            {slide.bullets.map((b, j) => (
-              <div key={j} style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                <span style={{ fontFamily: qxType.mono, fontSize: 11, color: ac, letterSpacing: '0.10em', flexShrink: 0, marginTop: 4 }}>{String(j + 1).padStart(2, '0')}</span>
-                <EditableText tag="span" field="bullet" bi={j} style={{ color: tx, fontFamily: bFont, fontSize: 'clamp(13px,1.4vw,16px)', lineHeight: 1.55 }}>{b}</EditableText>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-
-    if (layout === 'bigTitle') return (
-      <div style={container}>
-        {hasImg && <div style={{ position: 'absolute', inset: 0, background: overlay, zIndex: 1 }} />}
-        <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
-        <GridOverlay visible={gridOn} color={gridColor} />
-        <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'flex-end', alignItems: ai }}>
-          <Eyebrow>{slide.eyebrow || 'The headline'}</Eyebrow>
-          <EditableText tag="h2" field="title" style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(40px,7vw,84px)', color: fg, lineHeight: 0.98, letterSpacing: '-0.035em', margin: 0, textAlign: ta, maxWidth: '95%' }}>{slide.title}</EditableText>
-          {slide.bullets[0] && (
-            <EditableText tag="div" field="bullet" bi={0} style={{ marginTop: 24, color: tx, fontFamily: bFont, fontSize: 'clamp(14px,1.55vw,18px)', lineHeight: 1.55, maxWidth: '62%', textAlign: ta }}>{slide.bullets[0]}</EditableText>
-          )}
-        </div>
-      </div>
-    );
-
-    if (layout === 'quote') return (
-      <div style={container}>
-        {hasImg && <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(155deg,rgba(0,0,0,0.7),rgba(0,0,0,0.45))', zIndex: 1 }} />}
-        <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
-        <GridOverlay visible={gridOn} color={gridColor} />
-        <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
-          <div style={{ fontFamily: 'Georgia, serif', fontSize: 'clamp(80px,11vw,140px)', color: ac, lineHeight: 0.5, marginBottom: 8, opacity: 0.85 }}>"</div>
-          <EditableText tag="blockquote" field="bullet" bi={0} style={{ fontFamily: dFont, fontStyle: 'italic', fontWeight: 400, fontSize: 'clamp(20px,2.6vw,32px)', color: fg, lineHeight: 1.35, letterSpacing: '-0.012em', margin: 0, maxWidth: '82%' }}>
-            {slide.bullets[0] || slide.title}
-          </EditableText>
-          <div style={{ marginTop: 28, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 32, height: 1, background: ac }} />
-            <EditableText tag="span" field="title" style={{ fontFamily: qxType.mono, fontSize: 11, letterSpacing: '0.28em', textTransform: 'uppercase', color: tx }}>{slide.title}</EditableText>
-          </div>
-        </div>
-      </div>
-    );
-
-    if (layout === 'minimal') return (
-      <div style={container}>
-        {hasImg && <div style={{ position: 'absolute', inset: 0, background: overlay, zIndex: 1 }} />}
-        <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
-        <GridOverlay visible={gridOn} color={gridColor} />
-        <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'center', alignItems: ai }}>
-          <Eyebrow>{slide.eyebrow || `Slide ${String(index + 1).padStart(2, '0')} · ${String(total).padStart(2, '0')}`}</Eyebrow>
-          <EditableText tag="h2" field="title" style={{ fontFamily: dFont, fontWeight: 500, fontSize: 'clamp(34px,5.5vw,68px)', color: fg, lineHeight: 1.0, letterSpacing: '-0.030em', margin: 0, textAlign: ta, maxWidth: '90%' }}>{slide.title}</EditableText>
-        </div>
-      </div>
-    );
-
-    if (layout === 'stat') {
-      const m   = (slide.bullets[0] || '').match(/(\d+(?:\.\d+)?)\s*(%|x|×|M|K|B|bn|m)?/i);
-      const num = m ? m[1] : 'TBD';
-      const suf = m ? (m[2] || '') : '';
-      const ctx = (slide.bullets[0] || slide.title || 'Metric needs source confirmation').replace(/(\d+(?:\.\d+)?)\s*(%|x|×|M|K|B|bn|m)?/i, '').replace(/^[^\w]+|[^\w]+$/g, '').trim() || 'Metric needs source confirmation';
-      return (
-        <div style={container}>
-          {hasImg && <div style={{ position: 'absolute', inset: 0, background: overlay, zIndex: 1 }} />}
-          <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
-          <GridOverlay visible={gridOn} color={gridColor} />
-          <div style={{ ...bodyInset, gap: 48, alignItems: 'center' }}>
-            <div style={{ flex: '0 0 56%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <Eyebrow>{slide.eyebrow || 'The number'}</Eyebrow>
-              <EditableText field="stat-num" editValue={slide.bullets[0] || ''} style={{ display: 'flex', alignItems: 'flex-start', lineHeight: 0.85, gap: 4 }}>
-                <span style={{ fontFamily: dFont, fontWeight: 500, fontSize: 'clamp(120px,18vw,240px)', color: fg, letterSpacing: '-0.05em' }}>{num}</span>
-                <span style={{ fontFamily: dFont, fontWeight: 500, fontSize: 'clamp(48px,7vw,90px)', color: ac, letterSpacing: '-0.02em', marginTop: '0.5em' }}>{suf}</span>
-              </EditableText>
-            </div>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 18, borderLeft: `1px solid ${t.rule}`, paddingLeft: 36 }}>
-              <EditableText tag="h3" field="title" style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(20px,2.4vw,28px)', color: fg, lineHeight: 1.15, letterSpacing: '-0.018em', margin: 0 }}>{slide.title}</EditableText>
-              <p style={{ fontFamily: bFont, fontSize: 'clamp(13px,1.4vw,16px)', lineHeight: 1.55, color: tx, margin: 0 }}>{ctx}</p>
-              {slide.bullets[1] && (
-                <EditableText tag="div" field="bullet" bi={1} style={{ paddingTop: 14, borderTop: `1px solid ${t.rule}`, fontFamily: bFont, fontSize: 'clamp(12px,1.25vw,14px)', color: tx, opacity: 0.85, lineHeight: 1.5 }}>{slide.bullets[1]}</EditableText>
-              )}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (layout === 'image') {
-      const img = bgImg || `https://picsum.photos/seed/${encodeURIComponent(slide.title)}/1600/900`;
-      return (
-        <div style={{ ...container, background: t.gradient }}>
-          <SlideFrame t={t} hasImg={false} index={index} total={total} isLight={isLight} />
-          <GridOverlay visible={gridOn} color={gridColor} />
-          <div style={{ ...bodyInset, gap: 36 }}>
-            <div style={{ flex: '0 0 52%', borderRadius: 8, overflow: 'hidden', position: 'relative', background: `url(${img}) center/cover no-repeat`, border: `1px solid ${t.rule}`, cursor: 'pointer' }}
-              onDoubleClick={(e) => { e.stopPropagation(); setEditPanelOpen(true); setEditTab('image'); }}
-              onMouseEnter={(e) => { const ov = e.currentTarget.querySelector('.img-hover-ov'); if (ov) ov.style.opacity = '1'; }}
-              onMouseLeave={(e) => { const ov = e.currentTarget.querySelector('.img-hover-ov'); if (ov) ov.style.opacity = '0'; }}
-            >
-              <EditableText tag="div" field="figure" style={{ position: 'absolute', top: 14, left: 14, fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.24em', textTransform: 'uppercase', color: '#fff', opacity: 0.85, padding: '5px 9px', background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)', borderRadius: 4, zIndex: 2, position: 'absolute' }}>{slide.figure || `Figure ${String(index + 1).padStart(2, '0')}`}</EditableText>
-              <div className="img-hover-ov" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 180ms', pointerEvents: 'none' }}>
-                <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: '#fff', padding: '6px 12px', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', borderRadius: 6 }}>Double-click to change image</span>
-              </div>
-            </div>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 14 }}>
-              <Eyebrow>{slide.eyebrow || `Section · ${String(index + 1).padStart(2, '0')}`}</Eyebrow>
-              <EditableText tag="h2" field="title" style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(22px,3vw,38px)', color: fg, lineHeight: 1.08, letterSpacing: '-0.022em', margin: 0 }}>{slide.title}</EditableText>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 6 }}>
-                {slide.bullets.map((b, j) => (
-                  <div key={j} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                    <div style={{ width: 4, height: 4, borderRadius: '50%', background: ac, marginTop: 9, flexShrink: 0 }} />
-                    <EditableText tag="span" field="bullet" bi={j} style={{ color: tx, fontFamily: bFont, fontSize: 'clamp(13px,1.35vw,15px)', lineHeight: 1.55 }}>{b}</EditableText>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // standard (default)
+  const ResizeHandle = () => {
+    if (!selectedObject || selectedObject.locked) return null;
     return (
-      <div style={container}>
-        {hasImg && <div style={{ position: 'absolute', inset: 0, background: overlay, zIndex: 1 }} />}
-        <SlideFrame t={t} hasImg={hasImg} index={index} total={total} isLight={isLight} />
-        <GridOverlay visible={gridOn} color={gridColor} />
-        <div style={{ ...bodyInset, flexDirection: 'column', justifyContent: 'center', alignItems: ai }}>
-          <Eyebrow>{slide.eyebrow || `Section · ${String(index + 1).padStart(2, '0')}`}</Eyebrow>
-          <EditableText tag="h2" field="title" style={{ fontFamily: dFont, fontWeight: 600, fontSize: 'clamp(26px,3.6vw,42px)', color: fg, lineHeight: 1.08, letterSpacing: '-0.025em', margin: 0, textAlign: ta, maxWidth: '80%' }}>{slide.title}</EditableText>
-          <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: '82%' }}>
-            {slide.bullets.map((b, j) => (
-              <div key={j} style={{ display: 'flex', gap: 14, alignItems: 'flex-start', justifyContent: ai === 'flex-end' ? 'flex-end' : 'flex-start' }}>
-                <span style={{ fontFamily: qxType.mono, fontSize: 11, color: ac, letterSpacing: '0.10em', flexShrink: 0, marginTop: 5 }}>{String(j + 1).padStart(2, '0')}</span>
-                <EditableText tag="span" field="bullet" bi={j} style={{ color: tx, fontFamily: bFont, fontSize: 'clamp(13px,1.45vw,16.5px)', lineHeight: 1.55, textAlign: ta }}>{b}</EditableText>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <button
+        aria-label="Resize selected object"
+        onPointerDown={(e) => beginResize(e, selectedObject)}
+        style={{
+          position: 'absolute',
+          left: `${selectedObject.x + selectedObject.w}%`,
+          top: `${((selectedObject.y + selectedObject.h) / 56.25) * 100}%`,
+          width: 14,
+          height: 14,
+          marginLeft: -7,
+          marginTop: -7,
+          zIndex: 400,
+          border: `2px solid ${QX.lime}`,
+          background: '#0F031F',
+          borderRadius: 3,
+          cursor: 'nwse-resize',
+        }}
+      />
     );
   };
 
-  // ─── nav arrow style ─────────────────────────────────────
-  const navStyle = (disabled, side) => ({
-    width: 38, height: 38, borderRadius: '50%', padding: 0,
-    border: '1px solid rgba(246,241,251,0.14)',
-    background: disabled ? 'transparent' : 'rgba(246,241,251,0.04)',
-    backdropFilter: 'blur(6px)',
-    color: disabled ? 'rgba(246,241,251,0.18)' : 'rgba(246,241,251,0.7)',
-    cursor: disabled ? 'default' : 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    transition: `all 160ms ${qxEase}`,
-    position: 'absolute', top: '50%', transform: 'translateY(-50%)',
-    [side]: 14, zIndex: 5,
-  });
+  const ObjectStage = () => (
+    <div
+      id="main-slide"
+      ref={stageRef}
+      onClick={() => { setSelectedObjectId(null); setSelectedCell(null); }}
+      style={{
+        width: '100%',
+        aspectRatio: '16/9',
+        borderRadius: 12,
+        overflow: 'hidden',
+        position: 'relative',
+        background: theme.gradient,
+        backgroundImage: theme.gradient,
+        backgroundColor: '#0B0118',
+        boxShadow: '0 30px 90px rgba(0,0,0,0.55), 0 0 0 1px rgba(246,241,251,0.06)',
+      }}
+    >
+      <div aria-hidden="true" style={{ position: 'absolute', inset: 0, zIndex: -1, pointerEvents: 'none', background: theme.gradient, backgroundImage: theme.gradient, backgroundColor: '#0B0118' }} />
+      {showGrid && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 350, pointerEvents: 'none', backgroundImage: 'linear-gradient(rgba(246,241,251,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(246,241,251,0.08) 1px, transparent 1px)', backgroundSize: '8.333% 12.5%' }} />
+      )}
+      {[...(slide.objects || [])].sort((a, b) => (a.z || 0) - (b.z || 0)).map((obj) => {
+        if (obj.type === 'shape') return renderShapeObject(obj);
+        if (obj.type === 'image') return renderImageObject(obj);
+        if (obj.type === 'table') return renderTableObject(obj);
+        return renderTextObject(obj);
+      })}
+      <ResizeHandle />
+    </div>
+  );
 
-  // ─── chrome button style ─────────────────────────────────
   const chromeBtn = (active = false) => ({
-    height: 32, padding: '0 12px', borderRadius: 8,
+    height: 32,
+    padding: '0 12px',
+    borderRadius: 8,
     border: `1px solid ${active ? 'rgba(246,241,251,0.28)' : 'rgba(246,241,251,0.10)'}`,
     background: active ? 'rgba(246,241,251,0.06)' : 'transparent',
     color: active ? '#F6F1FB' : 'rgba(246,241,251,0.70)',
-    fontFamily: qxType.body, fontSize: 12.5, fontWeight: 500,
-    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7,
-    transition: `all 140ms ${qxEase}`, letterSpacing: '0.005em',
+    fontFamily: qxType.body,
+    fontSize: 12.5,
+    fontWeight: 500,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 7,
   });
+
+  const selectedTypeLabel = selectedObject
+    ? selectedObject.type === 'table' && selectedCell ? 'Table cell' : `${selectedObject.type.charAt(0).toUpperCase()}${selectedObject.type.slice(1)} object`
+    : 'No object selected';
+
+  const selectedFontStyle = selectedObject?.type === 'table' && selectedCell
+    ? selectedObject.rows?.[selectedCell.row]?.[selectedCell.col]?.style || {}
+    : selectedObject?.style || {};
 
   const agentQuickPrompts = [
     { label: 'Split layout', text: `make slide ${agentSlideIndex + 1} split layout` },
+    { label: 'Table layout', text: `make slide ${agentSlideIndex + 1} table layout` },
     { label: 'Add detail', text: `add more information to slide ${agentSlideIndex + 1}` },
     { label: 'Shorten title', text: `make the title of slide ${agentSlideIndex + 1} shorter` },
-    { label: 'Summarise', text: `make slide ${agentSlideIndex + 1} a summary layout` },
   ];
 
-  // ─── JSX ─────────────────────────────────────────────────
-  return (
-    <div style={{ height: '100vh', background: '#0B0118', display: 'flex', flexDirection: 'column', fontFamily: qxType.body, userSelect: 'none', overflow: 'hidden' }}
-      onClick={() => { setShowMenu(false); setShowThemePop(false); }}>
+  const panelTabs = [
+    { key: 'style', label: 'Style', sub: 'Text' },
+    { key: 'layout', label: 'Layouts', sub: 'Slide' },
+    { key: 'image', label: 'Images', sub: 'Media' },
+    { key: 'table', label: 'Tables', sub: 'Rows' },
+  ];
+  const canFormatText = selectedObject && ['text', 'table'].includes(selectedObject.type);
+  const selectedSummary = selectedObject
+    ? `${selectedTypeLabel}${selectedObject.role ? ` · ${selectedObject.role}` : ''}`
+    : 'Select any object on the slide';
+  const imageSearchValue = imgQuery.trim() || selectedObject?.prompt || slide.imagePrompt || slide.title || '';
+  const activeImageObject = selectedObject?.type === 'image' ? selectedObject : null;
 
-      {/* ══════════ TOP CHROME — editorial bar ══════════ */}
+  const inspectorPanel = {
+    width: 380,
+    flexShrink: 0,
+    borderLeft: '1px solid rgba(246,241,251,0.10)',
+    background: 'linear-gradient(180deg, rgba(23,7,41,0.98) 0%, rgba(11,1,24,0.99) 100%)',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    boxShadow: '-24px 0 70px rgba(0,0,0,0.25)',
+  };
+  const inspectorHeader = {
+    padding: '18px 20px 14px',
+    borderBottom: '1px solid rgba(246,241,251,0.08)',
+    background: 'linear-gradient(180deg, rgba(246,241,251,0.035), rgba(246,241,251,0.012))',
+  };
+  const inspectorCard = {
+    border: '1px solid rgba(246,241,251,0.10)',
+    background: 'rgba(246,241,251,0.045)',
+    borderRadius: 14,
+    padding: 14,
+    boxShadow: '0 12px 30px rgba(0,0,0,0.12)',
+  };
+  const sectionTitle = {
+    fontFamily: qxType.mono,
+    fontSize: 9,
+    letterSpacing: '0.22em',
+    textTransform: 'uppercase',
+    color: 'rgba(246,241,251,0.46)',
+    marginBottom: 10,
+  };
+  const inspectorButton = (variant = 'ghost', disabled = false) => ({
+    height: 38,
+    padding: '0 13px',
+    borderRadius: 10,
+    border: variant === 'primary' ? '1px solid rgba(212,255,63,0.55)' : '1px solid rgba(246,241,251,0.11)',
+    background: variant === 'primary' ? QX.lime : variant === 'danger' ? 'rgba(188,59,35,0.12)' : 'rgba(246,241,251,0.045)',
+    color: variant === 'primary' ? QX.limeInk : variant === 'danger' ? '#FCA5A5' : 'rgba(246,241,251,0.84)',
+    fontFamily: qxType.body,
+    fontSize: 12.5,
+    fontWeight: variant === 'primary' ? 800 : 650,
+    cursor: disabled ? 'default' : 'pointer',
+    opacity: disabled ? 0.45 : 1,
+    textAlign: 'center',
+  });
+  const compactField = {
+    ...panelInput,
+    height: 40,
+    borderRadius: 10,
+    background: 'rgba(5,0,12,0.35)',
+    border: '1px solid rgba(246,241,251,0.13)',
+    fontFamily: qxType.body,
+    fontSize: 13,
+  };
+  const rowLabel = {
+    fontFamily: qxType.body,
+    fontSize: 12.5,
+    fontWeight: 650,
+    color: 'rgba(246,241,251,0.86)',
+  };
+
+  return (
+    <div style={{ height: '100vh', background: '#0B0118', display: 'flex', flexDirection: 'column', fontFamily: qxType.body, userSelect: editingObjectId ? 'text' : 'none', overflow: 'hidden' }}
+      onClick={() => { setShowMenu(false); setShowThemePop(false); setShowAddMenu(false); }}>
+
       <div style={{ padding: '14px 24px', borderBottom: '1px solid rgba(246,241,251,0.08)', display: 'flex', alignItems: 'center', gap: 14, background: 'rgba(0,0,0,0.30)', flexShrink: 0, position: 'relative', zIndex: 50 }}
         onClick={(e) => e.stopPropagation()}>
-
-        <button onClick={onBack} style={{ ...chromeBtn(), padding: '0 10px' }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(246,241,251,0.06)'; e.currentTarget.style.color = '#F6F1FB'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(246,241,251,0.70)'; }}>
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M8 2L3 6.5 8 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          Back
-        </button>
-
+        <button onClick={onBack} style={{ ...chromeBtn(), padding: '0 10px' }}>Back</button>
         <div style={{ width: 1, height: 22, background: 'rgba(246,241,251,0.10)' }} />
-
-        {/* Masthead */}
+        <div style={{ width: 36, height: 36, borderRadius: 9, background: 'linear-gradient(135deg,#3D0F6E 0%,#7B2FBE 100%)', border: '1px solid rgba(246,241,251,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <span style={{ fontFamily: qxType.mono, fontSize: 10, fontWeight: 800, color: QX.lime, letterSpacing: '0.04em' }}>QX</span>
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <div style={{ width: 6, height: 6, background: QX.lime, borderRadius: 1 }} />
-            <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.32em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.55)' }}>Quidax</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 3 }}>
-            <span style={{ fontFamily: qxType.display, fontSize: 15, fontWeight: 600, color: '#F6F1FB', letterSpacing: '-0.012em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 340 }}>{deckTitle}</span>
-            <span style={{ fontFamily: qxType.mono, fontSize: 10, color: 'rgba(246,241,251,0.45)', letterSpacing: '0.14em' }}>{String(currentIndex + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}</span>
+          <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.45)' }}>AutoDeck · Quidax</span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 2 }}>
+            <span style={{ fontFamily: qxType.display, fontSize: 15, fontWeight: 600, color: '#F6F1FB', letterSpacing: '-0.012em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 300 }}>{deckTitle}</span>
+            <span style={{ fontFamily: qxType.mono, fontSize: 10, color: 'rgba(246,241,251,0.40)', letterSpacing: '0.14em' }}>{String(currentIndex + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}</span>
           </div>
         </div>
-
-        {/* Right tools */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-
-          <button onClick={() => setShowGrid((s) => !s)} title="Toggle grid (G)" style={chromeBtn(showGrid)}>
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1 1h11v11H1V1zM1 5h11M1 9h11M5 1v11M9 1v11" stroke="currentColor" strokeWidth="1" /></svg>
-            Grid
-          </button>
-
-          {/* Theme picker */}
+          {/* Insert dropdown */}
+          <div style={{ position: 'relative' }}>
+            <button onClick={(e) => { e.stopPropagation(); setShowAddMenu((p) => !p); setShowMenu(false); setShowThemePop(false); }} style={{ ...chromeBtn(showAddMenu), gap: 6 }}>
+              <span style={{ fontSize: 14, lineHeight: 1, marginTop: -1 }}>+</span> Add
+              <span style={{ fontSize: 8, opacity: 0.65, marginLeft: 1 }}>▾</span>
+            </button>
+            {showAddMenu && (
+              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, background: '#170729', border: '1px solid rgba(246,241,251,0.10)', borderRadius: 12, padding: 6, minWidth: 210, zIndex: 300, boxShadow: '0 18px 50px rgba(0,0,0,0.6)' }}>
+                {[
+                  { icon: 'T', label: 'Text box', sub: 'Heading or body', action: () => { addTextbox(); setShowAddMenu(false); } },
+                  { icon: '⊞', label: 'Table', sub: 'Editable rows', action: () => { addTable(); setShowAddMenu(false); } },
+                  { icon: '▭', label: 'Image', sub: 'Search or upload', action: () => { addImagePlaceholder(); setShowAddMenu(false); } },
+                ].map(({ icon, label, sub, action }) => (
+                  <button key={label} onClick={action} style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', padding: '10px 12px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(246,241,251,0.06)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(246,241,251,0.07)', border: '1px solid rgba(246,241,251,0.10)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F6F1FB', fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{icon}</div>
+                    <div>
+                      <div style={{ fontFamily: qxType.body, fontSize: 13, fontWeight: 650, color: '#F6F1FB' }}>{label}</div>
+                      <div style={{ fontFamily: qxType.mono, fontSize: 8.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)', marginTop: 2 }}>{sub}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div style={{ width: 1, height: 18, background: 'rgba(246,241,251,0.12)', margin: '0 3px' }} />
+          {/* View group */}
+          <button onClick={() => setShowGrid((s) => !s)} title="Toggle grid (G)" style={chromeBtn(showGrid)}>Grid</button>
           <div style={{ position: 'relative' }}>
             <button onClick={(e) => { e.stopPropagation(); setShowThemePop((p) => !p); setShowMenu(false); }} style={chromeBtn(showThemePop)}>
               <span style={{ width: 14, height: 14, borderRadius: '50%', background: theme.swatch, border: '1px solid rgba(246,241,251,0.3)', display: 'inline-block' }} />
               Theme
-              <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M1.5 3l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </button>
             {showThemePop && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, background: '#170729', border: '1px solid rgba(246,241,251,0.10)', borderRadius: 12, padding: 14, width: 240, zIndex: 300, boxShadow: '0 18px 50px rgba(0,0,0,0.6)' }}
-                onClick={(e) => e.stopPropagation()}>
+              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, background: '#170729', border: '1px solid rgba(246,241,251,0.10)', borderRadius: 12, padding: 14, width: 240, zIndex: 300, boxShadow: '0 18px 50px rgba(0,0,0,0.6)' }}>
                 <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.30em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.45)', marginBottom: 10 }}>Deck theme</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 7 }}>
                   {Object.entries(THEMES).map(([k, t]) => (
-                    <button key={k} title={t.name} onClick={() => setGlobalTheme(k)} style={{ aspectRatio: '1', borderRadius: 8, padding: 0, cursor: 'pointer', background: t.gradient, border: globalTheme === k ? '2px solid #F6F1FB' : '1px solid rgba(246,241,251,0.10)', transition: `all 140ms ${qxEase}` }} />
+                    <button key={k} title={t.name} onClick={() => setGlobalTheme(k)} style={{ aspectRatio: '1', borderRadius: 8, padding: 0, cursor: 'pointer', background: t.gradient, border: globalTheme === k ? '2px solid #F6F1FB' : '1px solid rgba(246,241,251,0.10)' }} />
                   ))}
                 </div>
-                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(246,241,251,0.08)', display: 'flex', justifyContent: 'space-between', fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.14em', color: 'rgba(246,241,251,0.5)' }}>
+                <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: qxType.body, fontSize: 12, color: 'rgba(246,241,251,0.72)' }}>
                   <span>Active</span>
-                  <span style={{ color: '#F6F1FB' }}>{theme.name}</span>
+                  <strong style={{ color: '#F6F1FB', fontWeight: 700 }}>{theme.name}</strong>
                 </div>
               </div>
             )}
           </div>
-
-          <div style={{ width: 1, height: 22, background: 'rgba(246,241,251,0.10)', margin: '0 2px' }} />
-
-          <button onClick={() => { setEditPanelOpen((p) => !p); setEditTab('layout'); }} style={chromeBtn(editPanelOpen)}>
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M8.5 1.5a1.5 1.5 0 012.12 2.12L3.5 10.75 1 11.5l.75-3L8.5 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            Customise
-          </button>
-
-          {/* Edit with Agent */}
-          <button onClick={() => openAgent(currentIndex)} style={{ ...chromeBtn(), borderColor: 'rgba(212,255,63,0.35)', color: '#D4FF3F' }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(212,255,63,0.08)'; e.currentTarget.style.borderColor = 'rgba(212,255,63,0.55)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(212,255,63,0.35)'; }}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1l1.2 3.3L10.5 5.5 7.2 6.7 6 10l-1.2-3.3L1.5 5.5l3.3-1.2L6 1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>
-            Agent
-          </button>
-
-          <div style={{ width: 1, height: 22, background: 'rgba(246,241,251,0.10)', margin: '0 2px' }} />
-
-          {/* Present — lime CTA */}
-          <button onClick={handlePresent} style={{ height: 32, padding: '0 14px', borderRadius: 8, border: 'none', background: QX.lime, color: '#1A0530', fontFamily: qxType.body, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7, transition: `all 160ms ${qxEase}`, boxShadow: '0 6px 22px rgba(212,255,63,0.30)' }}
-            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 10px 28px rgba(212,255,63,0.42)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 6px 22px rgba(212,255,63,0.30)'; }}>
-            <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><polygon points="2,1 10,5.5 2,10" fill="currentColor" /></svg>
-            Present
-          </button>
-
-          {/* Overflow menu */}
+          <div style={{ width: 1, height: 18, background: 'rgba(246,241,251,0.12)', margin: '0 3px' }} />
+          {/* AI agent */}
+          <button onClick={() => openAgent(currentIndex)} style={{ ...chromeBtn(), borderColor: 'rgba(212,255,63,0.35)', color: QX.lime }}>Agent</button>
+          <div style={{ width: 1, height: 18, background: 'rgba(246,241,251,0.12)', margin: '0 3px' }} />
+          {/* Primary action */}
+          <button onClick={handlePresent} style={{ height: 36, padding: '0 20px', borderRadius: 9, border: 'none', background: QX.lime, color: '#1A0530', fontFamily: qxType.body, fontSize: 13, fontWeight: 800, cursor: 'pointer', letterSpacing: '0.01em' }}>Present</button>
           <div style={{ position: 'relative' }}>
-            <button onClick={(e) => { e.stopPropagation(); setShowMenu((p) => !p); setShowThemePop(false); }} style={{ ...chromeBtn(showMenu), padding: '0 9px', width: 32 }}>
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="2.5" cy="6.5" r="1.2" fill="currentColor" /><circle cx="6.5" cy="6.5" r="1.2" fill="currentColor" /><circle cx="10.5" cy="6.5" r="1.2" fill="currentColor" /></svg>
+            <button aria-label="Export menu" title="Export menu" onClick={(e) => { e.stopPropagation(); setShowMenu((p) => !p); setShowThemePop(false); }} style={{ ...chromeBtn(showMenu), width: 32, padding: 0, justifyContent: 'center' }}>
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                <circle cx="4" cy="8" r="1.4" fill="currentColor" />
+                <circle cx="8" cy="8" r="1.4" fill="currentColor" />
+                <circle cx="12" cy="8" r="1.4" fill="currentColor" />
+              </svg>
             </button>
             {showMenu && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, background: '#170729', border: '1px solid rgba(246,241,251,0.10)', borderRadius: 12, padding: 6, minWidth: 230, zIndex: 300, boxShadow: '0 18px 50px rgba(0,0,0,0.6)' }}
-                onClick={(e) => e.stopPropagation()}>
-                <MenuItem icon={<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="2" y="1" width="9" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3" /><path d="M4 5h5M4 7.5h3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" /></svg>} label="Export as PDF" sub="Print current slide" onClick={handleExportPDF} />
-                <MenuItem icon={<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1.5" y="1" width="10" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3" /><path d="M4 4.5h3.5a1.5 1.5 0 010 3H4V4.5z" stroke="currentColor" strokeWidth="1.1" /></svg>} label="Download .pptx" sub="PowerPoint format" onClick={handleDownloadPPTX} />
-                <MenuItem icon={<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="2.5" width="11" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3" /><circle cx="4.5" cy="5.5" r="1" fill="currentColor" opacity=".6" /><path d="M1 9.5l3-3 2.5 2.5 2-2 2.5 2.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" /></svg>} label="Save slide as PNG" sub="Current slide only" onClick={handleDownloadPNG} />
+              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, background: '#170729', border: '1px solid rgba(246,241,251,0.10)', borderRadius: 12, padding: 6, minWidth: 230, zIndex: 300, boxShadow: '0 18px 50px rgba(0,0,0,0.6)' }}>
+                <MenuItem label="Export as PDF" sub="Print current slide" onClick={() => { setShowMenu(false); window.print(); }} />
+                <MenuItem label="Download .pptx" sub="PowerPoint format" onClick={handleDownloadPPTX} />
+                <MenuItem label="Save slide as PNG" sub="Current slide only" onClick={handleDownloadPNG} />
                 <div style={{ height: 1, background: 'rgba(246,241,251,0.08)', margin: '4px 0' }} />
-                <MenuItem icon={<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="10" cy="2.5" r="1.5" stroke="currentColor" strokeWidth="1.2" /><circle cx="10" cy="10.5" r="1.5" stroke="currentColor" strokeWidth="1.2" /><circle cx="3" cy="6.5" r="1.5" stroke="currentColor" strokeWidth="1.2" /><path d="M4.3 7.3l4.5 2.5M4.3 5.7l4.5-2.5" stroke="currentColor" strokeWidth="1.1" /></svg>} label="Share link" sub="Copy shareable URL" onClick={handleShare} />
-                <MenuItem icon={<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="4" y="1" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3" /><rect x="1" y="4" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3" fill="#170729" /></svg>} label="Duplicate deck" sub="Save a copy to library" onClick={handleDuplicate} />
+                <MenuItem label="Share link" sub="Copy shareable URL" onClick={handleShare} />
+                <MenuItem label="Duplicate deck" sub="Save a copy to library" onClick={handleDuplicate} />
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* ══════════ MAIN AREA ══════════ */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
-
-        {/* Slide stage */}
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '28px 64px', position: 'relative' }}
-          onClick={() => { setShowMenu(false); setShowThemePop(false); }}>
-
-          <button onClick={(e) => { e.stopPropagation(); goTo(currentIndex - 1); }} disabled={currentIndex === 0} style={navStyle(currentIndex === 0, 'left')}
-            onMouseEnter={(e) => { if (currentIndex !== 0) { e.currentTarget.style.background = 'rgba(246,241,251,0.10)'; e.currentTarget.style.borderColor = 'rgba(246,241,251,0.30)'; } }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = currentIndex === 0 ? 'transparent' : 'rgba(246,241,251,0.04)'; e.currentTarget.style.borderColor = 'rgba(246,241,251,0.14)'; }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          </button>
-
-          <div style={{ width: '100%', maxWidth: editPanelOpen ? 880 : 1040, position: 'relative', transition: `max-width 240ms ${qxEase}` }}>
-            <div id="main-slide" key={transitionKey} style={{ width: '100%', aspectRatio: '16/9', borderRadius: 12, overflow: 'hidden', boxShadow: '0 30px 90px rgba(0,0,0,0.55), 0 0 0 1px rgba(246,241,251,0.06)', position: 'relative', animation: `sgFadeIn 280ms ${qxEase}` }}>
-              <SlideContent slide={slide} t={theme} layout={layout} align={align} bgImg={slideImages[currentIndex]} index={currentIndex} total={total} gridOn={showGrid || editPanelOpen} />
-            </div>
-
-            {/* Slide caption strip */}
-            <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.40)' }}>Layout</span>
-                <span style={{ fontFamily: qxType.body, fontSize: 12, color: 'rgba(246,241,251,0.75)' }}>{LAYOUTS.find((l) => l.key === layout)?.name || 'Standard'}</span>
-                {slideThemeOverrides[currentIndex] && (
-                  <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.22em', textTransform: 'uppercase', color: QX.lime, padding: '2px 7px', border: `1px solid ${QX.lime}45`, borderRadius: 4 }}>Override</span>
-                )}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.18em', color: 'rgba(246,241,251,0.40)' }}>
-                <span>← →  Navigate</span>
-                <span>·</span>
-                <span>G  Grid</span>
-                <span>·</span>
-                <span>F  Present</span>
-              </div>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '28px 64px', position: 'relative' }}>
+          <button onClick={() => goTo(currentIndex - 1)} disabled={currentIndex === 0} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', width: 38, height: 38, borderRadius: '50%', border: '1px solid rgba(246,241,251,0.14)', background: 'rgba(246,241,251,0.04)', color: 'rgba(246,241,251,0.7)', cursor: currentIndex === 0 ? 'default' : 'pointer' }}>‹</button>
+          <div style={{ width: '100%', maxWidth: editPanelOpen ? 880 : 1040, transition: `max-width 240ms ${qxEase}` }}>
+            <ObjectStage />
+            <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.30)' }}>Layout</span>
+              <span style={{ fontFamily: qxType.body, fontSize: 11, color: 'rgba(246,241,251,0.55)' }}>{LAYOUTS.find((l) => l.key === layout)?.name || 'Standard'}</span>
+              {selectedObject && <><span style={{ color: 'rgba(246,241,251,0.22)', fontSize: 11 }}>·</span><span style={{ fontFamily: qxType.body, fontSize: 11, color: 'rgba(246,241,251,0.42)' }}>{selectedTypeLabel}</span></>}
             </div>
           </div>
-
-          <button onClick={(e) => { e.stopPropagation(); goTo(currentIndex + 1); }} disabled={currentIndex === total - 1} style={navStyle(currentIndex === total - 1, 'right')}
-            onMouseEnter={(e) => { if (currentIndex !== total - 1) { e.currentTarget.style.background = 'rgba(246,241,251,0.10)'; e.currentTarget.style.borderColor = 'rgba(246,241,251,0.30)'; } }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = currentIndex === total - 1 ? 'transparent' : 'rgba(246,241,251,0.04)'; e.currentTarget.style.borderColor = 'rgba(246,241,251,0.14)'; }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 2l5 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          </button>
+          <button onClick={() => goTo(currentIndex + 1)} disabled={currentIndex === total - 1} style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', width: 38, height: 38, borderRadius: '50%', border: '1px solid rgba(246,241,251,0.14)', background: 'rgba(246,241,251,0.04)', color: 'rgba(246,241,251,0.7)', cursor: currentIndex === total - 1 ? 'default' : 'pointer' }}>›</button>
         </div>
 
-        {/* ══ Edit panel (right drawer) ══ */}
         {editPanelOpen && (
-          <div style={{ width: 300, flexShrink: 0, borderLeft: '1px solid rgba(246,241,251,0.08)', background: '#0F031F', display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: `sgSlideIn 220ms ${qxEase}` }}
-            onClick={(e) => e.stopPropagation()}>
-
-            <div style={{ padding: '16px 18px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.30em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.40)' }}>Slide {String(currentIndex + 1).padStart(2, '0')}</div>
-                <div style={{ fontFamily: qxType.display, fontSize: 16, fontWeight: 600, color: '#F6F1FB', letterSpacing: '-0.012em', marginTop: 2 }}>Customise</div>
+          <aside style={inspectorPanel} onClick={(e) => e.stopPropagation()} aria-label="Customize slide">
+            <div style={inspectorHeader}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ padding: '3px 10px', borderRadius: 999, background: 'rgba(246,241,251,0.06)', border: '1px solid rgba(246,241,251,0.10)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.50)' }}>Slide</span>
+                    <span style={{ fontFamily: qxType.mono, fontSize: 10, fontWeight: 700, color: '#F6F1FB' }}>{String(currentIndex + 1).padStart(2, '0')}</span>
+                  </div>
+                </div>
+                <button onClick={() => setEditPanelOpen(false)} aria-label="Collapse panel" title="Collapse panel" style={{ width: 30, height: 30, borderRadius: 8, border: '1px solid rgba(246,241,251,0.10)', background: 'rgba(246,241,251,0.04)', color: 'rgba(246,241,251,0.50)', cursor: 'pointer', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
               </div>
-              <button onClick={() => setEditPanelOpen(false)} style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: 'rgba(246,241,251,0.06)', color: 'rgba(246,241,251,0.55)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-              </button>
+              <div style={{ marginTop: 12, ...inspectorCard, padding: 12, display: 'flex', alignItems: 'center', gap: 11 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 10, background: selectedObject ? 'rgba(212,255,63,0.14)' : 'rgba(246,241,251,0.07)', border: selectedObject ? '1px solid rgba(212,255,63,0.30)' : '1px solid rgba(246,241,251,0.10)', color: selectedObject ? QX.lime : 'rgba(246,241,251,0.50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, textTransform: 'uppercase' }}>{selectedObject ? selectedObject.type?.[0] : '▤'}</div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontFamily: qxType.body, fontSize: 13.5, fontWeight: 750, color: '#F6F1FB', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedObject ? (selectedObject.content?.slice(0, 28) || selectedObject.alt || selectedObject.role || selectedObject.type) : (LAYOUTS.find((l) => l.key === layout)?.name || 'Standard')}</div>
+                  <div style={{ marginTop: 2, fontFamily: qxType.mono, fontSize: 8.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedObject ? selectedSummary : 'Slide layout · click an object to select'}</div>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 7, marginTop: 12 }}>
+                {panelTabs.map((tab) => (
+                  <button key={tab.key} onClick={() => setEditTab(tab.key)} style={{ height: 38, borderRadius: 10, border: editTab === tab.key ? `1px solid ${QX.lime}` : '1px solid rgba(246,241,251,0.09)', background: editTab === tab.key ? 'rgba(212,255,63,0.13)' : 'rgba(246,241,251,0.035)', color: editTab === tab.key ? QX.lime : 'rgba(246,241,251,0.72)', cursor: 'pointer', fontFamily: qxType.body, fontSize: 12.5, fontWeight: 700 }}>
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
             </div>
-
-            {/* Tabs */}
-            <div style={{ display: 'flex', padding: '14px 18px 0', gap: 4 }}>
-              {['layout', 'image', 'style'].map((tab) => (
-                <button key={tab} onClick={() => setEditTab(tab)} style={{ flex: 1, padding: '8px 0', borderRadius: 7, border: 'none', cursor: 'pointer', fontFamily: qxType.body, fontSize: 12, background: editTab === tab ? 'rgba(212,255,63,0.10)' : 'transparent', color: editTab === tab ? '#D4FF3F' : 'rgba(246,241,251,0.5)', fontWeight: editTab === tab ? 600 : 500, transition: `all 140ms ${qxEase}`, textTransform: 'capitalize' }}>{tab}</button>
-              ))}
-            </div>
-
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
-
-              {/* LAYOUT TAB */}
-              {editTab === 'layout' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                  <div>
-                    <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)', marginBottom: 9 }}>Alignment</div>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {[
-                        { val: 'left',   icon: <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="1.4" rx=".7" fill="currentColor" /><rect x="1" y="5.5" width="8" height="1.4" rx=".7" fill="currentColor" opacity=".55" /><rect x="1" y="9" width="10" height="1.4" rx=".7" fill="currentColor" opacity=".55" /></svg> },
-                        { val: 'center', icon: <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="1.4" rx=".7" fill="currentColor" /><rect x="3" y="5.5" width="8" height="1.4" rx=".7" fill="currentColor" opacity=".55" /><rect x="2" y="9" width="10" height="1.4" rx=".7" fill="currentColor" opacity=".55" /></svg> },
-                        { val: 'right',  icon: <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="1.4" rx=".7" fill="currentColor" /><rect x="5" y="5.5" width="8" height="1.4" rx=".7" fill="currentColor" opacity=".55" /><rect x="3" y="9" width="10" height="1.4" rx=".7" fill="currentColor" opacity=".55" /></svg> },
-                      ].map((a) => (
-                        <button key={a.val} onClick={() => applyAlign(a.val)} style={{ flex: 1, height: 34, borderRadius: 7, padding: 0, border: align === a.val ? '1px solid rgba(212,255,63,0.55)' : '1px solid rgba(246,241,251,0.08)', background: align === a.val ? 'rgba(212,255,63,0.10)' : 'rgba(246,241,251,0.02)', color: align === a.val ? '#D4FF3F' : 'rgba(246,241,251,0.55)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: `all 140ms ${qxEase}` }}>{a.icon}</button>
-                      ))}
+            <div style={{ flex: 1, overflowY: 'auto', padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {editTab === 'style' && (
+                <>
+                  {!selectedObject && (
+                    <div style={inspectorCard}>
+                      <div style={sectionTitle}>Start editing</div>
+                      <div style={{ color: '#F6F1FB', fontFamily: qxType.display, fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Select text, image, or table</div>
+                      <div style={{ color: 'rgba(246,241,251,0.60)', fontSize: 12.5, lineHeight: 1.45 }}>Click any item on the slide to format, move, duplicate, or delete it.</div>
+                    </div>
+                  )}
+                  {canFormatText && (() => {
+                    const currentWeight = selectedFontStyle.fontWeight || (selectedFontStyle.bold ? 700 : 400);
+                    const activeColor = selectedFontStyle.color && /^#[0-9a-f]{6}$/i.test(selectedFontStyle.color) ? selectedFontStyle.color : '#F6F1FB';
+                    const colorPalette = ['#F6F1FB', '#B890FE', '#D4FF3F', '#7B2FBE', '#0891B2', '#22C55E'];
+                    const fieldLabel = { fontFamily: qxType.body, fontSize: 11, fontWeight: 500, color: 'rgba(246,241,251,0.55)', marginBottom: 7, display: 'block' };
+                    return (
+                      <div style={inspectorCard}>
+                        <div style={{ display: 'grid', gap: 14 }}>
+                          <div>
+                            <span style={fieldLabel}>Text</span>
+                            <select value={selectedFontStyle.fontFamily || qxType.body} onChange={(e) => updateSelectedStyle({ fontFamily: e.target.value })} style={compactField}>
+                              {[brandConfig?.displayFont, brandConfig?.bodyFont, qxType.display, qxType.body, 'Aptos', 'Aptos Display', 'Arial', 'Georgia', 'Times New Roman'].filter(Boolean).map((f) => <option key={f} value={f}>{String(f).replace(/"/g, '').split(',')[0].trim()}</option>)}
+                            </select>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: 10 }}>
+                            <div>
+                              <span style={fieldLabel}>Weight</span>
+                              <select value={currentWeight} onChange={(e) => { const w = parseInt(e.target.value); updateSelectedStyle({ fontWeight: w, bold: w >= 600 }); }} style={compactField}>
+                                <option value={400}>Regular · 400</option>
+                                <option value={500}>Medium · 500</option>
+                                <option value={600}>Semibold · 600</option>
+                                <option value={700}>Bold · 700</option>
+                                <option value={800}>Extra bold · 800</option>
+                              </select>
+                            </div>
+                            <div>
+                              <span style={fieldLabel}>Size</span>
+                              <div style={{ display: 'flex', alignItems: 'center', height: 40, borderRadius: 10, border: '1px solid rgba(246,241,251,0.13)', background: 'rgba(5,0,12,0.35)', overflow: 'hidden' }}>
+                                <button onClick={() => updateSelectedFontSize(Math.max(6, (selectedFontStyle.fontSize || 16) - 1))} style={{ width: 34, height: '100%', border: 'none', borderRight: '1px solid rgba(246,241,251,0.08)', background: 'transparent', color: 'rgba(246,241,251,0.65)', cursor: 'pointer', fontSize: 16, flexShrink: 0 }}>−</button>
+                                <input type="number" min="6" max="96" value={selectedFontStyle.fontSize || 16} onChange={(e) => updateSelectedFontSize(e.target.value)} style={{ flex: 1, textAlign: 'center', background: 'transparent', border: 'none', color: '#F6F1FB', fontFamily: qxType.body, fontSize: 13, fontWeight: 600, outline: 'none', padding: 0, width: 0 }} />
+                                <button onClick={() => updateSelectedFontSize(Math.min(96, (selectedFontStyle.fontSize || 16) + 1))} style={{ width: 34, height: '100%', border: 'none', borderLeft: '1px solid rgba(246,241,251,0.08)', background: 'transparent', color: 'rgba(246,241,251,0.65)', cursor: 'pointer', fontSize: 16, flexShrink: 0 }}>+</button>
+                              </div>
+                            </div>
+                          </div>
+                          <div>
+                            <span style={fieldLabel}>Colour</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              {colorPalette.map((hex) => (
+                                <button key={hex} onClick={() => updateSelectedStyle({ color: hex })} title={hex} style={{ width: 28, height: 28, borderRadius: 6, background: hex, border: activeColor.toUpperCase() === hex.toUpperCase() ? `2px solid #F6F1FB` : '1.5px solid rgba(246,241,251,0.15)', cursor: 'pointer', padding: 0, flexShrink: 0 }} />
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <span style={fieldLabel}>Alignment & emphasis</span>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
+                              <button onClick={() => updateSelectedStyle({ bold: !selectedFontStyle.bold, fontWeight: selectedFontStyle.bold ? 400 : 700 })} style={miniButton(selectedFontStyle.bold)}>B</button>
+                              <button onClick={() => updateSelectedStyle({ italic: !selectedFontStyle.italic })} style={{ ...miniButton(selectedFontStyle.italic), fontStyle: 'italic' }}>I</button>
+                              {[['left','←'], ['center','↔'], ['right','→']].map(([a, sym]) => <button key={a} onClick={() => updateSelectedStyle({ align: a })} style={miniButton(selectedFontStyle.align === a)}>{sym}</button>)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  {selectedObject?.type === 'shape' && (
+                    <div style={inspectorCard}>
+                      <div style={sectionTitle}>Fill & opacity</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 96px', gap: 10 }}>
+                        <div>
+                          <label style={{ ...rowLabel, display: 'block', marginBottom: 7 }}>Fill color</label>
+                          <div style={{ position: 'relative' }}>
+                            <input type="color" value={selectedObject.style?.fill && /^#[0-9a-f]{6}$/i.test(selectedObject.style.fill) ? selectedObject.style.fill : '#1A0530'} onChange={(e) => updateObject(selectedObjectId, { style: { fill: e.target.value } })} style={{ ...compactField, height: 40, padding: 3, cursor: 'pointer', width: '100%' }} />
+                            <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontFamily: qxType.mono, fontSize: 10, color: 'rgba(246,241,251,0.55)', pointerEvents: 'none', letterSpacing: '0.06em' }}>
+                              {(selectedObject.style?.fill && /^#[0-9a-f]{6}$/i.test(selectedObject.style.fill) ? selectedObject.style.fill : '#1A0530').toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
+                        <div>
+                          <label style={{ ...rowLabel, display: 'block', marginBottom: 7 }}>Opacity</label>
+                          <input type="number" min="0" max="1" step="0.05" value={Math.round((selectedObject.style?.opacity ?? 1) * 100) / 100} onChange={(e) => updateObject(selectedObjectId, { style: { opacity: Math.min(1, Math.max(0, parseFloat(e.target.value) || 0)) } })} style={compactField} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {selectedObject?.type === 'image' && (
+                    <div style={inspectorCard}>
+                      <div style={sectionTitle}>Image</div>
+                      <div style={{ color: 'rgba(246,241,251,0.64)', fontSize: 12.5, lineHeight: 1.45, marginBottom: 10 }}>Search or replace this photo in the Images tab.</div>
+                      <button onClick={() => setEditTab('image')} style={{ ...inspectorButton('primary'), width: '100%' }}>Open Images</button>
+                    </div>
+                  )}
+                  <div style={inspectorCard}>
+                    <div style={sectionTitle}>Object actions</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <button onClick={duplicateSelected} disabled={!selectedObject} style={inspectorButton('ghost', !selectedObject)}>Duplicate</button>
+                      <button onClick={deleteSelected} disabled={!selectedObject} style={inspectorButton('danger', !selectedObject)}>Delete</button>
+                      <button onClick={bringForward} disabled={!selectedObject} style={inspectorButton('ghost', !selectedObject)}>Bring forward</button>
+                      <button onClick={sendBackward} disabled={!selectedObject} style={inspectorButton('ghost', !selectedObject)}>Send back</button>
                     </div>
                   </div>
-
-                  <div>
-                    <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)', marginBottom: 9 }}>Layout</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
+                </>
+              )}
+              {editTab === 'layout' && (() => {
+                const lt = (key, active) => {
+                  const s = active ? QX.lime : 'rgba(246,241,251,0.30)';
+                  const f = active ? 'rgba(212,255,63,0.18)' : 'rgba(246,241,251,0.08)';
+                  const shapes = {
+                    standard:          (<><rect x="3" y="5" width="22" height="3" rx="1" fill={s} /><rect x="3" y="11" width="18" height="1.5" rx="0.75" fill={s} opacity="0.5" /><rect x="3" y="14.5" width="14" height="1.5" rx="0.75" fill={s} opacity="0.4" /></>),
+                    split:             (<><rect x="3" y="4" width="11" height="14" rx="1" fill={f} stroke={s} strokeWidth="0.6" /><rect x="16" y="4" width="9" height="14" rx="1" fill={f} stroke={s} strokeWidth="0.6" /></>),
+                    bigTitle:          (<><rect x="3" y="7" width="22" height="5" rx="1" fill={s} /><rect x="3" y="15" width="12" height="1.5" rx="0.75" fill={s} opacity="0.4" /></>),
+                    stat:              (<><rect x="9" y="4" width="10" height="8" rx="1" fill={f} stroke={s} strokeWidth="0.6" /><rect x="7" y="15" width="14" height="2" rx="1" fill={s} opacity="0.4" /></>),
+                    quote:             (<><rect x="5" y="7" width="18" height="2" rx="1" fill={s} opacity="0.7" /><rect x="5" y="11" width="18" height="2" rx="1" fill={s} opacity="0.7" /><rect x="9" y="15" width="10" height="1.5" rx="0.75" fill={s} opacity="0.3" /></>),
+                    image:             (<><rect x="3" y="4" width="10" height="14" rx="1" fill={f} stroke={s} strokeWidth="0.6" /><rect x="15" y="5" width="10" height="2.5" rx="1" fill={s} /><rect x="15" y="10" width="8" height="1.5" rx="0.75" fill={s} opacity="0.4" /><rect x="15" y="13" width="8" height="1.5" rx="0.75" fill={s} opacity="0.4" /></>),
+                    minimal:           (<><rect x="4" y="9" width="20" height="4" rx="1" fill={s} /></>),
+                    centered:          (<><rect x="7" y="5" width="14" height="3" rx="1" fill={s} /><rect x="8" y="11" width="12" height="1.5" rx="0.75" fill={s} opacity="0.5" /><rect x="10" y="14.5" width="8" height="1.5" rx="0.75" fill={s} opacity="0.35" /></>),
+                    process_flow:      (<><rect x="2" y="7" width="7" height="8" rx="1" fill={f} stroke={s} strokeWidth="0.6" /><rect x="11" y="7" width="7" height="8" rx="1" fill={f} stroke={s} strokeWidth="0.6" /><rect x="20" y="7" width="6" height="8" rx="1" fill={f} stroke={s} strokeWidth="0.6" /></>),
+                    comparison:        (<><rect x="3" y="4" width="10" height="14" rx="1" fill={f} stroke={s} strokeWidth="0.6" /><rect x="15" y="4" width="10" height="14" rx="1" fill={f} stroke={s} strokeWidth="0.6" /></>),
+                    table_matrix:      (<><rect x="3" y="4" width="22" height="3" rx="0.5" fill={s} opacity="0.75" /><rect x="3" y="9" width="22" height="2" rx="0.5" fill={s} opacity="0.3" /><rect x="3" y="13" width="22" height="2" rx="0.5" fill={s} opacity="0.3" /></>),
+                    timeline:          (<><line x1="3" y1="11" x2="25" y2="11" stroke={s} strokeWidth="1.5" opacity="0.5" /><circle cx="8" cy="11" r="2" fill={s} /><circle cx="15" cy="11" r="2" fill={s} /><circle cx="22" cy="11" r="2" fill={s} /></>),
+                    statistics:        (<><rect x="2" y="4" width="10" height="7" rx="1" fill={f} stroke={s} strokeWidth="0.5" /><rect x="14" y="4" width="10" height="7" rx="1" fill={f} stroke={s} strokeWidth="0.5" /><rect x="2" y="13" width="10" height="6" rx="1" fill={f} stroke={s} strokeWidth="0.5" /><rect x="14" y="13" width="10" height="6" rx="1" fill={f} stroke={s} strokeWidth="0.5" /></>),
+                    hierarchy:         (<><rect x="9" y="3" width="10" height="4" rx="1" fill={s} opacity="0.8" /><rect x="4" y="10" width="8" height="4" rx="1" fill={s} opacity="0.5" /><rect x="16" y="10" width="8" height="4" rx="1" fill={s} opacity="0.5" /></>),
+                    roadmap:           (<><rect x="2" y="7" width="7" height="8" rx="1" fill={f} stroke={s} strokeWidth="0.6" /><rect x="11" y="7" width="7" height="8" rx="1" fill={f} stroke={s} strokeWidth="0.6" /><rect x="20" y="7" width="6" height="8" rx="1" fill={f} stroke={s} strokeWidth="0.6" /></>),
+                    problem_solution:  (<><rect x="3" y="5" width="10" height="12" rx="1" fill={f} stroke={s} strokeWidth="0.6" /><rect x="15" y="5" width="10" height="12" rx="1" fill={active ? 'rgba(212,255,63,0.28)' : 'rgba(246,241,251,0.12)'} stroke={s} strokeWidth="0.6" /></>),
+                    feature_breakdown: (<><rect x="2" y="4" width="7" height="14" rx="1" fill={f} stroke={s} strokeWidth="0.6" /><rect x="11" y="4" width="6" height="14" rx="1" fill={f} stroke={s} strokeWidth="0.6" /><rect x="19" y="4" width="7" height="14" rx="1" fill={f} stroke={s} strokeWidth="0.6" /></>),
+                    summary:           (<><rect x="3" y="5" width="22" height="2" rx="1" fill={s} /><rect x="3" y="9.5" width="22" height="1.5" rx="0.75" fill={s} opacity="0.5" /><rect x="3" y="13" width="22" height="1.5" rx="0.75" fill={s} opacity="0.5" /><rect x="3" y="16.5" width="14" height="1.5" rx="0.75" fill={s} opacity="0.35" /></>),
+                    image_focus:       (<><rect x="0" y="0" width="28" height="22" fill={f} stroke={s} strokeWidth="0.5" /><rect x="4" y="7" width="20" height="3" rx="1" fill={s} /><rect x="7" y="13" width="14" height="1.5" rx="0.75" fill={s} opacity="0.4" /></>),
+                  };
+                  return (
+                    <svg viewBox="0 0 28 22" style={{ display: 'block', width: '100%', height: 48 }}>
+                      {shapes[key] || shapes.standard}
+                    </svg>
+                  );
+                };
+                return (
+                  <div style={inspectorCard}>
+                    <div style={{ fontFamily: qxType.body, fontSize: 13, fontWeight: 700, color: '#F6F1FB', marginBottom: 4 }}>Choose a layout</div>
+                    <div style={{ fontSize: 11.5, color: 'rgba(246,241,251,0.50)', lineHeight: 1.5, marginBottom: 14 }}>Switching layout rebuilds this slide's objects from your content.</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                       {LAYOUTS.map((l) => {
                         const active = layout === l.key;
                         return (
-                          <button key={l.key} onClick={() => applyLayout(l.key)} style={{ borderRadius: 8, padding: 0, cursor: 'pointer', border: active ? '1px solid rgba(212,255,63,0.55)' : '1px solid rgba(246,241,251,0.08)', background: active ? 'rgba(212,255,63,0.06)' : 'rgba(246,241,251,0.02)', transition: `all 140ms ${qxEase}`, display: 'flex', flexDirection: 'column', gap: 0, overflow: 'hidden' }}
-                            onMouseEnter={(e) => { if (!active) { e.currentTarget.style.borderColor = 'rgba(246,241,251,0.18)'; e.currentTarget.style.background = 'rgba(246,241,251,0.05)'; } }}
-                            onMouseLeave={(e) => { if (!active) { e.currentTarget.style.borderColor = 'rgba(246,241,251,0.08)'; e.currentTarget.style.background = 'rgba(246,241,251,0.02)'; } }}>
-                            <div style={{ width: '100%', aspectRatio: '16/9', background: theme.gradient, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              {layoutSwatch(l.key, theme)}
-                            </div>
-                            <div style={{ padding: '7px 9px 8px', textAlign: 'left' }}>
-                              <div style={{ fontFamily: qxType.body, fontSize: 11.5, fontWeight: 600, color: active ? '#D4FF3F' : 'rgba(246,241,251,0.85)' }}>{l.name}</div>
-                              <div style={{ fontFamily: qxType.mono, fontSize: 9, color: 'rgba(246,241,251,0.40)', letterSpacing: '0.04em', marginTop: 2 }}>{l.desc}</div>
-                            </div>
+                          <button key={l.key} onClick={() => applyLayout(l.key)} style={{ borderRadius: 10, border: active ? `1.5px solid ${QX.lime}` : '1px solid rgba(246,241,251,0.10)', background: active ? 'rgba(212,255,63,0.08)' : 'rgba(5,0,12,0.28)', cursor: 'pointer', textAlign: 'left', padding: '10px 10px 8px', boxShadow: active ? `0 0 0 3px rgba(212,255,63,0.06)` : 'none' }}>
+                            {lt(l.key, active)}
+                            <div style={{ fontSize: 12, fontWeight: 700, color: active ? QX.lime : '#F6F1FB', marginTop: 6 }}>{l.name}</div>
+                            <div style={{ marginTop: 3, fontFamily: qxType.mono, fontSize: 7.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.38)' }}>{l.desc}</div>
                           </button>
                         );
                       })}
                     </div>
                   </div>
-                </div>
-              )}
-
-              {/* IMAGE TAB */}
+                );
+              })()}
               {editTab === 'image' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {/* Current image strip */}
-                  {slideImages[currentIndex] && (
-                    <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '16/9', background: `url(${slideImages[currentIndex]}) center/cover no-repeat`, border: '1px solid rgba(246,241,251,0.10)' }}>
-                      <button onClick={removeImage} style={{ position: 'absolute', top: 7, right: 7, padding: '4px 9px', borderRadius: 6, border: '1px solid rgba(224,62,107,0.45)', background: 'rgba(0,0,0,0.60)', backdropFilter: 'blur(6px)', color: '#F472A6', fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', cursor: 'pointer' }}>Remove</button>
-                    </div>
-                  )}
-
-                  {/* Upload from computer */}
-                  <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)' }}>Upload from computer</div>
-                  <label
-                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '18px 12px', border: '1px dashed rgba(246,241,251,0.16)', borderRadius: 9, cursor: 'pointer', background: 'rgba(246,241,251,0.02)', transition: `background 140ms ${qxEase}` }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(246,241,251,0.06)'; e.currentTarget.style.borderColor = 'rgba(246,241,251,0.28)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(246,241,251,0.02)'; e.currentTarget.style.borderColor = 'rgba(246,241,251,0.16)'; }}
-                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.background = 'rgba(212,255,63,0.06)'; e.currentTarget.style.borderColor = 'rgba(212,255,63,0.35)'; }}
-                    onDragLeave={(e) => { e.currentTarget.style.background = 'rgba(246,241,251,0.02)'; e.currentTarget.style.borderColor = 'rgba(246,241,251,0.16)'; }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      e.currentTarget.style.background = 'rgba(246,241,251,0.02)';
-                      e.currentTarget.style.borderColor = 'rgba(246,241,251,0.16)';
-                      const file = e.dataTransfer.files[0];
-                      if (file && file.type.startsWith('image/')) {
-                        const reader = new FileReader();
-                        reader.onload = (ev) => applyImage(ev.target.result);
-                        reader.readAsDataURL(file);
-                      }
-                    }}
-                  >
-                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => {
-                      const file = e.target.files[0];
-                      if (!file) return;
-                      const reader = new FileReader();
-                      reader.onload = (ev) => applyImage(ev.target.result);
-                      reader.readAsDataURL(file);
-                      e.target.value = '';
-                    }} />
-                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 14V4M7 8l4-4 4 4" stroke="rgba(246,241,251,0.45)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /><path d="M3 16v1a2 2 0 002 2h12a2 2 0 002-2v-1" stroke="rgba(246,241,251,0.28)" strokeWidth="1.5" strokeLinecap="round" /></svg>
-                    <span style={{ fontFamily: qxType.body, fontSize: 12, color: 'rgba(246,241,251,0.55)' }}>Click or drag an image here</span>
-                    <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', color: 'rgba(246,241,251,0.28)', textTransform: 'uppercase' }}>JPG · PNG · WEBP · GIF</span>
-                  </label>
-
-                  {/* Divider */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0' }}>
-                    <div style={{ flex: 1, height: 1, background: 'rgba(246,241,251,0.08)' }} />
-                    <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.24em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.28)' }}>or generate</span>
-                    <div style={{ flex: 1, height: 1, background: 'rgba(246,241,251,0.08)' }} />
-                  </div>
-
-                  {/* Gemini image generation */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                    <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" fill="url(#gImg)" /><defs><radialGradient id="gImg" cx="30%" cy="30%"><stop offset="0%" stopColor="#4285F4"/><stop offset="60%" stopColor="#0F9D58"/><stop offset="100%" stopColor="#F4B400"/></radialGradient></defs></svg>
-                    <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)' }}>Generate with Gemini</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <input
-                      value={imgQuery}
-                      onChange={(e) => setImgQuery(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') handleGeminiImageGenerate(); }}
-                      placeholder="modern office, city skyline, data visualization…"
-                      disabled={imgGenerating}
-                      style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(66,133,244,0.18)', background: 'rgba(66,133,244,0.05)', color: '#F6F1FB', fontFamily: qxType.body, fontSize: 12.5, outline: 'none', boxSizing: 'border-box', opacity: imgGenerating ? 0.55 : 1 }}
-                    />
-                    <button
-                      onClick={handleGeminiImageGenerate}
-                      disabled={!imgQuery.trim() || imgGenerating}
-                      style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 8, border: 'none', background: imgQuery.trim() && !imgGenerating ? 'linear-gradient(135deg,#4285F4,#0F9D58)' : 'rgba(246,241,251,0.06)', color: imgQuery.trim() && !imgGenerating ? '#fff' : 'rgba(246,241,251,0.25)', cursor: imgQuery.trim() && !imgGenerating ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: `all 140ms ${qxEase}` }}>
-                      {imgGenerating
-                        ? <div style={{ width: 12, height: 12, border: '1.5px solid rgba(255,255,255,0.25)', borderTopColor: '#fff', borderRadius: '50%', animation: 'sgSpin 0.7s linear infinite' }} />
-                        : <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1l1.1 3L11 5.5 7.6 6.9 6.5 10 5.4 6.9 2 5.5l3.4-1.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" fill="currentColor" fillOpacity="0.15" /></svg>
-                      }
-                    </button>
-                  </div>
-                  {imgGenerating && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 2px' }}>
-                      <div style={{ width: 10, height: 10, border: '1.5px solid rgba(66,133,244,0.25)', borderTopColor: '#4285F4', borderRadius: '50%', animation: 'sgSpin 0.7s linear infinite', flexShrink: 0 }} />
-                      <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.38)' }}>Finding photos…</span>
-                    </div>
-                  )}
-                  {imgResults.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                        {imgResults.map((img) => (
-                          <button key={img.id} onClick={() => applyImage(img.src)} style={{ padding: 0, border: slideImages[currentIndex] === img.src ? '1px solid rgba(212,255,63,0.55)' : '1px solid rgba(246,241,251,0.08)', borderRadius: 7, overflow: 'hidden', cursor: 'pointer', aspectRatio: '16/9', background: '#0a0118' }}>
-                            <img src={img.thumb} alt={img.alt || ''} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                          </button>
-                        ))}
+                <>
+                  <div style={inspectorCard}>
+                    <div style={sectionTitle}>Selected image</div>
+                    {activeImageObject ? (
+                      <div style={{ display: 'grid', gap: 10 }}>
+                        {activeImageObject.src ? (
+                        <div style={{ aspectRatio: '16/9', borderRadius: 10, overflow: 'hidden', background: `url(${activeImageObject.src}) center/cover no-repeat`, border: '1px solid rgba(246,241,251,0.10)' }} />
+                      ) : (
+                        <div style={{ aspectRatio: '16/9', borderRadius: 10, border: '1.5px dashed rgba(246,241,251,0.22)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                          <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.38)' }}>Empty frame</span>
+                          <span style={{ fontFamily: qxType.mono, fontSize: 8, letterSpacing: '0.14em', color: 'rgba(246,241,251,0.22)' }}>16 : 9</span>
+                        </div>
+                      )}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          <button onClick={() => fetchImages(1, imageSearchValue)} disabled={imgGenerating} style={inspectorButton('primary', imgGenerating)}>{imgGenerating ? 'Searching...' : 'Replace'}</button>
+                          <button onClick={removeImage} style={inspectorButton('ghost')}>Clear</button>
+                        </div>
                       </div>
-                      <button
-                        onClick={handleRegenerateImages}
-                        disabled={imgGenerating}
-                        style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(246,241,251,0.12)', background: 'rgba(246,241,251,0.05)', color: imgGenerating ? 'rgba(246,241,251,0.3)' : 'rgba(246,241,251,0.65)', fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', cursor: imgGenerating ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, transition: `all 140ms ${qxEase}` }}
-                        onMouseEnter={(e) => { if (!imgGenerating) e.currentTarget.style.background = 'rgba(246,241,251,0.10)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(246,241,251,0.05)'; }}>
-                        {imgGenerating
-                          ? <><svg width="11" height="11" viewBox="0 0 11 11" fill="none" style={{ animation: 'spin 0.9s linear infinite' }}><circle cx="5.5" cy="5.5" r="4" stroke="rgba(246,241,251,0.3)" strokeWidth="1.4" /><path d="M5.5 1.5A4 4 0 0 1 9.5 5.5" stroke="rgba(246,241,251,0.65)" strokeWidth="1.4" strokeLinecap="round" /></svg>Finding…</>
-                          : <><svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M9 5.5A3.5 3.5 0 1 1 5.5 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /><path d="M5.5 2l1.5-1.5v3L5.5 2z" fill="currentColor" /></svg>Regenerate</>}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* STYLE TAB */}
-              {editTab === 'style' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                  <div>
-                    <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)', marginBottom: 9 }}>Theme override</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-                      {Object.entries(THEMES).map(([key, t]) => {
-                        const active     = (slideThemeOverrides[currentIndex] || globalTheme) === key;
-                        const isOverride = slideThemeOverrides[currentIndex] === key;
-                        return (
-                          <button key={key} title={t.name} onClick={() => applySlideTheme(key)} style={{ aspectRatio: '1', borderRadius: 8, background: t.gradient, padding: 0, cursor: 'pointer', border: active ? `2px solid ${isOverride ? '#D4FF3F' : '#F6F1FB'}` : '1px solid rgba(246,241,251,0.10)', transition: `all 140ms ${qxEase}` }} />
-                        );
-                      })}
-                    </div>
-                    {slideThemeOverrides[currentIndex] && (
-                      <button onClick={() => setSlideThemeOverrides((p) => { const n = { ...p }; delete n[currentIndex]; return n; })}
-                        style={{ width: '100%', marginTop: 10, padding: '7px', borderRadius: 7, border: '1px solid rgba(246,241,251,0.08)', background: 'transparent', color: 'rgba(246,241,251,0.55)', fontFamily: qxType.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', cursor: 'pointer' }}>
-                        Reset to deck theme
-                      </button>
+                    ) : (
+                      <div style={{ display: 'grid', gap: 11 }}>
+                        <div style={{ color: 'rgba(246,241,251,0.64)', fontSize: 12.5, lineHeight: 1.45 }}>No image is selected. Add a frame or search below to insert one.</div>
+                        <button onClick={addImagePlaceholder} style={{ ...inspectorButton('ghost'), width: '100%' }}>Add image frame</button>
+                      </div>
                     )}
                   </div>
-                  <div>
-                    <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)', marginBottom: 9 }}>Quick actions</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <PanelAction label="Export slide as PDF" onClick={handleExportPDF} icon={<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y=".5" width="9" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2" /><path d="M3.5 4.5h5M3.5 7h3" stroke="currentColor" strokeWidth="1" strokeLinecap="round" /></svg>} />
-                      <PanelAction label="Save as PNG" onClick={handleDownloadPNG} icon={<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="2" width="10" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.2" /><circle cx="4" cy="5" r=".9" fill="currentColor" opacity=".6" /><path d="M1 9l2.5-2.5L6 9l1.5-1.5L11 9" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" /></svg>} />
-                      <PanelAction label="Share this deck" onClick={handleShare} icon={<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="9.5" cy="2" r="1.5" stroke="currentColor" strokeWidth="1.2" /><circle cx="9.5" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.2" /><circle cx="2.5" cy="6" r="1.5" stroke="currentColor" strokeWidth="1.2" /><path d="M3.8 6.7l4.2 2.6M3.8 5.3l4.2-2.6" stroke="currentColor" strokeWidth="1" /></svg>} />
-                    </div>
+                  <div style={inspectorCard}>
+                    <div style={sectionTitle}>Search Unsplash</div>
+                    <input value={imgQuery} onChange={(e) => setImgQuery(e.target.value)} placeholder={selectedObject?.prompt || slide.imagePrompt || 'Describe the image you need'} style={compactField} />
+                    <button onClick={() => { setImgPage(1); fetchImages(1); }} disabled={imgGenerating || !imageSearchValue} style={{ ...inspectorButton('primary', imgGenerating || !imageSearchValue), width: '100%', marginTop: 9 }}>{imgGenerating ? 'Finding photos...' : 'Search Unsplash'}</button>
+                    {imgResults.length > 0 && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, marginTop: 12 }}>
+                        {imgResults.map((img) => (
+                          <button key={img.id} onClick={() => applyImage(img)} style={{ padding: 0, border: selectedObject?.src === img.src ? `2px solid ${QX.lime}` : '1px solid rgba(246,241,251,0.10)', borderRadius: 10, overflow: 'hidden', cursor: 'pointer', aspectRatio: '16/9', background: `url(${img.thumb}) center/cover no-repeat`, boxShadow: '0 10px 24px rgba(0,0,0,0.18)' }} title={img.alt} aria-label={`Use image ${img.alt || img.id}`} />
+                        ))}
+                      </div>
+                    )}
+                    {imgResults.length > 0 && <button onClick={() => { const next = imgPage + 1; setImgPage(next); fetchImages(next); }} disabled={imgGenerating} style={{ ...inspectorButton('ghost', imgGenerating), width: '100%', marginTop: 9 }}>More images</button>}
                   </div>
-                </div>
+                  <div style={inspectorCard}>
+                    <div style={sectionTitle}>Use image URL</div>
+                    <input value={imgUrl} onChange={(e) => setImgUrl(e.target.value)} placeholder="https://..." style={compactField} />
+                    <button onClick={applyImageUrl} disabled={!imgUrl.trim()} style={{ ...inspectorButton('ghost', !imgUrl.trim()), width: '100%', marginTop: 9 }}>Apply URL</button>
+                  </div>
+                </>
               )}
-            </div>
+              {editTab === 'table' && (() => {
+                const headerPresets = [
+                  { label: 'Lime',    bg: '#D4FF3F', text: '#1A0530' },
+                  { label: 'Lilac',   bg: '#B890FE', text: '#1A0530' },
+                  { label: 'Brand',   bg: '#7B2FBE', text: '#F6F1FB' },
+                  { label: 'Surface', bg: '#170729', text: 'rgba(246,241,251,0.55)' },
+                  { label: 'Green',   bg: '#22C55E', text: '#1A0530' },
+                ];
+                const bodyPresets = [
+                  { label: 'Subtle',  bg: 'transparent' },
+                  { label: 'Surface', bg: 'rgba(246,241,251,0.05)' },
+                  { label: 'Deep',    bg: 'rgba(26,5,48,0.70)' },
+                  { label: 'Violet',  bg: 'rgba(123,47,190,0.22)' },
+                  { label: 'Stripe',  bg: 'rgba(246,241,251,0.02)', stripe: true },
+                ];
+                const isTbl = selectedObject?.type === 'table';
+                const curHdrFill = selectedObject?.style?.headerFill || '#D4FF3F';
+                const curHdrText = selectedObject?.style?.headerText || '#1A0530';
+                const curBdyFill = selectedObject?.style?.bodyFill ?? 'transparent';
+                const curAlt     = selectedObject?.style?.alternateRows || false;
+                const activeHdr  = headerPresets.find(p => p.bg === curHdrFill) || headerPresets[0];
+                const activeBdy  = bodyPresets.find(p => p.bg === curBdyFill)  || bodyPresets[0];
+                const previewRows = selectedObject?.rows?.slice(0, 3) || [];
+                const colCount = previewRows[0]?.length || 3;
+                return (
+                  <>
+                    {/* Show table styling when a table is selected */}
+                    {isTbl ? (
+                      <>
+                        {/* Live mini preview */}
+                        <div style={inspectorCard}>
+                          <div style={{ ...sectionTitle, marginBottom: 10 }}>Table preview</div>
+                          <div style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(246,241,251,0.10)' }}>
+                            {previewRows.length > 0 ? previewRows.map((row, ri) => {
+                              const isHdr = ri === 0;
+                              const isAlt = !isHdr && curAlt && ri % 2 === 0;
+                              const rowBg = isHdr ? curHdrFill : isAlt ? 'rgba(246,241,251,0.07)' : curBdyFill;
+                              const rowClr = isHdr ? curHdrText : (selectedObject?.style?.bodyText || '#F6F1FB');
+                              return (
+                                <div key={ri} style={{ display: 'grid', gridTemplateColumns: `repeat(${row.length}, 1fr)`, borderBottom: ri < previewRows.length - 1 ? '1px solid rgba(246,241,251,0.08)' : 'none' }}>
+                                  {row.map((cell, ci) => (
+                                    <div key={ci} style={{ padding: '7px 10px', background: rowBg, color: rowClr, fontFamily: qxType.body, fontSize: 11, fontWeight: isHdr ? 700 : 400, borderRight: ci < row.length - 1 ? '1px solid rgba(246,241,251,0.08)' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {cell.text || ''}
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            }) : (
+                              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${colCount}, 1fr)` }}>
+                                {Array.from({ length: colCount }).map((_, ci) => (
+                                  <div key={ci} style={{ padding: '7px 10px', background: curHdrFill, color: curHdrText, fontFamily: qxType.body, fontSize: 11, fontWeight: 700, borderRight: ci < colCount - 1 ? '1px solid rgba(246,241,251,0.08)' : 'none' }}>Col {ci + 1}</div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
 
-            {/* Edit with Agent — pinned bottom */}
-            <div style={{ padding: '12px 18px', borderTop: '1px solid rgba(246,241,251,0.08)', flexShrink: 0 }}>
-              <button onClick={() => { setEditPanelOpen(false); openAgent(currentIndex); }}
-                style={{ width: '100%', padding: '11px 14px', borderRadius: 9, border: '1px solid rgba(212,255,63,0.4)', background: 'rgba(212,255,63,0.08)', color: '#D4FF3F', fontFamily: qxType.body, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: `all 160ms ${qxEase}` }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(212,255,63,0.18)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(212,255,63,0.08)'; }}>
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1l1.2 3.3L11 5.5 7.7 6.7 6.5 10l-1.2-3.3L2 5.5l3.3-1.2L6.5 1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>
-                Edit with Agent
-              </button>
+                        {/* Header row colour */}
+                        <div style={inspectorCard}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                            <span style={{ fontFamily: qxType.body, fontSize: 12.5, fontWeight: 650, color: '#F6F1FB' }}>Header row</span>
+                            <span style={{ fontFamily: qxType.body, fontSize: 11.5, color: 'rgba(246,241,251,0.45)' }}>{activeHdr.label}</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: 7 }}>
+                            {headerPresets.map(p => (
+                              <button key={p.label} title={p.label} onClick={() => updateObject(selectedObjectId, { style: { headerFill: p.bg, headerText: p.text } })}
+                                style={{ flex: 1, height: 44, borderRadius: 12, background: p.bg, border: curHdrFill === p.bg ? '2px solid #F6F1FB' : '1.5px solid rgba(246,241,251,0.12)', cursor: 'pointer', padding: 0, transition: 'border 130ms' }} />
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Body rows colour */}
+                        <div style={inspectorCard}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                            <span style={{ fontFamily: qxType.body, fontSize: 12.5, fontWeight: 650, color: '#F6F1FB' }}>Body rows</span>
+                            <span style={{ fontFamily: qxType.body, fontSize: 11.5, color: 'rgba(246,241,251,0.45)' }}>{activeBdy.label}</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: 7 }}>
+                            {bodyPresets.map(p => (
+                              <button key={p.label} title={p.label} onClick={() => updateObject(selectedObjectId, { style: { bodyFill: p.bg } })}
+                                style={{ flex: 1, height: 44, borderRadius: 12, background: p.stripe ? 'repeating-linear-gradient(135deg,rgba(246,241,251,0.12) 0px,rgba(246,241,251,0.12) 3px,rgba(11,1,24,0.80) 3px,rgba(11,1,24,0.80) 9px)' : (p.bg === 'transparent' ? 'rgba(246,241,251,0.05)' : p.bg), border: curBdyFill === p.bg ? '2px solid #F6F1FB' : '1.5px solid rgba(246,241,251,0.12)', cursor: 'pointer', padding: 0, transition: 'border 130ms' }} />
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Alternate row shading */}
+                        <div style={{ ...inspectorCard, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontFamily: qxType.body, fontSize: 12.5, fontWeight: 650, color: '#F6F1FB' }}>Alternate row shading</span>
+                          <button onClick={() => updateObject(selectedObjectId, { style: { alternateRows: !curAlt } })}
+                            style={{ width: 44, height: 26, borderRadius: 13, border: 'none', background: curAlt ? QX.lime : 'rgba(246,241,251,0.14)', cursor: 'pointer', position: 'relative', transition: 'background 180ms', flexShrink: 0, padding: 0 }}>
+                            <span style={{ position: 'absolute', top: 3, left: curAlt ? 21 : 3, width: 20, height: 20, borderRadius: '50%', background: curAlt ? '#1A0530' : '#F6F1FB', transition: 'left 180ms', display: 'block' }} />
+                          </button>
+                        </div>
+
+                        {/* Add table — inside card to match the lilac card appearance */}
+                        <div style={inspectorCard}>
+                          <button onClick={addTable} style={{ ...inspectorButton('ghost'), width: '100%' }}>Add table</button>
+                        </div>
+                      </>
+                    ) : (
+                      /* No table selected — prompt to insert */
+                      <>
+                        <div style={inspectorCard}>
+                          <div style={sectionTitle}>Tables</div>
+                          <div style={{ color: 'rgba(246,241,251,0.55)', fontFamily: qxType.body, fontSize: 12.5, lineHeight: 1.5, marginBottom: 14 }}>Insert a table, click any cell to edit it, then set row colours here.</div>
+                        </div>
+                        <div style={inspectorCard}>
+                          <button onClick={addTable} style={{ ...inspectorButton('ghost'), width: '100%' }}>Add table</button>
+                        </div>
+                      </>
+                    )}
+                  </>
+                );
+              })()}
             </div>
-          </div>
+            <div style={{ padding: '10px 18px 12px', borderTop: '1px solid rgba(246,241,251,0.06)', display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: QX.lime, display: 'inline-block', flexShrink: 0 }} />
+              <span style={{ fontFamily: qxType.body, fontSize: 11, color: 'rgba(246,241,251,0.36)' }}>Double-click any element to edit</span>
+            </div>
+          </aside>
         )}
       </div>
 
-      {/* ══════════ FILMSTRIP — quieter, mono, hairline ══════════ */}
       <div style={{ borderTop: '1px solid rgba(246,241,251,0.08)', padding: '10px 24px 12px', overflowX: 'auto', display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(0,0,0,0.30)', flexShrink: 0 }}>
         {localSlides.map((s, i) => {
-          const t      = getTheme(i);
-          const bgImg  = slideImages[i];
           const active = i === currentIndex;
-          const isLight = t.swatch === '#E9D5FF';
-          const tFg    = isLight ? '#1A0530' : '#F6F1FB';
           return (
-            <button key={i} onClick={() => goTo(i)} style={{ flexShrink: 0, width: 124, padding: 0, cursor: 'pointer', position: 'relative', background: 'transparent', border: 'none', display: 'flex', flexDirection: 'column', gap: 5, transition: `all 160ms ${qxEase}`, opacity: active ? 1 : 0.78 }}
-              onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.opacity = active ? '1' : '0.78'; e.currentTarget.style.transform = 'translateY(0)'; }}>
-              <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: 5, overflow: 'hidden', position: 'relative', background: bgImg ? `url(${bgImg}) center/cover no-repeat` : t.gradient, border: active ? `1px solid ${QX.lime}` : '1px solid rgba(246,241,251,0.08)', boxShadow: active ? `0 0 0 1px ${QX.lime}30` : 'none' }}>
-                <div style={{ position: 'absolute', top: 5, left: 7, fontFamily: qxType.mono, fontSize: 7, letterSpacing: '0.2em', color: tFg, opacity: 0.7 }}>QX</div>
-                <div style={{ position: 'absolute', top: 5, right: 7, fontFamily: qxType.mono, fontSize: 7, letterSpacing: '0.18em', color: tFg, opacity: 0.55 }}>{String(i + 1).padStart(2, '0')}</div>
-                <div style={{ position: 'absolute', left: 7, right: 7, bottom: 6, fontFamily: qxType.display, fontWeight: 600, fontSize: 7, color: tFg, lineHeight: 1.15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.95 }}>{s.title}</div>
-                <div style={{ position: 'absolute', left: 7, bottom: 3, width: 14, height: 1, background: t.accent, opacity: 0.7 }} />
+            <button key={i} onClick={() => goTo(i)} style={{ flexShrink: 0, width: 124, padding: 0, cursor: 'pointer', background: 'transparent', border: 'none', display: 'flex', flexDirection: 'column', gap: 5, opacity: active ? 1 : 0.78 }}>
+              <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: 5, overflow: 'hidden', position: 'relative', background: (THEMES[slideThemeOverrides[i] || globalTheme] || THEMES.purple).gradient, border: active ? `1px solid ${QX.lime}` : '1px solid rgba(246,241,251,0.08)' }}>
+                <div style={{ position: 'absolute', top: 5, left: 7, fontFamily: qxType.mono, fontSize: 7, letterSpacing: '0.2em', color: '#F6F1FB', opacity: 0.7 }}>QX</div>
+                <div style={{ position: 'absolute', top: 5, right: 7, fontFamily: qxType.mono, fontSize: 7, letterSpacing: '0.18em', color: '#F6F1FB', opacity: 0.55 }}>{String(i + 1).padStart(2, '0')}</div>
+                <div style={{ position: 'absolute', left: 7, right: 7, bottom: 6, fontFamily: qxType.display, fontWeight: 600, fontSize: 7, color: '#F6F1FB', lineHeight: 1.15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1px' }}>
                 <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', color: active ? QX.lime : 'rgba(246,241,251,0.42)' }}>{String(i + 1).padStart(2, '0')}</span>
@@ -2224,103 +1669,54 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
         })}
       </div>
 
-      {/* ══════════ TOAST ══════════ */}
       {toast && (
-        <div style={{ position: 'fixed', bottom: 170, left: '50%', transform: 'translateX(-50%)', background: toast.type === 'success' ? 'rgba(52,199,123,0.14)' : toast.type === 'loading' ? 'rgba(212,255,63,0.10)' : 'rgba(23,7,41,0.94)', border: `1px solid ${toast.type === 'success' ? 'rgba(52,199,123,0.40)' : toast.type === 'loading' ? 'rgba(212,255,63,0.30)' : 'rgba(246,241,251,0.12)'}`, color: toast.type === 'success' ? '#6EE7B7' : toast.type === 'loading' ? '#D4FF3F' : '#F6F1FB', padding: '10px 18px', borderRadius: 24, fontFamily: qxType.body, fontSize: 12.5, zIndex: 500, backdropFilter: 'blur(12px)', boxShadow: '0 12px 40px rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', gap: 10, animation: `sgFadeUp 220ms ${qxEase}` }}>
-          {toast.type === 'loading' && <div style={{ width: 11, height: 11, border: '1.5px solid rgba(212,255,63,0.20)', borderTopColor: '#D4FF3F', borderRadius: '50%', animation: 'sgSpin 0.7s linear infinite', flexShrink: 0 }} />}
+        <div style={{ position: 'fixed', bottom: 170, left: '50%', transform: 'translateX(-50%)', background: toast.type === 'success' ? 'rgba(52,199,123,0.14)' : toast.type === 'loading' ? 'rgba(212,255,63,0.10)' : 'rgba(23,7,41,0.94)', border: `1px solid ${toast.type === 'success' ? 'rgba(52,199,123,0.40)' : toast.type === 'loading' ? 'rgba(212,255,63,0.30)' : 'rgba(246,241,251,0.12)'}`, color: toast.type === 'success' ? '#6EE7B7' : toast.type === 'loading' ? QX.lime : '#F6F1FB', padding: '10px 18px', borderRadius: 24, fontFamily: qxType.body, fontSize: 12.5, zIndex: 500 }}>
           {toast.msg}
         </div>
       )}
 
-      {/* ══════════ GEMINI MODAL ══════════ */}
-      {/* ══════════ AGENT MODAL ══════════ */}
       {agentOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(5,0,12,0.68)', backdropFilter: 'blur(8px)', zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: `sgFadeIn 200ms ${qxEase}` }}
-          onClick={() => setAgentOpen(false)}>
-          <div style={{ width: 'min(640px, calc(100vw - 32px))', height: 'min(720px, calc(100vh - 48px))', background: 'linear-gradient(180deg,#120323 0%,#0C0218 100%)', border: '1px solid rgba(246,241,251,0.12)', borderRadius: 18, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 34px 110px rgba(0,0,0,0.74)', animation: `sgZoomIn 220ms ${qxEase}` }}
-            onClick={(e) => e.stopPropagation()}>
-
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(5,0,12,0.68)', backdropFilter: 'blur(8px)', zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setAgentOpen(false)}>
+          <div style={{ width: 'min(640px, calc(100vw - 32px))', height: 'min(720px, calc(100vh - 48px))', background: 'linear-gradient(180deg,#120323 0%,#0C0218 100%)', border: '1px solid rgba(246,241,251,0.12)', borderRadius: 18, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 34px 110px rgba(0,0,0,0.74)' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ padding: '16px 18px', borderBottom: '1px solid rgba(246,241,251,0.09)', display: 'flex', alignItems: 'center', gap: 13, background: 'rgba(246,241,251,0.025)' }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg, ${QX.lime}, ${QX.purple[300]})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 10px 26px rgba(212,255,63,0.18)' }}>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1l1.2 3.3L11.5 5.5 8.2 6.7 7 10l-1.2-3.3L2.5 5.5l3.3-1.2L7 1z" stroke="#1A0530" strokeWidth="1.3" strokeLinejoin="round" fill="#1A0530" fillOpacity="0.15" /></svg>
-              </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                   <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.45)' }}>Agent · Slide {agentSlideIndex + 1}</div>
                   <span style={{ width: 4, height: 4, borderRadius: '50%', background: QX.lime, opacity: 0.8 }} />
-                  <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.38)' }}>{LAYOUTS.find((l) => l.key === getLayout(agentSlideIndex))?.name || 'Standard'}</div>
+                  <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.38)' }}>{LAYOUTS.find((l) => l.key === (localSlides[agentSlideIndex]?.renderLayout || localSlides[agentSlideIndex]?.layout))?.name || 'Standard'}</div>
                 </div>
                 <div style={{ fontFamily: qxType.display, fontSize: 15, fontWeight: 600, color: '#F6F1FB', letterSpacing: '-0.012em', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{localSlides[agentSlideIndex]?.title}</div>
               </div>
-              <button onClick={() => setAgentOpen(false)} title="Close" style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'rgba(246,241,251,0.06)', color: 'rgba(246,241,251,0.55)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-              </button>
+              <button onClick={() => setAgentOpen(false)} style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'rgba(246,241,251,0.06)', color: 'rgba(246,241,251,0.55)', cursor: 'pointer' }}>x</button>
             </div>
-
-            <div ref={agentScrollRef} style={{ flex: 1, overflowY: 'auto', padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 12, background: 'radial-gradient(circle at 50% 0%,rgba(123,47,190,0.14),transparent 45%)' }}>
+            <div ref={agentScrollRef} style={{ flex: 1, overflowY: 'auto', padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 12 }}>
               {agentMessages.map((m, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                  <div style={{ maxWidth: m.role === 'user' ? '76%' : '82%', padding: '11px 14px', borderRadius: m.role === 'user' ? '15px 15px 5px 15px' : '15px 15px 15px 5px', background: m.role === 'user' ? QX.lime : 'rgba(246,241,251,0.07)', border: m.role === 'user' ? '1px solid rgba(212,255,63,0.6)' : '1px solid rgba(246,241,251,0.055)', color: m.role === 'user' ? '#1A0530' : 'rgba(246,241,251,0.92)', fontFamily: qxType.body, fontSize: 13.5, lineHeight: 1.5, fontWeight: m.role === 'user' ? 600 : 400, boxShadow: m.role === 'user' ? '0 10px 24px rgba(212,255,63,0.12)' : 'none', overflowWrap: 'anywhere' }}>{m.text}</div>
+                  <div style={{ maxWidth: m.role === 'user' ? '76%' : '82%', padding: '11px 14px', borderRadius: m.role === 'user' ? '15px 15px 5px 15px' : '15px 15px 15px 5px', background: m.role === 'user' ? QX.lime : 'rgba(246,241,251,0.07)', color: m.role === 'user' ? '#232126' : 'rgba(246,241,251,0.92)', fontFamily: qxType.body, fontSize: 13.5, lineHeight: 1.5, fontWeight: m.role === 'user' ? 700 : 400 }}>{m.text}</div>
                 </div>
               ))}
-              {agentThinking && (
-                <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-                  <div style={{ padding: '10px 14px', borderRadius: '14px 14px 14px 4px', background: 'rgba(246,241,251,0.07)', border: '1px solid rgba(246,241,251,0.055)', display: 'flex', gap: 5, alignItems: 'center' }}>
-                    {[0, 1, 2].map((i) => (
-                      <div key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: 'rgba(246,241,251,0.50)', animation: `sgBounce 1s ease-in-out ${i * 0.15}s infinite` }} />
-                    ))}
-                  </div>
-                </div>
-              )}
+              {agentThinking && <div style={{ color: 'rgba(246,241,251,0.60)', fontSize: 13 }}>Thinking...</div>}
             </div>
-
             <div style={{ padding: '12px 16px 14px', borderTop: '1px solid rgba(246,241,251,0.09)', background: 'rgba(5,0,12,0.78)', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                <div style={{ minWidth: 0, fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  Target · Slide {agentSlideIndex + 1} · {LAYOUTS.find((l) => l.key === getLayout(agentSlideIndex))?.name || 'Standard'}
-                </div>
-                <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <button onClick={() => setAgentHistoryOpen((p) => !p)} disabled={!agentHistorySessions.length} style={{ border: 'none', background: 'transparent', color: agentHistorySessions.length ? 'rgba(246,241,251,0.64)' : 'rgba(246,241,251,0.24)', cursor: agentHistorySessions.length ? 'pointer' : 'default', fontFamily: qxType.body, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2a4 4 0 1 1-3.2 1.6M2.5 2v2.6h2.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                    History
-                  </button>
-                  <button onClick={() => resetAgentChat(agentSlideIndex)} style={{ border: 'none', background: 'transparent', color: 'rgba(212,255,63,0.84)', cursor: 'pointer', fontFamily: qxType.body, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v9M1 5.5h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-                    New chat
-                  </button>
-                </div>
+                <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)' }}>Target · Slide {agentSlideIndex + 1}</div>
+                <button onClick={() => { if (agentMessages.some((m) => m.role === 'user')) setAgentHistorySessions((prev) => [{ id: Date.now(), title: agentMessages.find((m) => m.role === 'user')?.text || 'Agent chat', slideIndex: agentSlideIndex, messages: agentMessages }, ...prev].slice(0, 12)); setAgentMessages([agentIntroMessage(agentSlideIndex, true)]); }} style={{ border: 'none', background: 'transparent', color: QX.lime, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>New chat</button>
               </div>
-              {agentHistoryOpen && (
-                <div style={{ border: '1px solid rgba(246,241,251,0.10)', background: 'rgba(246,241,251,0.04)', borderRadius: 12, padding: 8, display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 180, overflowY: 'auto' }}>
-                  <div style={{ padding: '2px 4px 6px', fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.20em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)' }}>Previous chats</div>
+              {agentHistoryOpen && agentHistorySessions.length > 0 && (
+                <div style={{ border: '1px solid rgba(246,241,251,0.10)', borderRadius: 12, padding: 8 }}>
+                  <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)', padding: '2px 4px 7px' }}>Previous chats</div>
                   {agentHistorySessions.map((session) => (
-                    <button key={session.id} onClick={() => restoreAgentHistory(session)} style={{ width: '100%', border: '1px solid rgba(246,241,251,0.08)', background: 'rgba(5,0,12,0.30)', borderRadius: 9, padding: '8px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, textAlign: 'left' }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontFamily: qxType.body, fontSize: 12.5, fontWeight: 600, color: 'rgba(246,241,251,0.88)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.title}</div>
-                        <div style={{ marginTop: 2, fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.38)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Slide {session.slideIndex + 1} · {LAYOUTS.find((l) => l.key === session.layout)?.name || 'Layout'}</div>
-                      </div>
-                      <span style={{ flexShrink: 0, fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.08em', color: 'rgba(246,241,251,0.34)' }}>{session.updatedAt}</span>
-                    </button>
+                    <button key={session.id} onClick={() => { setAgentSlideIndex(session.slideIndex); setAgentMessages(session.messages); setAgentHistoryOpen(false); }} style={panelButton}>{session.title}</button>
                   ))}
                 </div>
               )}
-              <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 1 }}>
-                {agentQuickPrompts.map((item) => (
-                  <button key={item.label} onClick={() => { setAgentInput(item.text); setTimeout(() => agentInputRef.current?.focus(), 20); }} style={{ flexShrink: 0, padding: '6px 9px', borderRadius: 999, border: '1px solid rgba(246,241,251,0.10)', background: 'rgba(246,241,251,0.045)', color: 'rgba(246,241,251,0.76)', cursor: 'pointer', fontFamily: qxType.body, fontSize: 12 }}>
-                    {item.label}
-                  </button>
-                ))}
+              <button onClick={() => setAgentHistoryOpen((p) => !p)} disabled={!agentHistorySessions.length} style={{ ...panelButton, opacity: agentHistorySessions.length ? 1 : 0.45 }}>History</button>
+              <div style={{ display: 'flex', gap: 6, overflowX: 'auto' }}>
+                {agentQuickPrompts.map((item) => <button key={item.label} onClick={() => { setAgentInput(item.text); setTimeout(() => agentInputRef.current?.focus(), 20); }} style={{ flexShrink: 0, padding: '6px 9px', borderRadius: 999, border: '1px solid rgba(246,241,251,0.10)', background: 'rgba(246,241,251,0.045)', color: 'rgba(246,241,251,0.76)', cursor: 'pointer', fontFamily: qxType.body, fontSize: 12 }}>{item.label}</button>)}
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                <textarea ref={agentInputRef} value={agentInput} onChange={(e) => setAgentInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAgentSend(); } }}
-                  placeholder="Ask Agent to change slide 2 to split layout, expand feature 1, rewrite the title…" rows={2}
-                  style={{ flex: 1, minHeight: 48, maxHeight: 120, padding: '12px 13px', borderRadius: 12, border: '1px solid rgba(246,241,251,0.13)', background: 'rgba(246,241,251,0.045)', color: '#F6F1FB', fontFamily: qxType.body, fontSize: 13.5, outline: 'none', resize: 'vertical', lineHeight: 1.45, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.08)' }} />
-                <button onClick={handleAgentSend} disabled={!agentInput.trim() || agentThinking}
-                  title="Send"
-                  style={{ width: 44, height: 44, borderRadius: 12, border: 'none', flexShrink: 0, background: agentInput.trim() && !agentThinking ? QX.lime : 'rgba(246,241,251,0.07)', color: agentInput.trim() && !agentThinking ? '#1A0530' : 'rgba(246,241,251,0.30)', cursor: agentInput.trim() && !agentThinking ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: `all 160ms ${qxEase}`, boxShadow: agentInput.trim() && !agentThinking ? '0 12px 30px rgba(212,255,63,0.18)' : 'none' }}>
-                  <svg width="15" height="15" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M7 2l5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                </button>
+                <textarea ref={agentInputRef} value={agentInput} onChange={(e) => setAgentInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAgentSend(); } }} placeholder="Ask Agent to change slide 2 to split layout, expand feature 1, rewrite the title..." rows={2} style={{ flex: 1, minHeight: 48, maxHeight: 120, padding: '12px 13px', borderRadius: 12, border: '1px solid rgba(246,241,251,0.13)', background: 'rgba(246,241,251,0.045)', color: '#F6F1FB', fontFamily: qxType.body, fontSize: 13.5, outline: 'none', resize: 'vertical', lineHeight: 1.45 }} />
+                <button onClick={handleAgentSend} disabled={!agentInput.trim() || agentThinking} style={{ width: 44, height: 44, borderRadius: 12, border: 'none', background: agentInput.trim() && !agentThinking ? QX.lime : 'rgba(246,241,251,0.07)', color: agentInput.trim() && !agentThinking ? '#232126' : 'rgba(246,241,251,0.30)', cursor: agentInput.trim() && !agentThinking ? 'pointer' : 'default' }}>→</button>
               </div>
             </div>
           </div>
@@ -2328,41 +1724,61 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
       )}
 
       <style>{`
-        @keyframes sgSpin    { to { transform: rotate(360deg); } }
-        @keyframes sgBounce  { 0%,80%,100% { transform:scale(0.55); opacity:.4 } 40% { transform:scale(1); opacity:1 } }
-        @keyframes sgFadeIn  { from { opacity:0 } to { opacity:1 } }
-        @keyframes sgFadeUp  { from { opacity:0; transform:translate(-50%, 8px) } to { opacity:1; transform:translate(-50%, 0) } }
-        @keyframes sgSlideIn { from { transform: translateX(20px); opacity:0 } to { transform: translateX(0); opacity:1 } }
-        @keyframes sgZoomIn  { from { transform: scale(0.96); opacity:0 } to { transform: scale(1); opacity:1 } }
         @media print {
           body * { visibility: hidden !important; }
           #main-slide, #main-slide * { visibility: visible !important; }
-          #main-slide { position:fixed !important; inset:0 !important; width:100vw !important; height:100vh !important; max-width:none !important; border-radius:0 !important; box-shadow:none !important; }
+          #main-slide { position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; border-radius: 0 !important; box-shadow: none !important; }
         }
       `}</style>
     </div>
   );
 };
 
-// ─── helpers ─────────────────────────────────────────────────
-const MenuItem = ({ icon, label, sub, onClick }) => (
-  <button onClick={onClick} style={{ width: '100%', padding: '9px 10px', borderRadius: 8, border: 'none', background: 'transparent', color: 'rgba(246,241,251,0.85)', fontFamily: qxType.body, fontSize: 12.5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 11, textAlign: 'left', transition: 'background 120ms' }}
-    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(246,241,251,0.06)'; }}
-    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
-    <span style={{ color: 'rgba(246,241,251,0.50)', flexShrink: 0 }}>{icon}</span>
-    <div>
-      <div style={{ fontSize: 12.5, color: 'rgba(246,241,251,0.92)' }}>{label}</div>
-      {sub && <div style={{ fontFamily: qxType.mono, fontSize: 9.5, color: 'rgba(246,241,251,0.40)', marginTop: 2, letterSpacing: '0.10em' }}>{sub}</div>}
-    </div>
-  </button>
-);
+const panelLabel = {
+  fontFamily: qxType.mono,
+  fontSize: 9,
+  letterSpacing: '0.24em',
+  textTransform: 'uppercase',
+  color: 'rgba(246,241,251,0.42)',
+};
 
-const PanelAction = ({ icon, label, onClick }) => (
-  <button onClick={onClick} style={{ padding: '9px 11px', borderRadius: 8, border: '1px solid rgba(246,241,251,0.08)', background: 'rgba(246,241,251,0.02)', color: 'rgba(246,241,251,0.78)', fontFamily: qxType.body, fontSize: 12, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, transition: 'all 140ms' }}
-    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(246,241,251,0.06)'; e.currentTarget.style.borderColor = 'rgba(246,241,251,0.16)'; }}
-    onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(246,241,251,0.02)'; e.currentTarget.style.borderColor = 'rgba(246,241,251,0.08)'; }}>
-    <span style={{ color: 'rgba(246,241,251,0.55)' }}>{icon}</span>
-    {label}
+const panelInput = {
+  width: '100%',
+  height: 36,
+  borderRadius: 8,
+  border: '1px solid rgba(246,241,251,0.12)',
+  background: 'rgba(246,241,251,0.05)',
+  color: '#F6F1FB',
+  padding: '0 10px',
+  outline: 'none',
+};
+
+const panelButton = {
+  padding: '9px 11px',
+  borderRadius: 8,
+  border: '1px solid rgba(246,241,251,0.08)',
+  background: 'rgba(246,241,251,0.03)',
+  color: 'rgba(246,241,251,0.78)',
+  fontFamily: qxType.body,
+  fontSize: 12,
+  cursor: 'pointer',
+  textAlign: 'left',
+};
+
+const miniButton = (active) => ({
+  height: 34,
+  borderRadius: 7,
+  border: active ? `1px solid ${QX.lime}` : '1px solid rgba(246,241,251,0.10)',
+  background: active ? 'rgba(212,255,63,0.10)' : 'rgba(246,241,251,0.03)',
+  color: active ? QX.lime : 'rgba(246,241,251,0.76)',
+  cursor: 'pointer',
+  fontWeight: 800,
+});
+
+const MenuItem = ({ label, sub, onClick }) => (
+  <button onClick={onClick} style={{ width: '100%', padding: '9px 10px', borderRadius: 8, border: 'none', background: 'transparent', color: 'rgba(246,241,251,0.85)', fontFamily: qxType.body, fontSize: 12.5, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left' }}>
+    <span>{label}</span>
+    {sub && <span style={{ fontFamily: qxType.mono, fontSize: 9.5, color: 'rgba(246,241,251,0.40)', letterSpacing: '0.10em' }}>{sub}</span>}
   </button>
 );
 
