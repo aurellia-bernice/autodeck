@@ -12,9 +12,12 @@ const normalizePreviewSlides = (slides, templateStyle = 'Professional') => {
         ? slide.bullets.map((b) => String(b || '').trim()).filter(Boolean)
         : [];
       const normalized = { ...slide, title, bullets: bullets.slice(0, 4) };
-      return window.AutoDeckTemplatePresets?.enhanceSlide
+      const enhanced = window.AutoDeckTemplatePresets?.enhanceSlide
         ? window.AutoDeckTemplatePresets.enhanceSlide(normalized, index, slide?.templateStyle || templateStyle)
         : normalized;
+      return window.AutoDeckSlideObjects?.ensureSlideObjects
+        ? window.AutoDeckSlideObjects.ensureSlideObjects(enhanced, index, slides.length)
+        : enhanced;
     })
     .filter((slide) => slide.title || slide.bullets.length);
 };

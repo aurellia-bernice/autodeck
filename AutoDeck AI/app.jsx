@@ -51,9 +51,12 @@ const normalizeDeckSlides = (slides, templateStyle = 'Professional') => {
         speakerNotes: String(slide?.speakerNotes || '').trim(),
         imagePrompt: String(slide?.imagePrompt || '').trim(),
       };
-      return window.AutoDeckTemplatePresets?.enhanceSlide
+      const enhanced = window.AutoDeckTemplatePresets?.enhanceSlide
         ? window.AutoDeckTemplatePresets.enhanceSlide(normalized, index, slide?.templateStyle || templateStyle)
         : normalized;
+      return window.AutoDeckSlideObjects?.ensureSlideObjects
+        ? window.AutoDeckSlideObjects.ensureSlideObjects(enhanced, index, slides.length)
+        : enhanced;
     })
     .filter((slide) => slide.title || slide.bullets.length);
 };
@@ -804,6 +807,7 @@ const App = () => {
             config={deckConfig}
             tweaks={tweaks}
             brandConfig={brandConfig}
+            activeDeckId={activeDeckId}
             onBack={() => setScreen('preview')}
           />
         )}
