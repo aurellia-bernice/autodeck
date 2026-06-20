@@ -7,6 +7,7 @@ const mammoth  = require('mammoth');
 const JSZip    = require('jszip');
 const pdfParse = require('pdf-parse');
 const SlideIntelligence = require('./slide-intelligence');
+const SlideObjects = require('./slide-objects');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -246,7 +247,7 @@ const trimWords = (value, maxWords) => String(value || '')
 const normalizeLayout = (value, fallback = 'standard') => {
   const allowed = new Set([
     'standard', 'split', 'bigTitle', 'stat', 'quote', 'image', 'minimal', 'centered',
-    'process_flow', 'comparison', 'timeline', 'statistics', 'hierarchy', 'image_focus',
+    'process_flow', 'comparison', 'table_matrix', 'timeline', 'statistics', 'hierarchy', 'image_focus',
     'roadmap', 'problem_solution', 'feature_breakdown', 'summary',
   ]);
   const layout = String(value || '').trim();
@@ -264,6 +265,10 @@ const normalizeLayout = (value, fallback = 'standard') => {
     'process flow': 'process_flow',
     process: 'process_flow',
     compare: 'comparison',
+    table: 'table_matrix',
+    matrix: 'table_matrix',
+    'table matrix': 'table_matrix',
+    'comparison table': 'table_matrix',
     kpi: 'statistics',
     metrics: 'statistics',
     'image focus': 'image_focus',
@@ -373,9 +378,10 @@ const normalizeSlides = (slides, count) => {
     uniqueSlides.push(nextSlide);
   });
 
-  return SlideIntelligence.enhanceSlides(uniqueSlides
+  const enhanced = SlideIntelligence.enhanceSlides(uniqueSlides
     .map(({ index, ...slide }) => slide)
     .slice(0, count));
+  return SlideObjects.ensureSlidesObjects(enhanced);
 };
 
 const generationMaxTokens = (count) => Math.min(8000, Math.max(3200, count * 550));
@@ -445,39 +451,23 @@ const slideDocumentId = (index) => `slide-${String(index + 1).padStart(2, '0')}`
 
 const persistGeneratedSlides = async ({ deckId, uid, slides }) => {
   try {
+    const safeSlides = slides.map((slide, index) => sanitizeSlideForFirestore(slide, index, slides.length));
     // Write deck-level slides and mark ready first so the Firestore listener
     // on the client fires as early as possible. Subcollection batch follows.
     await db.collection('decks').doc(deckId).set({
       userId: uid,
       status: 'ready',
       stage: 'ready',
-      slideCount: slides.length,
-      slides,
+      slideCount: safeSlides.length,
+      editorVersion: SlideObjects.EDITOR_VERSION,
+      slides: safeSlides,
       completedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
 
     const batch = db.batch();
-    slides.forEach((s, i) => {
+    safeSlides.forEach((s, i) => {
       const ref = db.collection('decks').doc(deckId).collection('slides').doc(slideDocumentId(i));
-      batch.set(ref, {
-        index: i,
-        title: s.title || '',
-        bullets: s.bullets || [],
-        layout: s.layout || 'standard',
-        visualLayout: s.visualLayout || s.layout || null,
-        renderLayout: s.renderLayout || null,
-        slideType: s.slideType || null,
-        visualization: s.visualization || null,
-        needsIcons: s.needsIcons === true,
-        needsChart: s.needsChart === true,
-        needsImage: s.needsImage === true,
-        components: Array.isArray(s.components) ? s.components : [],
-        storytellingNote: s.storytellingNote || '',
-        contentType: s.contentType || null,
-        kicker: s.kicker || null,
-        speakerNotes: s.speakerNotes || '',
-        imagePrompt: s.imagePrompt || '',
-      });
+      batch.set(ref, s);
     });
     await batch.commit();
 
@@ -571,8 +561,8 @@ Universal requirements:
 - Every slide title must be distinct. Do not reuse the document title, lecture title, event title, or a previous slide title with minor suffixes.
 - Bullets should state the point and the implication. Prefer concrete claims over vague phrases.
 - Every slide must include Slide Intelligence fields: slideType, layout, visualization, needsIcons, needsChart, needsImage, components, and storytellingNote.
-- The slideType must be one of: title_slide, section_break, process_flow, comparison, timeline, statistics, hierarchy, image_focus, roadmap, problem_solution, feature_breakdown, summary.
-- Choose the visual treatment that best tells the story. Prefer transforming content into flows, timelines, comparisons, KPI cards, roadmaps, hierarchies, problem/solution splits, feature cards, or summary cards when the content supports it.
+- The slideType must be one of: title_slide, section_break, process_flow, comparison, table_matrix, timeline, statistics, hierarchy, image_focus, roadmap, problem_solution, feature_breakdown, summary.
+- Choose the visual treatment that best tells the story. Prefer transforming content into flows, timelines, comparisons, editable tables, KPI cards, roadmaps, hierarchies, problem/solution splits, feature cards, or summary cards when the content supports it.
 - Use "statistics" only when there is a real number or metric in the source.
 - Never create placeholder/default metrics.
 - Use "image_focus" only when you can provide a concrete imagePrompt.
@@ -588,9 +578,9 @@ JSON shape:
 [
   {
     "title": "Specific slide title",
-    "slideType": "title_slide|section_break|process_flow|comparison|timeline|statistics|hierarchy|image_focus|roadmap|problem_solution|feature_breakdown|summary",
-    "layout": "hero_title|section_divider|horizontal_step_flow|two_column_comparison|chronological_timeline|kpi_card_grid|layered_hierarchy|full_bleed_image_with_caption|phased_roadmap|problem_vs_solution_split|icon_card_grid|key_takeaway_cards",
-    "visualization": "flowchart|comparison_table|timeline|kpi_cards|hierarchy_diagram|image_story|roadmap|split_story|feature_cards|takeaway_cards|title_hero|section_marker",
+    "slideType": "title_slide|section_break|process_flow|comparison|table_matrix|timeline|statistics|hierarchy|image_focus|roadmap|problem_solution|feature_breakdown|summary",
+    "layout": "hero_title|section_divider|horizontal_step_flow|two_column_comparison|editable_table_matrix|chronological_timeline|kpi_card_grid|layered_hierarchy|full_bleed_image_with_caption|phased_roadmap|problem_vs_solution_split|icon_card_grid|key_takeaway_cards",
+    "visualization": "flowchart|comparison_table|table_matrix|timeline|kpi_cards|hierarchy_diagram|image_story|roadmap|split_story|feature_cards|takeaway_cards|title_hero|section_marker",
     "needsIcons": true,
     "needsChart": false,
     "needsImage": false,
@@ -615,6 +605,7 @@ Slide Intelligence mapping:
 - section_break -> section_divider -> section_marker
 - process_flow -> horizontal_step_flow -> flowchart. Components should be ordered steps with icons.
 - comparison -> two_column_comparison -> comparison_table. Components should be two comparison_column objects with item lists.
+- table_matrix -> editable_table_matrix -> table_matrix. Use for pricing, tiers, feature matrices, row/column data, or dense comparisons that should be editable as a table.
 - timeline -> chronological_timeline -> timeline. Components should be dated milestones.
 - statistics -> kpi_card_grid -> kpi_cards. Components should be KPI objects with value and label.
 - hierarchy -> layered_hierarchy -> hierarchy_diagram. Components should be nodes with level values when useful.
@@ -849,7 +840,7 @@ You must be faithful to the source. If a fact is not in the source, do not add i
         .join('\n')
         .trim();
       const parsed = await parseGeneratedSlides({ anthropic, raw, count, deckId });
-      slides = parsed.slides;
+      slides = await hydrateGeneratedSlideImages(parsed.slides);
       logger.info('generateDeck anthropic response parsed', {
         deckId,
         rawChars: raw.length,
@@ -921,7 +912,7 @@ exports.agentEdit = onCall(
     const safeSlideIndex = Math.max(0, Math.min(Math.max(0, Number(slideCount) - 1), Number(slideIndex) || 0));
     const layoutList = Array.isArray(availableLayouts) && availableLayouts.length
       ? availableLayouts.map((l) => `${l.key}: ${l.name || l.key} - ${l.desc || ''}`).join('\n')
-      : 'standard, split, bigTitle, stat, quote, image, minimal, centered, process_flow, comparison, timeline, statistics, hierarchy, image_focus, roadmap, problem_solution, feature_breakdown, summary';
+      : 'standard, split, bigTitle, stat, quote, image, minimal, centered, process_flow, comparison, table_matrix, timeline, statistics, hierarchy, image_focus, roadmap, problem_solution, feature_breakdown, summary';
     const historyText = Array.isArray(history)
       ? history
           .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && m.text)
@@ -936,7 +927,7 @@ The user is editing a slide deck. Apply the request to the intended slide. Respo
   "targetSlideIndex": 0,
   "updatedTitle": "...",
   "updatedBullets": ["...", "..."],
-  "updatedLayout": "standard|split|bigTitle|stat|quote|image|minimal|centered|process_flow|comparison|timeline|statistics|hierarchy|image_focus|roadmap|problem_solution|feature_breakdown|summary|null",
+  "updatedLayout": "standard|split|bigTitle|stat|quote|image|minimal|centered|process_flow|comparison|table_matrix|timeline|statistics|hierarchy|image_focus|roadmap|problem_solution|feature_breakdown|summary|null",
   "needsClarification": false,
   "assistantReply": "One sentence confirming the change."
 }
@@ -946,7 +937,7 @@ Rules:
 - If the user does not specify a slide, use ${safeSlideIndex}.
 - Preserve existing content unless the user asked to change it.
 - Return updatedLayout only when the user asks to change layout or visual treatment.
-- If the user asks for split view, two columns, quote, summary, timeline, roadmap, problem/solution, comparison, image focus, or any listed layout, return the matching updatedLayout. Do not tell the user to change layout manually.
+- If the user asks for split view, two columns, quote, summary, table, timeline, roadmap, problem/solution, comparison, image focus, or any listed layout, return the matching updatedLayout. Do not tell the user to change layout manually.
 - For requests like "add more info", "talk more about this", "expand", or "more detail", use the current slide content, slide components, deck outline, source prompt, and chat history to return updatedBullets with richer visible content.
 - Return updatedBullets whenever the visible wording should change. Keep each bullet under 22 words.
 - If you cannot make a concrete edit because the user gave no actionable request or there is no relevant content, set needsClarification true and do not claim you changed anything.
@@ -1110,21 +1101,12 @@ exports.geminiGenerateImage = onCall(
   }
 );
 
-// ── searchImages ───────────────────────────────────────────────
-exports.searchImages = onCall(
-  callableOptions({
-    timeoutSeconds: 30,
-    memory: '256MiB',
-    secrets: ['UNSPLASH_ACCESS_KEY', 'GEMINI_API_KEY'],
-  }),
-  async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
-
-    const { query, count = 6, orientation = 'landscape', page = 1 } = request.data || {};
-    if (!query || !String(query).trim()) throw new HttpsError('invalid-argument', 'query is required');
-
+const searchUnsplashImages = async ({ query, count = 6, orientation = 'landscape', page = 1, requireKey = true }) => {
     const unsplashKey = process.env.UNSPLASH_ACCESS_KEY;
-    if (!unsplashKey) throw new HttpsError('internal', 'Unsplash key not configured');
+    if (!unsplashKey) {
+      if (requireKey) throw new HttpsError('internal', 'Unsplash key not configured');
+      return { images: [], refinedQuery: String(query || '').trim() };
+    }
 
     let searchQuery = String(query).trim();
     const geminiKey = process.env.GEMINI_API_KEY;
@@ -1198,6 +1180,61 @@ exports.searchImages = onCall(
     })).filter((image) => image.src && image.thumb);
 
     return { images, refinedQuery: searchQuery };
+};
+
+const hydrateGeneratedSlideImages = async (slides = []) => {
+  const hydrated = [];
+  for (const slide of slides) {
+    let next = SlideObjects.ensureSlideObjects(slide, hydrated.length, slides.length);
+    if (SlideObjects.shouldHaveImage(next)) {
+      const imageObjects = (next.objects || []).filter((obj) => obj.type === 'image');
+      const hasImage = imageObjects.some((obj) => obj.src);
+      if (!hasImage) {
+        const prompt = next.imagePrompt || imageObjects[0]?.prompt || next.title || '';
+        if (prompt) {
+          try {
+            const { images } = await searchUnsplashImages({ query: prompt, count: 1, orientation: 'landscape', page: 1, requireKey: false });
+            const image = images[0];
+            if (image) {
+              next = {
+                ...next,
+                image: {
+                  src: image.src,
+                  alt: image.alt,
+                  credit: image.credit,
+                  creditUrl: image.creditUrl,
+                  prompt,
+                },
+                objects: next.objects.map((obj) => obj.type === 'image'
+                  ? { ...obj, src: image.src, alt: image.alt, credit: image.credit, creditUrl: image.creditUrl, prompt: obj.prompt || prompt }
+                  : obj),
+              };
+            }
+          } catch (err) {
+            logger.warn('generateDeck image hydration skipped', { message: err.message, title: next.title });
+          }
+        }
+      }
+    }
+    hydrated.push(SlideObjects.ensureSlideObjects(next, hydrated.length, slides.length));
+  }
+  return hydrated;
+};
+
+// ── searchImages ───────────────────────────────────────────────
+exports.searchImages = onCall(
+  callableOptions({
+    timeoutSeconds: 30,
+    memory: '256MiB',
+    secrets: ['UNSPLASH_ACCESS_KEY', 'GEMINI_API_KEY'],
+  }),
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
+
+    const { query, count = 6, orientation = 'landscape', page = 1 } = request.data || {};
+    if (!query || !String(query).trim()) throw new HttpsError('invalid-argument', 'query is required');
+
+    return searchUnsplashImages({ query, count, orientation, page, requireKey: true });
   }
 );
 
@@ -1284,28 +1321,35 @@ const templatePresetIdFromStyle = (style) => String(style || 'professional')
   .toLowerCase()
   .replace(/\s+/g, '-');
 
-const sanitizeSlideForFirestore = (slide = {}, index = 0) => ({
-  index,
-  title: String(slide.title || '').trim(),
-  bullets: Array.isArray(slide.bullets)
-    ? slide.bullets.map((bullet) => String(bullet || '').trim()).filter(Boolean)
-    : [],
-  layout: slide.layout || 'standard',
-  visualLayout: slide.visualLayout || slide.layout || null,
-  renderLayout: slide.renderLayout || null,
-  theme: slide.theme || null,
-  slideType: slide.slideType || null,
-  visualization: slide.visualization || null,
-  needsIcons: slide.needsIcons === true,
-  needsChart: slide.needsChart === true,
-  needsImage: slide.needsImage === true,
-  components: Array.isArray(slide.components) ? slide.components : [],
-  storytellingNote: String(slide.storytellingNote || ''),
-  contentType: slide.contentType || null,
-  kicker: slide.kicker || null,
-  speakerNotes: String(slide.speakerNotes || ''),
-  imagePrompt: String(slide.imagePrompt || ''),
-});
+const sanitizeSlideForFirestore = (slide = {}, index = 0, total = 1) => {
+  const editorSlide = SlideObjects.ensureSlideObjects(slide, index, total);
+  const derived = SlideObjects.deriveLegacyFields(editorSlide);
+  return {
+    index,
+    title: String(derived.title || '').trim(),
+    bullets: Array.isArray(derived.bullets)
+      ? derived.bullets.map((bullet) => String(bullet || '').trim()).filter(Boolean)
+      : [],
+    layout: slide.layout || slide.renderLayout || 'standard',
+    visualLayout: slide.visualLayout || slide.layout || null,
+    renderLayout: slide.renderLayout || null,
+    theme: slide.theme || null,
+    slideType: slide.slideType || null,
+    visualization: slide.visualization || null,
+    needsIcons: slide.needsIcons === true,
+    needsChart: slide.needsChart === true,
+    needsImage: slide.needsImage === true,
+    components: Array.isArray(slide.components) ? slide.components : [],
+    storytellingNote: String(slide.storytellingNote || ''),
+    contentType: slide.contentType || null,
+    kicker: slide.kicker || null,
+    speakerNotes: String(slide.speakerNotes || ''),
+    imagePrompt: String(slide.imagePrompt || ''),
+    editorVersion: SlideObjects.EDITOR_VERSION,
+    visualVersion: editorSlide.visualVersion || SlideObjects.OBJECT_VISUAL_VERSION || 2,
+    objects: editorSlide.objects,
+  };
+};
 
 // ── createDeck ─────────────────────────────────────────────────
 exports.createDeck = onCall(
@@ -1386,25 +1430,70 @@ exports.finalizeDeck = onCall(
       });
     }
 
+    const safeSlides = slides.map((slide, index) => sanitizeSlideForFirestore(slide, index, slides.length));
     const batch = db.batch();
     batch.set(deckRef, {
       status: 'ready',
       stage: 'ready',
       templatePresetId: templatePresetIdFromStyle(config.templateStyle),
-      slideCount: slides.length,
-      slides,
+      slideCount: safeSlides.length,
+      editorVersion: SlideObjects.EDITOR_VERSION,
+      slides: safeSlides,
       completedAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
 
-    slides.forEach((slide, index) => {
+    safeSlides.forEach((slide, index) => {
       const slideRef = deckRef.collection('slides').doc(slideDocumentId(index));
-      batch.set(slideRef, sanitizeSlideForFirestore(slide, index));
+      batch.set(slideRef, slide);
     });
 
     await batch.commit();
-    logger.info('finalizeDeck', { deckId: deckRef.id, uid: request.auth.uid, slides: slides.length });
+    logger.info('finalizeDeck', { deckId: deckRef.id, uid: request.auth.uid, slides: safeSlides.length });
     return { deckId: deckRef.id, ok: true };
+  }
+);
+
+// ── saveDeckEdits ──────────────────────────────────────────────
+exports.saveDeckEdits = onCall(
+  callableOptions({ timeoutSeconds: 60, memory: '256MiB' }),
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
+
+    const { deckId, slides, editorVersion = SlideObjects.EDITOR_VERSION } = request.data;
+    if (!deckId) throw new HttpsError('invalid-argument', 'deckId is required');
+    if (!Array.isArray(slides) || !slides.length) throw new HttpsError('invalid-argument', 'slides array is required');
+
+    const deckRef = db.collection('decks').doc(deckId);
+    const snap = await deckRef.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'Deck not found');
+    if (snap.data().userId !== request.auth.uid) throw new HttpsError('permission-denied', 'Not your deck');
+
+    const safeSlides = slides.map((slide, index) => sanitizeSlideForFirestore(slide, index, slides.length));
+    const batch = db.batch();
+    batch.set(deckRef, {
+      status: 'ready',
+      stage: 'ready',
+      editorVersion: Number(editorVersion) || SlideObjects.EDITOR_VERSION,
+      slideCount: safeSlides.length,
+      slides: safeSlides,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    const existing = await deckRef.collection('slides').get();
+    existing.docs.forEach((doc) => {
+      const match = doc.id.match(/^slide-(\d+)$/);
+      const n = match ? parseInt(match[1], 10) : 0;
+      if (n > safeSlides.length) batch.delete(doc.ref);
+    });
+
+    safeSlides.forEach((slide, index) => {
+      batch.set(deckRef.collection('slides').doc(slideDocumentId(index)), slide);
+    });
+
+    await batch.commit();
+    logger.info('saveDeckEdits', { deckId, uid: request.auth.uid, slides: safeSlides.length });
+    return { ok: true, deckId };
   }
 );
 
