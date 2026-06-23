@@ -1,7 +1,7 @@
 // ============================================================
 // Slide Object Composer
 // Converts legacy slide outlines into an editable object model.
-// Keep this file in sync with functions/slide-objects.js.
+// Keep browser and functions copies in sync.
 // ============================================================
 
 (function attachSlideObjects(global, factory) {
@@ -24,10 +24,7 @@
 
   const compactText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
   const trimWords = (value, maxWords = 22) => compactText(value).split(/\s+/).filter(Boolean).slice(0, maxWords).join(' ');
-  const hex = (value, fallback) => /^#[0-9a-f]{6}$/i.test(String(value || '')) ? value : fallback;
-
   const objectId = (slideIndex, role, n = 0) => `s${slideIndex + 1}-${role}-${n}`;
-
   const zSort = (objects) => [...objects].sort((a, b) => (a.z || 0) - (b.z || 0));
 
   const displayRoles = new Set(['title', 'quote', 'kpi-value']);

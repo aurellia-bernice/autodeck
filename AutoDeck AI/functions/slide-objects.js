@@ -1,7 +1,7 @@
 // ============================================================
 // Slide Object Composer
 // Converts legacy slide outlines into an editable object model.
-// Keep this file in sync with ../slide-objects.jsx.
+// Keep browser and functions copies in sync.
 // ============================================================
 
 (function attachSlideObjects(global, factory) {

@@ -5,10 +5,12 @@
   "description": "AutoDeck AI — Internal Quidax tool for AI-generated presentations",
   "license": "UNLICENSED",
   "scripts": {
+    "check:shared": "node scripts/check-shared-sync.js",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
-    "test:report": "playwright show-report"
+    "test:report": "playwright show-report",
+    "verify": "npm run check:shared && npm test -- --project=chromium"
   },
   "devDependencies": {
     "@playwright/test": "^1.44.0"

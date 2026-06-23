@@ -99,38 +99,7 @@ const callFn = (name, payload = {}, timeoutMs = 30000) => {
   return fn(payload).then((result) => result.data);
 };
 
-// Mirrors functions/index.js KEYWORD_STOP_WORDS — keep in sync
-const SOURCE_REVIEW_STOP_WORDS = new Set([
-  'this', 'that', 'with', 'from', 'have', 'will', 'your', 'about', 'into', 'their', 'there', 'where',
-  'when', 'what', 'were', 'been', 'being', 'they', 'them', 'than', 'then', 'also', 'should', 'could',
-  'would', 'these', 'those', 'because', 'through', 'between', 'within', 'without', 'document', 'presentation',
-  'slide', 'slides', 'deck', 'cover', 'make', 'create', 'generate', 'build', 'please', 'need', 'want',
-]);
-
-// Mirrors functions/index.js keywordsFrom — keep in sync
-const sourceReviewKeywords = (value) => {
-  const words = String(value || '').toLowerCase().match(/[a-z0-9]{4,}/g) || [];
-  return [...new Set(words.filter((word) => !SOURCE_REVIEW_STOP_WORDS.has(word)))].slice(0, 40);
-};
-
-// Mirrors functions/index.js hasTangibleSourceInfo — keep in sync
-const compactTextSimple = (value, limit) => String(value || '')
-  .replace(/\u0000/g, '')
-  .replace(/[ \t]+\n/g, '\n')
-  .replace(/\n{4,}/g, '\n\n\n')
-  .trim()
-  .slice(0, limit);
-
-const hasTangibleSourceInfo = (value, kind = 'brief') => {
-  const text = compactTextSimple(value, Number.MAX_SAFE_INTEGER).replace(/\s+/g, ' ').trim();
-  if (!text) return false;
-  const words = text.split(/\s+/).filter(Boolean);
-  const keywords = sourceReviewKeywords(text);
-  const hasSpecificAnchor = /(\d{2,}|%|\$|₦|Q[1-4]|FY\d{2,4}|20\d{2}|@[a-z0-9.-]+)/i.test(text);
-
-  if (kind === 'source') return words.length >= 10 && keywords.length >= 4;
-  return (words.length >= 10 && keywords.length >= 4) || (hasSpecificAnchor && keywords.length >= 3);
-};
+const SourceReview = window.AutoDeckSourceReview;
 
 const buildSourceReviewData = ({ issueType, config, docSummary, briefSummary, missingItems, recommendations }) => {
   const uploadedName = config?.uploadedFile?.name || '';
@@ -191,22 +160,12 @@ const App = () => {
   const [conflictConfig, setConflictConfig] = React.useState(null);
   const [conflictRechecking, setConflictRechecking] = React.useState(false);
 
-  // Mirrors functions/index.js keywordOverlap + sourceFitGuide — keep in sync
-  const hasSourceConflict = (brief, source) => {
-    if (!brief || !source) return false;
-    const bkw = sourceReviewKeywords(brief);
-    if (bkw.length < 3) return false;
-    const skw = sourceReviewKeywords(source);
-    const overlap = bkw.filter(k => skw.some(sk => sk.includes(k) || k.includes(sk)));
-    return overlap.length < Math.min(3, Math.max(1, Math.floor(bkw.length * 0.25)));
-  };
-
   const getSourceReviewIssue = (config = {}) => {
     const brief = String(config.inputText || '').trim();
     const source = String(config.parsedFileText || '').trim();
     const hasUpload = Boolean(config.uploadedFile);
-    const briefHasInfo = hasTangibleSourceInfo(brief, 'brief');
-    const sourceHasInfo = hasTangibleSourceInfo(source, 'source');
+    const briefHasInfo = SourceReview.hasTangibleSourceInfo(brief, 'brief');
+    const sourceHasInfo = SourceReview.hasTangibleSourceInfo(source, 'source');
 
     if (hasUpload && !sourceHasInfo) {
       return buildSourceReviewData({
@@ -228,7 +187,7 @@ const App = () => {
       return buildSourceReviewData({ issueType: 'insufficient_context', config });
     }
 
-    if (briefHasInfo && sourceHasInfo && hasSourceConflict(brief, source)) {
+    if (briefHasInfo && sourceHasInfo && SourceReview.hasSourceConflict(brief, source)) {
       return buildSourceReviewData({ issueType: 'source_mismatch', config });
     }
 

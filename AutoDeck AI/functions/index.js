@@ -4,10 +4,18 @@ const admin    = require('firebase-admin');
 const { getStorage } = require('firebase-admin/storage');
 const Anthropic = require('@anthropic-ai/sdk');
 const mammoth  = require('mammoth');
-const JSZip    = require('jszip');
 const pdfParse = require('pdf-parse');
 const SlideIntelligence = require('./slide-intelligence');
 const SlideObjects = require('./slide-objects');
+const SourceReview = require('./shared/source-review');
+const { extractPptxText } = require('./lib/pptx-text');
+const {
+  cleanSourceMaterial,
+  compactText,
+  isNoisySourceUnit,
+  sourceUnitKey,
+  wordCount,
+} = require('./lib/source-cleaning');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -30,131 +38,12 @@ const callableOptions = (overrides = {}) => ({
   ...overrides,
 });
 
-const compactText = (value, limit) => String(value || '')
-  .replace(/\u0000/g, '')
-  .replace(/[ \t]+\n/g, '\n')
-  .replace(/\n{4,}/g, '\n\n\n')
-  .trim()
-  .slice(0, limit);
-
-const isNoisySourceUnit = (value) => {
-  const text = String(value || '').replace(/\s+/g, ' ').trim();
-  if (!text) return true;
-  const lower = text.toLowerCase();
-  if (/^[^\w]*\d{1,3}[^\w]*$/.test(text)) return true;
-  if (/^(page|slide)\s+\d+$/i.test(text)) return true;
-  if (/^(contents|table of contents|agenda)$/i.test(text)) return true;
-  if (/\bprepared for\b|\bprepared by\b/.test(lower)) return true;
-  if (/\bthis guide breaks down every concept\b/.test(lower)) return true;
-  const sectionRefs = (text.match(/\b\d{1,2}\s+[A-Z][A-Za-z]/g) || []).length;
-  const capitalizedWords = (text.match(/\b[A-Z][A-Za-z]{3,}\b/g) || []).length;
-  return sectionRefs >= 2 && capitalizedWords >= 4;
-};
-
-const sourceUnitKey = (value) => String(value || '')
-  .toLowerCase()
-  .replace(/[^a-z0-9]+/g, ' ')
-  .trim();
-
-const isLikelyRepeatedHeader = (value) => {
-  const text = String(value || '').replace(/\s+/g, ' ').trim();
-  const words = text.split(/\s+/).filter(Boolean);
-  const letters = text.replace(/[^A-Za-z]/g, '');
-  const upper = text.replace(/[^A-Z]/g, '');
-  const upperRatio = letters.length ? upper.length / letters.length : 0;
-  return words.length <= 14 && (upperRatio > 0.72 || /[@|]\s*\b/.test(text));
-};
-
-const dedupeSourceUnits = (units) => {
-  const counts = new Map();
-  units.forEach((unit) => {
-    const key = sourceUnitKey(unit);
-    if (!key) return;
-    counts.set(key, (counts.get(key) || 0) + 1);
-  });
-
-  const seen = new Map();
-  return units.filter((unit) => {
-    const key = sourceUnitKey(unit);
-    if (!key) return false;
-    const nextSeen = (seen.get(key) || 0) + 1;
-    seen.set(key, nextSeen);
-    if (nextSeen === 1) return true;
-    return !(counts.get(key) > 1 || isLikelyRepeatedHeader(unit));
-  });
-};
-
-const cleanSourceMaterial = (value, limit) => {
-  const compact = compactText(value, limit);
-  const units = compact
-    .split(/\n+/)
-    .flatMap((line) => {
-      const normalized = line.replace(/\s+/g, ' ').trim();
-      if (!normalized) return [];
-      return normalized.length > 260
-        ? (normalized.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [normalized])
-        : [normalized];
-    })
-    .map((line) => line.replace(/\s+/g, ' ').trim())
-    .filter(Boolean);
-  const cleaned = units.filter((unit) => !isNoisySourceUnit(unit));
-  return compactText(dedupeSourceUnits(cleaned.length ? cleaned : units).join('\n'), limit);
-};
-
-const wordCount = (value) => compactText(value, Number.MAX_SAFE_INTEGER)
-  .split(/\s+/)
-  .filter(Boolean)
-  .length;
-
-// Mirrors app.jsx SOURCE_REVIEW_STOP_WORDS — keep in sync
-const KEYWORD_STOP_WORDS = new Set([
-  'this', 'that', 'with', 'from', 'have', 'will', 'your', 'about', 'into', 'their', 'there', 'where',
-  'when', 'what', 'were', 'been', 'being', 'they', 'them', 'than', 'then', 'also', 'should', 'could',
-  'would', 'these', 'those', 'because', 'through', 'between', 'within', 'without', 'document', 'presentation',
-  'slide', 'slides', 'deck', 'cover', 'make', 'create', 'generate', 'build', 'please', 'need', 'want',
-]);
-
-// Mirrors app.jsx sourceReviewKeywords — keep in sync
-const keywordsFrom = (value) => {
-  const words = String(value || '').toLowerCase().match(/[a-z0-9]{4,}/g) || [];
-  return [...new Set(words.filter((word) => !KEYWORD_STOP_WORDS.has(word)))].slice(0, 40);
-};
-
-// Mirrors app.jsx hasSourceConflict — keep in sync
-const keywordOverlap = (brief, source) => {
-  const sourceKeywords = keywordsFrom(source);
-  return keywordsFrom(brief).filter((keyword) =>
-    sourceKeywords.some((sourceKeyword) => sourceKeyword.includes(keyword) || keyword.includes(sourceKeyword))
-  );
-};
-
-// Mirrors app.jsx hasTangibleSourceInfo — keep in sync
-const hasTangibleSourceInfo = (value, kind = 'brief') => {
-  const text = compactText(value, Number.MAX_SAFE_INTEGER).replace(/\s+/g, ' ').trim();
-  if (!text) return false;
-  const words = text.split(/\s+/).filter(Boolean);
-  const keywords = keywordsFrom(text);
-  const hasSpecificAnchor = /(\d{2,}|%|\$|₦|Q[1-4]|FY\d{2,4}|20\d{2}|@[a-z0-9.-]+)/i.test(text);
-
-  if (kind === 'source') return words.length >= 10 && keywords.length >= 4;
-  return (words.length >= 10 && keywords.length >= 4) || (hasSpecificAnchor && keywords.length >= 3);
-};
-
-const sourceFitGuide = (brief, source) => {
-  if (!brief || !source) return 'No source-fit warning.';
-  const briefKeywords = keywordsFrom(brief);
-  if (briefKeywords.length < 3) return 'No source-fit warning.';
-  const overlap = keywordOverlap(brief, source);
-  if (overlap.length >= Math.min(3, Math.max(1, Math.floor(briefKeywords.length * 0.25)))) {
-    return `The brief appears supported by the source. Shared anchors: ${overlap.slice(0, 8).join(', ')}.`;
-  }
-  return [
-    'The brief appears weakly supported by the uploaded source.',
-    'Use the brief only as audience/framing intent.',
-    'Do not force unsupported investor, metric, runway, funding, product, or decision claims into the deck.',
-    'If necessary, state missing source evidence concretely instead of pretending the document contains it.',
-  ].join(' ');
-};
+const {
+  keywordsFrom,
+  keywordOverlap,
+  hasTangibleSourceInfo,
+  sourceFitGuide,
+} = SourceReview;
 
 const resolveSlideCount = (slideCount, content) => {
   const explicit = parseInt(slideCount, 10);
@@ -486,37 +375,6 @@ const persistGeneratedSlides = async ({ deckId, uid, slides }) => {
     });
     return false;
   }
-};
-
-const decodeXmlEntities = (value) => String(value || '')
-  .replace(/&amp;/g, '&')
-  .replace(/&lt;/g, '<')
-  .replace(/&gt;/g, '>')
-  .replace(/&quot;/g, '"')
-  .replace(/&apos;/g, "'");
-
-const slideNumberFromPath = (path) => {
-  const match = String(path || '').match(/slide(\d+)\.xml$/);
-  return match ? parseInt(match[1], 10) : 0;
-};
-
-const extractPptxText = async (buffer) => {
-  const zip = await JSZip.loadAsync(buffer);
-  const slidePaths = Object.keys(zip.files)
-    .filter((path) => /^ppt\/slides\/slide\d+\.xml$/.test(path))
-    .sort((a, b) => slideNumberFromPath(a) - slideNumberFromPath(b));
-
-  const slides = [];
-  for (const path of slidePaths) {
-    const xml = await zip.file(path).async('text');
-    const textRuns = [...xml.matchAll(/<a:t[^>]*>([\s\S]*?)<\/a:t>/g)]
-      .map((match) => decodeXmlEntities(match[1]).replace(/\s+/g, ' ').trim())
-      .filter(Boolean);
-    if (textRuns.length) {
-      slides.push(`Slide ${slideNumberFromPath(path)}\n${textRuns.join('\n')}`);
-    }
-  }
-  return slides.join('\n\n');
 };
 
 const buildDeckPrompt = ({ userInstruction, sourceMaterial, sourceDocumentName, sourceFit, count, templateStyle, voiceGuide, templatePreset, inputMode }) => {
