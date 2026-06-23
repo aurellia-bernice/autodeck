@@ -1,5 +1,7 @@
 # AutoDeck AI — Backend Restructure Specification (v2)
 
+> Status note: this document is a historical restructure plan. Several Phase 1 items have since been implemented, including callable-backed deck/brand writes, server-side parsing, backend image search, and locked Firestore writes. Use `ARCHITECTURE.md` plus the current code as the source of truth before executing any remaining items.
+
 **For any coding agent executing this plan:**
 Read every section in full before touching any file. Each phase is independently shippable and must be validated before the next begins. Do not skip phases, reorder steps, or remove any frontend function until the backend replacement is deployed and confirmed working. Violations of these constraints will break the running app.
 

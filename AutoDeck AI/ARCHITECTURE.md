@@ -42,17 +42,25 @@ autodeck/
     ├── tokens.jsx                        # qxTheme, QX colors, typography, radius, shadows
     ├── slide-intelligence.jsx            # Browser visual-layout classifier helpers
     ├── template-presets.jsx              # Built-in style/preset contract
-    ├── firebase-config.js                # Gitignored Firebase app config
+    ├── firebase-config.js                # Local public Firebase web config; copy from example
     ├── firebase-config.example.js
     ├── api-config.js                     # Tracked empty globals; real API keys live in Function secrets
     ├── api-config.example.js
+    ├── shared/
+    │   └── source-review.js              # Browser source-review heuristics
     ├── firestore.rules                   # Client reads only; writes via Functions
     ├── firestore.indexes.json            # `decks(userId, createdAt desc)`
     ├── storage.rules                     # Owner-scoped upload paths
     ├── storage.cors.json
     ├── functions/
     │   ├── index.js                      # Callable APIs
+    │   ├── lib/
+    │   │   ├── pptx-text.js              # PPTX extraction helper
+    │   │   └── source-cleaning.js        # Source text cleanup helper
+    │   ├── shared/
+    │   │   └── source-review.js          # Functions copy of browser source-review heuristics
     │   ├── slide-intelligence.js         # Node copy of visual slide intelligence
+    │   ├── slide-objects.js              # Node copy of editable slide object composer
     │   └── package.json                  # Function dependencies, Node 22
     └── components/
         ├── motion.jsx
@@ -63,6 +71,7 @@ autodeck/
         ├── SourceConflictScreen.jsx
         ├── ProcessingScreen.jsx
         ├── PreviewScreen.jsx
+        ├── slide-editor-model.jsx
         ├── SlideGenerator.jsx
         ├── HistoryScreen.jsx
         ├── AdminScreen.jsx
@@ -71,7 +80,15 @@ autodeck/
         └── ResetPasswordScreen.jsx
 ```
 
-Loading order matters because there are no ES modules. `index.html` loads vendor libraries, then `tokens.jsx`, `slide-intelligence.jsx`, `template-presets.jsx`, shared helpers, components, and finally `app.jsx`. Each JSX file exposes globals with `Object.assign(window, { ... })`.
+Loading order matters because there are no ES modules. `index.html` loads vendor libraries, Firebase config, export libraries, `shared/source-review.js`, `tokens.jsx`, `slide-intelligence.jsx`, `slide-objects.jsx`, `template-presets.jsx`, component helpers such as `components/slide-editor-model.jsx`, components, and finally `app.jsx`. JSX files expose globals on `window`.
+
+The browser and Functions copies of shared runtime logic are checked by `npm run check:shared`. Keep these pairs byte-for-byte aligned unless the sync script is intentionally updated:
+
+- `slide-intelligence.jsx` and `functions/slide-intelligence.js`
+- `slide-objects.jsx` and `functions/slide-objects.js`
+- `shared/source-review.js` and `functions/shared/source-review.js`
+
+Preview-only HTML files (`preview-home.html`, `preview-conflict.html`, `preview-conflict-loading.html`) are static demo harnesses for isolated visual checks. They are not part of the production navigation flow. `AutoDeck AI.html` is a compatibility redirect, and `action.html` is the Firebase account-action page.
 
 ---
 
@@ -140,6 +157,7 @@ ResetPasswordScreen is the standalone reset target.
 ### `SlideGenerator`
 
 - Renders the editable slide canvas and export menu.
+- Uses `AutoDeckSlideEditorModel` for demo slides, layout metadata, theme construction, brand color derivation, and PowerPoint font normalization.
 - Supports legacy layouts (`standard`, `split`, `bigTitle`, `stat`, `quote`, `image`, `minimal`, `centered`) and intelligent visual layouts (`process_flow`, `comparison`, `timeline`, `statistics`, `hierarchy`, `image_focus`, `roadmap`, `problem_solution`, `feature_breakdown`, `summary`).
 - Uses `AutoDeckTemplatePresets` and slide metadata (`layout`, `renderLayout`, `slideType`, `components`, `speakerNotes`, `imagePrompt`) to choose visual treatment.
 - Reads admin typography and color config from `brandConfig`.
@@ -301,6 +319,8 @@ Optional permanent source archive. `app.jsx` only uploads here when `window.Auto
 - `firebase-config.js` from `firebase-config.example.js`
 - `api-config.js` currently defines empty browser globals; real Gemini/Unsplash keys live in Function secrets
 
+`firebase-config.js` identifies the public Firebase client app. It is not a server secret, but it is environment-local and remains ignored; copy it from `firebase-config.example.js`. Server-side API keys stay in Cloud Function secrets.
+
 ### Function secrets
 
 - `ANTHROPIC_API_KEY` - required for `generateDeck`, `agentEdit`, and Claude-backed source summaries
@@ -321,7 +341,9 @@ Optional permanent source archive. `app.jsx` only uploads here when `window.Auto
 The root package is Playwright-only.
 
 ```bash
+npm run check:shared
 npm test
+npm run verify
 ```
 
 Representative coverage includes login, home/generation forms, source conflict, generation source handling, processing, preview, slide intelligence, history, sidebar, account settings, and admin flows.
