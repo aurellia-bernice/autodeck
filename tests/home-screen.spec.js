@@ -40,6 +40,8 @@ test.describe('HomeScreenA', () => {
   });
 
   test('renders 5 prompt seed cards', async ({ page }) => {
+    await page.getByRole('button', { name: /Not sure where to start\?/i }).click();
+
     const labels = [
       'Q3 business review',
       'Product launch announcement',
@@ -52,8 +54,9 @@ test.describe('HomeScreenA', () => {
     }
   });
 
-  test('renders "Or start from" section label', async ({ page }) => {
-    await expect(page.getByText('Or start from')).toBeVisible();
+  test('renders collapsed starter prompt section label', async ({ page }) => {
+    await expect(page.getByText('Not sure where to start?')).toBeVisible();
+    await expect(page.getByText('Pick a brief starter')).toBeVisible();
   });
 
   // ── Generate button state ──────────────────────────────────────────────────
@@ -85,12 +88,14 @@ test.describe('HomeScreenA', () => {
   // ── Prompt seed interaction ───────────────────────────────────────────────
 
   test('clicking a prompt seed fills the textarea with seed content', async ({ page }) => {
+    await page.getByRole('button', { name: /Not sure where to start\?/i }).click();
     await page.getByRole('button', { name: /Q3 business review/i }).click();
     const value = await page.locator('textarea').inputValue();
     expect(value.length).toBeGreaterThan(10);
   });
 
   test('clicking a prompt seed enables the Generate deck button', async ({ page }) => {
+    await page.getByRole('button', { name: /Not sure where to start\?/i }).click();
     await page.getByRole('button', { name: /Product launch announcement/i }).click();
     await expect(page.getByRole('button', { name: /Generate deck/i })).toBeEnabled();
   });

@@ -52,7 +52,7 @@ test.describe('Slide Intelligence layer', () => {
     });
 
     await expect(page.locator('#main-slide')).toBeVisible();
-    await expect(page.getByText('Flow', { exact: true })).toBeVisible();
+    await expect(page.locator('#main-slide').getByText('Process flow')).toBeVisible();
     await expect(page.getByText('Discover')).toBeVisible();
     await expect(page.getByText('Sign Up')).toBeVisible();
     await expect(page.getByText('Complete KYC')).toBeVisible();
@@ -75,8 +75,8 @@ test.describe('Slide Intelligence layer', () => {
     });
 
     await expect(page.locator('#main-slide')).toBeVisible();
-    await expect(page.getByText('Flow', { exact: true })).toBeVisible();
+    await expect(page.locator('#main-slide').getByText('Process flow')).toBeVisible();
     await expect(page.getByText('Discover')).toBeVisible();
-    await expect(page.getByText('Layout')).toBeVisible();
+    await expect(page.getByText('Layout', { exact: true }).first()).toBeVisible();
   });
 });

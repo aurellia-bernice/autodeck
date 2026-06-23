@@ -77,11 +77,11 @@ test.describe('Presentation object editor', () => {
     await expect(page.locator('#main-slide').getByRole('heading', { name: 'Edited Title' })).toBeVisible();
 
     const body = await selectBodyObject(page);
-    await page.getByRole('button', { name: /Customise/i }).click();
+    await expect(page.getByRole('complementary', { name: /Customize slide/i })).toBeVisible();
     await page.locator('input[type="number"]').fill('22');
     await page.getByRole('button', { name: 'B', exact: true }).click();
     await page.getByRole('button', { name: 'I', exact: true }).click();
-    await page.getByRole('button', { name: 'C', exact: true }).click();
+    await page.getByRole('button', { name: '↔', exact: true }).click();
 
     const style = await body.evaluate((el) => {
       const computed = getComputedStyle(el);
@@ -101,7 +101,8 @@ test.describe('Presentation object editor', () => {
   test('inserts and edits a manual table', async ({ page }) => {
     await loadEditor(page, objectSlides);
 
-    await page.getByRole('button', { name: 'Table', exact: true }).first().click();
+    await page.getByRole('button', { name: /Add/i }).click();
+    await page.getByRole('button', { name: '⊞ Table Editable rows', exact: true }).click();
     await expect(page.locator('#main-slide').getByText('Column 1')).toBeVisible();
 
     const cell = page.locator('#main-slide').getByText('Row 1').first();
@@ -135,7 +136,8 @@ test.describe('Presentation object editor', () => {
       });
     });
 
-    await page.getByRole('button', { name: 'Image' }).click();
+    await page.getByRole('button', { name: /Add/i }).click();
+    await page.getByRole('button', { name: '▭ Image Search or upload', exact: true }).click();
     await expect(page.locator('#main-slide').getByText('Add image')).toBeVisible();
     await page.getByRole('button', { name: 'Search Unsplash' }).last().click();
     await page.getByRole('button', { name: /Use image Mock Unsplash photo/ }).click();

@@ -61,7 +61,7 @@ test.describe('Generation source workflow', () => {
     });
 
     await expect(page.getByText('Ready · Firebase generated')).toBeVisible();
-    await expect(page.getByText('Hinton frames the intelligence gap')).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Hinton frames the intelligence gap/i })).toBeVisible();
     await expect(page.getByText('The risk question becomes practical')).toBeVisible();
     await expect(page.getByRole('button', { name: /Open slideshow/i })).toBeVisible();
     await expect(page.getByText('Ready · Demo preview')).not.toBeVisible();

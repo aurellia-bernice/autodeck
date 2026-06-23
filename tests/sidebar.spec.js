@@ -74,7 +74,7 @@ test.describe('Sidebar', () => {
 
   test('renders a user avatar area at the bottom of the sidebar', async ({ page }) => {
     // Without auth the avatar shows "?" (first char of '?')
-    await expect(page.getByText('?')).toBeVisible();
+    await expect(page.getByText('?', { exact: true })).toBeVisible();
   });
 
   test('renders the dark mode toggle button', async ({ page }) => {
