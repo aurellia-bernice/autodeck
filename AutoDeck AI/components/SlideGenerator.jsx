@@ -1323,7 +1323,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 7, marginTop: 12 }}>
                 {panelTabs.map((tab) => (
-                  <button key={tab.key} onClick={() => setEditTab(tab.key)} style={{ height: 38, borderRadius: 10, border: editTab === tab.key ? `1px solid ${QX.lime}` : '1px solid rgba(246,241,251,0.09)', background: editTab === tab.key ? 'rgba(212,255,63,0.13)' : 'rgba(246,241,251,0.035)', color: editTab === tab.key ? QX.lime : 'rgba(246,241,251,0.72)', cursor: 'pointer', fontFamily: qxType.body, fontSize: 12.5, fontWeight: 700 }}>
+                  <button key={tab.key} onClick={() => setEditTab(tab.key)} style={{ height: 38, borderRadius: 10, border: editTab === tab.key ? '1.5px solid rgba(138,99,255,0.90)' : '1px solid rgba(246,241,251,0.09)', background: editTab === tab.key ? 'rgba(138,99,255,0.18)' : 'rgba(246,241,251,0.035)', color: editTab === tab.key ? '#FFFFFF' : 'rgba(246,241,251,0.55)', cursor: 'pointer', fontFamily: qxType.body, fontSize: 12.5, fontWeight: 700, boxShadow: editTab === tab.key ? '0 0 0 2px rgba(138,99,255,0.22), 0 0 14px rgba(138,99,255,0.16)' : 'none', transition: 'all 150ms' }}>
                     {tab.label}
                   </button>
                 ))}
@@ -1593,7 +1593,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
                           <div style={{ display: 'flex', gap: 7 }}>
                             {headerPresets.map(p => (
                               <button key={p.label} title={p.label} onClick={() => updateObject(selectedObjectId, { style: { headerFill: p.bg, headerText: p.text } })}
-                                style={{ flex: 1, height: 44, borderRadius: 12, background: p.bg, border: curHdrFill === p.bg ? '2px solid #F6F1FB' : '1.5px solid rgba(246,241,251,0.12)', cursor: 'pointer', padding: 0, transition: 'border 130ms' }} />
+                                style={{ flex: 1, height: 44, borderRadius: 12, background: p.bg, border: curHdrFill === p.bg ? '2px solid rgba(138,99,255,0.90)' : '1.5px solid rgba(246,241,251,0.12)', cursor: 'pointer', padding: 0, transition: 'border 130ms', boxShadow: curHdrFill === p.bg ? '0 0 0 3px rgba(138,99,255,0.25)' : 'none' }} />
                             ))}
                           </div>
                         </div>
@@ -1607,7 +1607,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
                           <div style={{ display: 'flex', gap: 7 }}>
                             {bodyPresets.map(p => (
                               <button key={p.label} title={p.label} onClick={() => updateObject(selectedObjectId, { style: { bodyFill: p.bg } })}
-                                style={{ flex: 1, height: 44, borderRadius: 12, background: p.stripe ? 'repeating-linear-gradient(135deg,rgba(246,241,251,0.12) 0px,rgba(246,241,251,0.12) 3px,rgba(11,1,24,0.80) 3px,rgba(11,1,24,0.80) 9px)' : (p.bg === 'transparent' ? 'rgba(246,241,251,0.05)' : p.bg), border: curBdyFill === p.bg ? '2px solid #F6F1FB' : '1.5px solid rgba(246,241,251,0.12)', cursor: 'pointer', padding: 0, transition: 'border 130ms' }} />
+                                style={{ flex: 1, height: 44, borderRadius: 12, background: p.stripe ? 'repeating-linear-gradient(135deg,rgba(246,241,251,0.12) 0px,rgba(246,241,251,0.12) 3px,rgba(11,1,24,0.80) 3px,rgba(11,1,24,0.80) 9px)' : (p.bg === 'transparent' ? 'rgba(246,241,251,0.05)' : p.bg), border: curBdyFill === p.bg ? '2px solid rgba(138,99,255,0.90)' : '1.5px solid rgba(246,241,251,0.12)', cursor: 'pointer', padding: 0, transition: 'border 130ms', boxShadow: curBdyFill === p.bg ? '0 0 0 3px rgba(138,99,255,0.25)' : 'none' }} />
                             ))}
                           </div>
                         </div>
@@ -1631,10 +1631,22 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
                       <>
                         <div style={inspectorCard}>
                           <div style={sectionTitle}>Tables</div>
-                          <div style={{ color: 'rgba(246,241,251,0.55)', fontFamily: qxType.body, fontSize: 12.5, lineHeight: 1.5, marginBottom: 14 }}>Insert a table, click any cell to edit it, then set row colours here.</div>
-                        </div>
-                        <div style={inspectorCard}>
-                          <button onClick={addTable} style={{ ...inspectorButton('ghost'), width: '100%' }}>Add table</button>
+                          <div style={{ color: 'rgba(246,241,251,0.55)', fontFamily: qxType.body, fontSize: 12.5, lineHeight: 1.5, marginBottom: 16 }}>Insert a table, click any cell to edit it, then set row colours below.</div>
+                          <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.30)', marginBottom: 8 }}>Preview</div>
+                          <div style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(246,241,251,0.10)', marginBottom: 14 }}>
+                            {[
+                              { cells: ['Plan', 'Price', 'Seats'], isHeader: true },
+                              { cells: ['Starter', '$0', '3'], isHeader: false },
+                              { cells: ['Growth', '$49', '20'], isHeader: false },
+                            ].map((row, ri) => (
+                              <div key={ri} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderBottom: ri < 2 ? '1px solid rgba(246,241,251,0.08)' : 'none' }}>
+                                {row.cells.map((cell, ci) => (
+                                  <div key={ci} style={{ padding: '7px 10px', background: row.isHeader ? '#D4FF3F' : 'transparent', color: row.isHeader ? '#1A0530' : 'rgba(246,241,251,0.80)', fontFamily: qxType.body, fontSize: 11, fontWeight: row.isHeader ? 700 : 400, borderRight: ci < 2 ? '1px solid rgba(246,241,251,0.08)' : 'none' }}>{cell}</div>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                          <button onClick={addTable} style={{ height: 38, padding: '0 13px', borderRadius: 10, border: '1px solid rgba(196,169,240,0.35)', background: '#C4A9F0', color: '#1A0530', fontFamily: qxType.body, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', width: '100%', textAlign: 'center' }}>+ Add table</button>
                         </div>
                       </>
                     )}
