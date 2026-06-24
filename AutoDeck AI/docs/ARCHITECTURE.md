@@ -95,8 +95,9 @@ autodeck/
     │   └── package.json                  # Function dependencies, Node 22
     └── components/
         ├── motion.jsx
-        ├── tweaks-panel.jsx
-        ├── Sidebar.jsx
+        ├── shell/
+        │   ├── tweaks-panel.jsx
+        │   └── Sidebar.jsx
         ├── auth/
         │   ├── LoginScreen.jsx
         │   └── ResetPasswordScreen.jsx
@@ -114,10 +115,11 @@ autodeck/
         │   ├── slide-editor-agent.jsx
         │   ├── slide-editor-export.jsx
         │   └── SlideGenerator.jsx
-        └── AdminScreen.jsx
+        └── admin/
+            └── AdminScreen.jsx
 ```
 
-Loading order matters because there are no ES modules. `index.html` loads vendor libraries, Firebase config, export libraries, `shared/source-review.js`, `app/tokens.jsx`, `slide-intelligence.jsx`, `slide-objects.jsx`, `app/template-presets.jsx`, deck workflow components under `components/deck/`, editor helpers and `SlideGenerator` under `components/editor/`, remaining components, `app/app-services.jsx`, and finally `app/app.jsx`. JSX files expose globals on `window`.
+Loading order matters because there are no ES modules. `index.html` loads vendor libraries, Firebase config, export libraries, `shared/source-review.js`, `app/tokens.jsx`, `slide-intelligence.jsx`, `slide-objects.jsx`, `app/template-presets.jsx`, shell components under `components/shell/`, deck workflow components under `components/deck/`, editor helpers and `SlideGenerator` under `components/editor/`, admin/auth/account components, `app/app-services.jsx`, and finally `app/app.jsx`. JSX files expose globals on `window`.
 
 The browser and Functions copies of shared runtime logic are checked by `npm run check:shared`. Keep these pairs byte-for-byte aligned unless the sync script is intentionally updated:
 
@@ -212,7 +214,7 @@ ResetPasswordScreen is the standalone reset target.
 - Opens real decks by reading `decks/{deckId}` and `decks/{deckId}/slides`.
 - Deletes real decks through the `deleteDeck` callable.
 
-### `AdminScreen`
+### `components/admin/AdminScreen.jsx`
 
 - Admin-only UI for brand colors, typography, built-in template presets, and voice.
 - Persists allowed brand keys through `saveBrand`; direct client writes to `config/brand` are blocked by Firestore rules.

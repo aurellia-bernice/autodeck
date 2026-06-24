@@ -194,6 +194,6 @@ flowchart LR
 - `app/app.jsx` performs the backup browser persistence path for `persisted: false` and still previews the generated slides.
 - `app/app.jsx` skips optional original-file uploads by default; enable them only after applying `storage.cors.json` to the bucket.
 - `components/deck/HomeScreenA.jsx` and `functions/index.js` both clean noisy parsed text; the backend remains authoritative because it re-cleans source material before prompting Anthropic.
-- `Sidebar.jsx` displays the build marker to confirm the loaded frontend is not stale.
+- `components/shell/Sidebar.jsx` displays the build marker to confirm the loaded frontend is not stale.
 - `components/auth/LoginScreen.jsx` maps Firebase Google sign-in errors to actionable messages, supports redirect fallback, and links pending Google credentials after password sign-in when Firebase reports an existing password account.
 - `tests/generation-source.spec.js` covers the stale-banner absence, slow Firebase generation state, successful Firebase-slide preview, and failure-without-local-draft behavior.
