@@ -464,6 +464,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     setAgentMessages((prev) => prev.length ? prev : [agentIntroMessage(idx)]);
     setAgentInput('');
     setAgentOpen(true);
+    setEditPanelOpen(false);
     setTimeout(() => agentInputRef.current?.focus(), 80);
   };
 
@@ -1146,7 +1147,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
           </div>
           <div style={{ width: 1, height: 18, background: 'rgba(246,241,251,0.12)', margin: '0 3px' }} />
           {/* AI agent */}
-          <button onClick={() => openAgent(currentIndex)} style={{ ...chromeBtn(), borderColor: 'rgba(212,255,63,0.35)', color: QX.lime }}>Agent</button>
+          <button onClick={() => agentOpen ? setAgentOpen(false) : openAgent(currentIndex)} style={{ ...chromeBtn(agentOpen), borderColor: agentOpen ? QX.lime : 'rgba(212,255,63,0.35)', color: QX.lime }}>Agent</button>
           <div style={{ width: 1, height: 18, background: 'rgba(246,241,251,0.12)', margin: '0 3px' }} />
           {/* Primary action */}
           <button onClick={handlePresent} style={{ height: 36, padding: '0 20px', borderRadius: 9, border: 'none', background: QX.lime, color: '#1A0530', fontFamily: qxType.body, fontSize: 13, fontWeight: 800, cursor: 'pointer', letterSpacing: '0.01em' }}>Present</button>
@@ -1175,7 +1176,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '28px 64px', position: 'relative' }}>
           <button onClick={() => goTo(currentIndex - 1)} disabled={currentIndex === 0} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', width: 38, height: 38, borderRadius: '50%', border: '1px solid rgba(246,241,251,0.14)', background: 'rgba(246,241,251,0.04)', color: 'rgba(246,241,251,0.7)', cursor: currentIndex === 0 ? 'default' : 'pointer' }}>‹</button>
-          <div style={{ width: '100%', maxWidth: editPanelOpen ? 880 : 1040, transition: `max-width 240ms ${qxEase}` }}>
+          <div style={{ width: '100%', maxWidth: (editPanelOpen || agentOpen) ? 880 : 1040, transition: `max-width 240ms ${qxEase}` }}>
             <ObjectStage />
             <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.30)' }}>Layout</span>
@@ -1544,6 +1545,66 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
             </div>
           </aside>
         )}
+
+        {agentOpen && (
+          <aside style={{ ...inspectorPanel, width: 360, borderLeft: `1px solid rgba(212,255,63,0.18)`, background: 'linear-gradient(180deg, #0E0220 0%, #080115 100%)' }} onClick={(e) => e.stopPropagation()} aria-label="AI Agent">
+            {/* Header */}
+            <div style={{ padding: '16px 18px 14px', borderBottom: '1px solid rgba(246,241,251,0.09)', background: 'linear-gradient(180deg,rgba(212,255,63,0.05),rgba(212,255,63,0.02))', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: QX.lime, flexShrink: 0 }} />
+                    <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.45)' }}>Agent · Slide {agentSlideIndex + 1}</span>
+                    <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.30)' }}>· {LAYOUTS.find((l) => l.key === (localSlides[agentSlideIndex]?.renderLayout || localSlides[agentSlideIndex]?.layout))?.name || 'Standard'}</span>
+                  </div>
+                  <div style={{ fontFamily: qxType.display, fontSize: 14, fontWeight: 600, color: '#F6F1FB', letterSpacing: '-0.012em', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{localSlides[agentSlideIndex]?.title}</div>
+                </div>
+                <button onClick={() => { setAgentOpen(false); setEditPanelOpen(true); }} style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid rgba(246,241,251,0.10)', background: 'rgba(246,241,251,0.04)', color: 'rgba(246,241,251,0.50)', cursor: 'pointer', flexShrink: 0, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
+              </div>
+            </div>
+
+            {/* Messages */}
+            <div ref={agentScrollRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {agentMessages.map((m, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                  <div style={{ maxWidth: '86%', padding: '10px 13px', borderRadius: m.role === 'user' ? '14px 14px 4px 14px' : '14px 14px 14px 4px', background: m.role === 'user' ? QX.lime : 'rgba(246,241,251,0.07)', color: m.role === 'user' ? '#232126' : 'rgba(246,241,251,0.92)', fontFamily: qxType.body, fontSize: 13, lineHeight: 1.5, fontWeight: m.role === 'user' ? 700 : 400 }}>{m.text}</div>
+                </div>
+              ))}
+              {agentThinking && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: QX.lime, opacity: 0.7 }} />
+                  <span style={{ color: 'rgba(246,241,251,0.55)', fontSize: 13, fontFamily: qxType.body }}>Thinking…</span>
+                </div>
+              )}
+            </div>
+
+            {/* Input area */}
+            <div style={{ padding: '10px 14px 14px', borderTop: '1px solid rgba(246,241,251,0.09)', background: 'rgba(5,0,12,0.60)', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 9 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.38)' }}>Target · Slide {agentSlideIndex + 1}</div>
+                <button onClick={() => { if (agentMessages.some((m) => m.role === 'user')) setAgentHistorySessions((prev) => [{ id: Date.now(), title: agentMessages.find((m) => m.role === 'user')?.text || 'Agent chat', slideIndex: agentSlideIndex, messages: agentMessages }, ...prev].slice(0, 12)); setAgentMessages([agentIntroMessage(agentSlideIndex, true)]); }} style={{ border: 'none', background: 'transparent', color: QX.lime, cursor: 'pointer', fontSize: 11.5, fontWeight: 700, fontFamily: qxType.body }}>New chat</button>
+              </div>
+              {agentHistoryOpen && agentHistorySessions.length > 0 && (
+                <div style={{ border: '1px solid rgba(246,241,251,0.10)', borderRadius: 10, padding: 8, maxHeight: 130, overflowY: 'auto' }}>
+                  <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)', padding: '2px 4px 7px' }}>Previous chats</div>
+                  {agentHistorySessions.map((session) => (
+                    <button key={session.id} onClick={() => { setAgentSlideIndex(session.slideIndex); setAgentMessages(session.messages); setAgentHistoryOpen(false); }} style={panelButton}>{session.title}</button>
+                  ))}
+                </div>
+              )}
+              <button onClick={() => setAgentHistoryOpen((p) => !p)} disabled={!agentHistorySessions.length} style={{ ...panelButton, opacity: agentHistorySessions.length ? 1 : 0.45, fontSize: 11.5 }}>History</button>
+              <div style={{ display: 'flex', gap: 5, overflowX: 'auto', paddingBottom: 2 }}>
+                {agentQuickPrompts.map((item) => (
+                  <button key={item.label} onClick={() => { setAgentInput(item.text); setTimeout(() => agentInputRef.current?.focus(), 20); }} style={{ flexShrink: 0, padding: '5px 8px', borderRadius: 999, border: '1px solid rgba(246,241,251,0.10)', background: 'rgba(246,241,251,0.04)', color: 'rgba(246,241,251,0.72)', cursor: 'pointer', fontFamily: qxType.body, fontSize: 11.5 }}>{item.label}</button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 7, alignItems: 'flex-end' }}>
+                <textarea ref={agentInputRef} value={agentInput} onChange={(e) => setAgentInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAgentSend(); } }} placeholder="Ask Agent to rewrite the title, switch layout, add detail…" rows={2} style={{ flex: 1, minHeight: 46, maxHeight: 110, padding: '11px 12px', borderRadius: 11, border: '1px solid rgba(246,241,251,0.13)', background: 'rgba(246,241,251,0.045)', color: '#F6F1FB', fontFamily: qxType.body, fontSize: 13, outline: 'none', resize: 'vertical', lineHeight: 1.45 }} />
+                <button onClick={handleAgentSend} disabled={!agentInput.trim() || agentThinking} style={{ width: 42, height: 42, borderRadius: 11, border: 'none', background: agentInput.trim() && !agentThinking ? QX.lime : 'rgba(246,241,251,0.07)', color: agentInput.trim() && !agentThinking ? '#232126' : 'rgba(246,241,251,0.28)', cursor: agentInput.trim() && !agentThinking ? 'pointer' : 'default', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>→</button>
+              </div>
+            </div>
+          </aside>
+        )}
       </div>
 
       <div style={{ borderTop: '1px solid rgba(246,241,251,0.08)', padding: '10px 24px 12px', overflowX: 'auto', display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(0,0,0,0.30)', flexShrink: 0 }}>
@@ -1571,53 +1632,6 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
         </div>
       )}
 
-      {agentOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(5,0,12,0.68)', backdropFilter: 'blur(8px)', zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setAgentOpen(false)}>
-          <div style={{ width: 'min(640px, calc(100vw - 32px))', height: 'min(720px, calc(100vh - 48px))', background: 'linear-gradient(180deg,#120323 0%,#0C0218 100%)', border: '1px solid rgba(246,241,251,0.12)', borderRadius: 18, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 34px 110px rgba(0,0,0,0.74)' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ padding: '16px 18px', borderBottom: '1px solid rgba(246,241,251,0.09)', display: 'flex', alignItems: 'center', gap: 13, background: 'rgba(246,241,251,0.025)' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                  <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.45)' }}>Agent · Slide {agentSlideIndex + 1}</div>
-                  <span style={{ width: 4, height: 4, borderRadius: '50%', background: QX.lime, opacity: 0.8 }} />
-                  <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.38)' }}>{LAYOUTS.find((l) => l.key === (localSlides[agentSlideIndex]?.renderLayout || localSlides[agentSlideIndex]?.layout))?.name || 'Standard'}</div>
-                </div>
-                <div style={{ fontFamily: qxType.display, fontSize: 15, fontWeight: 600, color: '#F6F1FB', letterSpacing: '-0.012em', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{localSlides[agentSlideIndex]?.title}</div>
-              </div>
-              <button onClick={() => setAgentOpen(false)} style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'rgba(246,241,251,0.06)', color: 'rgba(246,241,251,0.55)', cursor: 'pointer' }}>x</button>
-            </div>
-            <div ref={agentScrollRef} style={{ flex: 1, overflowY: 'auto', padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {agentMessages.map((m, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                  <div style={{ maxWidth: m.role === 'user' ? '76%' : '82%', padding: '11px 14px', borderRadius: m.role === 'user' ? '15px 15px 5px 15px' : '15px 15px 15px 5px', background: m.role === 'user' ? QX.lime : 'rgba(246,241,251,0.07)', color: m.role === 'user' ? '#232126' : 'rgba(246,241,251,0.92)', fontFamily: qxType.body, fontSize: 13.5, lineHeight: 1.5, fontWeight: m.role === 'user' ? 700 : 400 }}>{m.text}</div>
-                </div>
-              ))}
-              {agentThinking && <div style={{ color: 'rgba(246,241,251,0.60)', fontSize: 13 }}>Thinking...</div>}
-            </div>
-            <div style={{ padding: '12px 16px 14px', borderTop: '1px solid rgba(246,241,251,0.09)', background: 'rgba(5,0,12,0.78)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)' }}>Target · Slide {agentSlideIndex + 1}</div>
-                <button onClick={() => { if (agentMessages.some((m) => m.role === 'user')) setAgentHistorySessions((prev) => [{ id: Date.now(), title: agentMessages.find((m) => m.role === 'user')?.text || 'Agent chat', slideIndex: agentSlideIndex, messages: agentMessages }, ...prev].slice(0, 12)); setAgentMessages([agentIntroMessage(agentSlideIndex, true)]); }} style={{ border: 'none', background: 'transparent', color: QX.lime, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>New chat</button>
-              </div>
-              {agentHistoryOpen && agentHistorySessions.length > 0 && (
-                <div style={{ border: '1px solid rgba(246,241,251,0.10)', borderRadius: 12, padding: 8 }}>
-                  <div style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)', padding: '2px 4px 7px' }}>Previous chats</div>
-                  {agentHistorySessions.map((session) => (
-                    <button key={session.id} onClick={() => { setAgentSlideIndex(session.slideIndex); setAgentMessages(session.messages); setAgentHistoryOpen(false); }} style={panelButton}>{session.title}</button>
-                  ))}
-                </div>
-              )}
-              <button onClick={() => setAgentHistoryOpen((p) => !p)} disabled={!agentHistorySessions.length} style={{ ...panelButton, opacity: agentHistorySessions.length ? 1 : 0.45 }}>History</button>
-              <div style={{ display: 'flex', gap: 6, overflowX: 'auto' }}>
-                {agentQuickPrompts.map((item) => <button key={item.label} onClick={() => { setAgentInput(item.text); setTimeout(() => agentInputRef.current?.focus(), 20); }} style={{ flexShrink: 0, padding: '6px 9px', borderRadius: 999, border: '1px solid rgba(246,241,251,0.10)', background: 'rgba(246,241,251,0.045)', color: 'rgba(246,241,251,0.76)', cursor: 'pointer', fontFamily: qxType.body, fontSize: 12 }}>{item.label}</button>)}
-              </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                <textarea ref={agentInputRef} value={agentInput} onChange={(e) => setAgentInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAgentSend(); } }} placeholder="Ask Agent to change slide 2 to split layout, expand feature 1, rewrite the title..." rows={2} style={{ flex: 1, minHeight: 48, maxHeight: 120, padding: '12px 13px', borderRadius: 12, border: '1px solid rgba(246,241,251,0.13)', background: 'rgba(246,241,251,0.045)', color: '#F6F1FB', fontFamily: qxType.body, fontSize: 13.5, outline: 'none', resize: 'vertical', lineHeight: 1.45 }} />
-                <button onClick={handleAgentSend} disabled={!agentInput.trim() || agentThinking} style={{ width: 44, height: 44, borderRadius: 12, border: 'none', background: agentInput.trim() && !agentThinking ? QX.lime : 'rgba(246,241,251,0.07)', color: agentInput.trim() && !agentThinking ? '#232126' : 'rgba(246,241,251,0.30)', cursor: agentInput.trim() && !agentThinking ? 'pointer' : 'default' }}>→</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       <style>{`
         @media print {
