@@ -4,8 +4,8 @@ const path = require('path');
 const root = path.resolve(__dirname, '..');
 
 const pairs = [
-  ['AutoDeck AI/slide-intelligence.jsx', 'AutoDeck AI/functions/slide-intelligence.js'],
-  ['AutoDeck AI/slide-objects.jsx', 'AutoDeck AI/functions/slide-objects.js'],
+  ['AutoDeck AI/components/editor/slide-intelligence.jsx', 'AutoDeck AI/functions/slide-intelligence.js'],
+  ['AutoDeck AI/components/editor/slide-objects.jsx', 'AutoDeck AI/functions/slide-objects.js'],
   ['AutoDeck AI/shared/source-review.js', 'AutoDeck AI/functions/shared/source-review.js'],
 ];
 
