@@ -38,6 +38,8 @@ autodeck/
 └── AutoDeck AI/
     ├── index.html                        # Primary hosted entry point
     ├── AutoDeck AI.html                  # Compatibility redirect page
+    ├── action.html                       # Firebase account action page
+    ├── STRUCTURE_CLEANUP.md              # File cleanup inventory and staged hierarchy plan
     ├── app-services.jsx                  # Browser-global app services and source-review helpers
     ├── app.jsx                           # Root router, auth, deck lifecycle, and screen coordination
     ├── tokens.jsx                        # qxTheme, QX colors, typography, radius, shadows
@@ -46,7 +48,7 @@ autodeck/
     ├── firebase-config.js                # Local public Firebase web config; copy from example
     ├── firebase-config.example.js
     ├── api-config.js                     # Tracked empty globals; real API keys live in Function secrets
-    ├── api-config.example.js
+    ├── api-config.example.js             # Reference shape only; do not place real keys here
     ├── shared/
     │   └── source-review.js              # Browser source-review heuristics
     ├── firestore.rules                   # Client reads only; writes via Functions
@@ -100,7 +102,9 @@ The browser and Functions copies of shared runtime logic are checked by `npm run
 - `slide-objects.jsx` and `functions/slide-objects.js`
 - `shared/source-review.js` and `functions/shared/source-review.js`
 
-Preview-only HTML files (`preview-home.html`, `preview-conflict.html`, `preview-conflict-loading.html`) are static demo harnesses for isolated visual checks. They are not part of the production navigation flow. `AutoDeck AI.html` is a compatibility redirect, and `action.html` is the Firebase account-action page.
+Preview-only HTML files (`preview-home.html`, `preview-conflict.html`, `preview-conflict-loading.html`) are static demo harnesses for isolated visual checks. They are not part of the production navigation flow and are ignored from Firebase Hosting. `AutoDeck AI.html` is a local compatibility redirect, and `action.html` is the Firebase account-action page.
+
+`STRUCTURE_CLEANUP.md` tracks files that are active, demo-only, archival, or deletion candidates. Use it before moving or deleting files so the no-build script order and Hosting surface stay predictable.
 
 ---
 
@@ -346,7 +350,7 @@ Optional permanent source archive. `app.jsx` only uploads here when `window.Auto
 - `firebase-config.js` from `firebase-config.example.js`
 - `api-config.js` currently defines empty browser globals; real Gemini/Unsplash keys live in Function secrets
 
-`firebase-config.js` identifies the public Firebase client app. It is not a server secret, but it is environment-local and remains ignored; copy it from `firebase-config.example.js`. Server-side API keys stay in Cloud Function secrets.
+`firebase-config.js` identifies the public Firebase client app. It is not a server secret, but it is environment-local and remains ignored; copy it from `firebase-config.example.js`. `api-config.example.js` is a reference shape only; do not place real Gemini or Unsplash keys in browser-delivered files. Server-side API keys stay in Cloud Function secrets.
 
 ### Function secrets
 
@@ -387,3 +391,4 @@ Representative coverage includes login, home/generation forms, source conflict, 
 | Admin voice-doc uploads are filename-only state | Voice documents are not passed to `generateDeck` | Parse and persist voice docs, then include matching style guidance in the generation prompt |
 | Home layout-template mode is only partially wired | Selected `SLIDE_TEMPLATES` shape is captured in config but generation still relies on style presets | Pass `layoutTemplate` to `generateDeck` and merge it into the prompt contract |
 | PPTX export is high-fidelity but not pixel-perfect | Complex browser styling is represented with editable PowerPoint shapes | Add layout-by-layout export visual checks and consider optional flattened export |
+| Folder hierarchy still reflects the original static prototype | Demo harnesses, local scripts, docs, and runtime files live together at the hosted root | Execute `STRUCTURE_CLEANUP.md` in small path-update segments with `npm run verify` after each segment |

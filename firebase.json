@@ -27,8 +27,13 @@
       "storage.cors.json",
       "**/*.md",
       "AutoDeck AI.html",
+      "preview-home.html",
+      "preview-conflict.html",
+      "preview-conflict-loading.html",
       "firebase-config.example.js",
       "api-config.example.js",
+      "vendor/pdf.min.js",
+      "vendor/pdf.worker.min.js",
       "**/*.sh",
       "**/*.bat",
       "**/*.ps1"

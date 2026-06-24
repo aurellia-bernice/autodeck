@@ -1,11 +1,11 @@
-// Copy this file to api-config.js and fill in your keys.
-// api-config.js is gitignored — never commit real keys.
+// Reference shape for the browser globals expected by index.html.
+// api-config.js is tracked and intentionally empty; real API keys live in
+// Firebase Cloud Function secrets, not in browser-delivered files.
 
 // Free — get one at: https://aistudio.google.com/app/apikey
-// Used to extract optimised search keywords from your prompt.
-// Optional: if left blank the raw prompt is sent to Unsplash directly.
+// Used server-side for optional search keyword refinement and Imagen helpers.
 window.GEMINI_API_KEY = '';
 
 // Free — register at: https://unsplash.com/developers  (Demo: 50 req/hr)
-// Required for photo search.
+// Used server-side by the searchImages callable.
 window.UNSPLASH_ACCESS_KEY = '';

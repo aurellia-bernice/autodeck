@@ -3,10 +3,12 @@
 **/.DS_Store
 .claude/
 **/.claude/
+.kilo/
 # Public Firebase web config, but environment-local. Copy from firebase-config.example.js.
 AutoDeck AI/firebase-config.js
 AutoDeck AI/functions/.env
 AutoDeck AI/functions/.env.local
+AutoDeck AI/functions/.env.*
 node_modules/
 playwright-report/
 test-results/
