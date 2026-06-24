@@ -33,6 +33,7 @@ AutoDeck AI/
 ├── app/
 │   ├── app.jsx
 │   ├── app-services.jsx
+│   ├── template-presets.jsx
 │   └── tokens.jsx
 ├── components/
 │   ├── auth/
@@ -78,7 +79,8 @@ This hierarchy should be introduced in stages. In the current no-build setup, ea
    - Completed: replaced `start-server.*` and the Playwright Python server with root `npm run dev` / `npm start` scripts backed by `scripts/dev-server.js`.
 
 5. Re-section browser code.
-   - Move app orchestration files under `AutoDeck AI/app/`.
+   - Completed: moved low-risk browser globals `tokens.jsx`, `template-presets.jsx`, and `app-services.jsx` under `AutoDeck AI/app/`.
+   - Move remaining app orchestration files under `AutoDeck AI/app/`.
    - Group screen components by domain.
    - Keep shared browser/function mirrors in their existing locations until `check:shared` is updated for the new paths.
 

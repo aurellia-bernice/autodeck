@@ -14,7 +14,7 @@ The app is intentionally build-step-free: Firebase Hosting serves static HTML/JS
 |---|---|---|
 | UI Framework | React 18.3.1 UMD | Loaded from `vendor/`; no bundler |
 | JSX Runtime | Babel Standalone 7.29.0 | Browser runtime transform for `.jsx` files |
-| Styling | Inline React styles | Shared tokens live in `tokens.jsx` |
+| Styling | Inline React styles | Shared tokens live in `app/tokens.jsx` |
 | Auth | Firebase Auth compat SDK v10.12.2 | Email/password + Google SSO; Quidax domain gate |
 | Database | Cloud Firestore compat SDK v10.12.2 | Deck documents, slide subcollections, brand config |
 | Storage | Firebase Storage compat SDK v10.12.2 | Temporary parse uploads and optional archived source files |
@@ -57,11 +57,13 @@ autodeck/
     │   │   └── screenshots/              # Archived product/design screenshots
     │   └── archive/
     │       └── BACKEND_RESTRUCTURE.md    # Historical backend execution plan
-    ├── app-services.jsx                  # Browser-global app services and source-review helpers
     ├── app.jsx                           # Root router, auth, deck lifecycle, and screen coordination
-    ├── tokens.jsx                        # qxTheme, QX colors, typography, radius, shadows
     ├── slide-intelligence.jsx            # Browser visual-layout classifier helpers
-    ├── template-presets.jsx              # Built-in style/preset contract
+    ├── slide-objects.jsx                 # Browser editable slide object composer
+    ├── app/
+    │   ├── app-services.jsx              # Browser-global app services and source-review helpers
+    │   ├── template-presets.jsx          # Built-in style/preset contract
+    │   └── tokens.jsx                    # qxTheme, QX colors, typography, radius, shadows
     ├── firebase-config.js                # Local public Firebase web config; copy from example
     ├── firebase-config.example.js
     ├── api-config.js                     # Tracked empty globals; real API keys live in Function secrets
@@ -111,7 +113,7 @@ autodeck/
         └── ResetPasswordScreen.jsx
 ```
 
-Loading order matters because there are no ES modules. `index.html` loads vendor libraries, Firebase config, export libraries, `shared/source-review.js`, `tokens.jsx`, `slide-intelligence.jsx`, `slide-objects.jsx`, `template-presets.jsx`, component helpers such as `components/slide-editor-model.jsx`, `components/slide-editor-agent.jsx`, and `components/slide-editor-export.jsx`, components, `app-services.jsx`, and finally `app.jsx`. JSX files expose globals on `window`.
+Loading order matters because there are no ES modules. `index.html` loads vendor libraries, Firebase config, export libraries, `shared/source-review.js`, `app/tokens.jsx`, `slide-intelligence.jsx`, `slide-objects.jsx`, `app/template-presets.jsx`, component helpers such as `components/slide-editor-model.jsx`, `components/slide-editor-agent.jsx`, and `components/slide-editor-export.jsx`, components, `app/app-services.jsx`, and finally `app.jsx`. JSX files expose globals on `window`.
 
 The browser and Functions copies of shared runtime logic are checked by `npm run check:shared`. Keep these pairs byte-for-byte aligned unless the sync script is intentionally updated:
 
@@ -404,7 +406,7 @@ Representative coverage includes login, home/generation forms, source conflict, 
 
 | Gap | Impact | Next step |
 |---|---|---|
-| Admin template uploads are not persisted or parsed | Uploaded template files do not affect generation | Store templates in Firebase Storage and hydrate the same preset/layout contract used by `template-presets.jsx` |
+| Admin template uploads are not persisted or parsed | Uploaded template files do not affect generation | Store templates in Firebase Storage and hydrate the same preset/layout contract used by `app/template-presets.jsx` |
 | Admin voice-doc uploads are filename-only state | Voice documents are not passed to `generateDeck` | Parse and persist voice docs, then include matching style guidance in the generation prompt |
 | Home layout-template mode is only partially wired | Selected `SLIDE_TEMPLATES` shape is captured in config but generation still relies on style presets | Pass `layoutTemplate` to `generateDeck` and merge it into the prompt contract |
 | PPTX export is high-fidelity but not pixel-perfect | Complex browser styling is represented with editable PowerPoint shapes | Add layout-by-layout export visual checks and consider optional flattened export |
