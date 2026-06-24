@@ -94,7 +94,8 @@ autodeck/
     │   ├── slide-objects.js              # Node copy of editable slide object composer
     │   └── package.json                  # Function dependencies, Node 22
     └── components/
-        ├── motion.jsx
+        ├── shared/
+        │   └── motion.jsx
         ├── shell/
         │   ├── tweaks-panel.jsx
         │   └── Sidebar.jsx
@@ -119,7 +120,7 @@ autodeck/
             └── AdminScreen.jsx
 ```
 
-Loading order matters because there are no ES modules. `index.html` loads vendor libraries, Firebase config, export libraries, `shared/source-review.js`, `app/tokens.jsx`, `slide-intelligence.jsx`, `slide-objects.jsx`, `app/template-presets.jsx`, shell components under `components/shell/`, deck workflow components under `components/deck/`, editor helpers and `SlideGenerator` under `components/editor/`, admin/auth/account components, `app/app-services.jsx`, and finally `app/app.jsx`. JSX files expose globals on `window`.
+Loading order matters because there are no ES modules. `index.html` loads vendor libraries, Firebase config, export libraries, `shared/source-review.js`, `app/tokens.jsx`, `slide-intelligence.jsx`, `slide-objects.jsx`, `app/template-presets.jsx`, shared component primitives under `components/shared/`, shell components under `components/shell/`, deck workflow components under `components/deck/`, editor helpers and `SlideGenerator` under `components/editor/`, admin/auth/account components, `app/app-services.jsx`, and finally `app/app.jsx`. JSX files expose globals on `window`.
 
 The browser and Functions copies of shared runtime logic are checked by `npm run check:shared`. Keep these pairs byte-for-byte aligned unless the sync script is intentionally updated:
 
@@ -130,6 +131,25 @@ The browser and Functions copies of shared runtime logic are checked by `npm run
 Preview-only HTML files under `dev/preview/` (`preview-home.html`, `preview-conflict.html`, `preview-conflict-loading.html`) are static demo harnesses for isolated visual checks. They are not part of the production navigation flow and are ignored from Firebase Hosting through `dev/**`. `AutoDeck AI.html` is a local compatibility redirect, and `action.html` is the Firebase account-action page.
 
 `docs/STRUCTURE_CLEANUP.md` tracks files that are active, demo-only, archival, or deletion candidates. The `docs/` tree, including archived screenshots, is ignored from Firebase Hosting.
+
+### Root File Decisions
+
+| Path | Decision |
+|---|---|
+| `index.html` | Keep at the hosted root as the primary no-build app entry. |
+| `action.html` | Keep at the hosted root for Firebase account actions and password reset links. |
+| `AutoDeck AI.html` | Keep as a local compatibility redirect, but keep ignored from Firebase Hosting. |
+| `api-config.js` | Keep tracked at the hosted root as intentionally empty browser globals. Real API keys stay in Cloud Function secrets. |
+| `api-config.example.js` | Keep as reference shape only; ignored from Firebase Hosting. |
+| `firebase-config.js` | Keep local and ignored. It is public Firebase web config, not a server secret, but it is environment-specific. |
+| `firebase-config.example.js` | Keep tracked as the template for local `firebase-config.js`; ignored from Firebase Hosting. |
+| `firebase-debug.log` | Treat as a generated local Firebase CLI artifact. It is ignored and should not be committed. |
+| `firestore.rules` | Keep at the app root because `firebase.json` deploys this exact path. |
+| `firestore.indexes.json` | Keep at the app root because `firebase.json` deploys this exact path. |
+| `storage.rules` | Keep at the app root because `firebase.json` deploys this exact path. |
+| `storage.cors.json` | Keep at the app root as the bucket CORS policy reference. It is ignored from Firebase Hosting. |
+| `slide-intelligence.jsx` | Keep at the app root for now because `check:shared` syncs it with `functions/slide-intelligence.js`. |
+| `slide-objects.jsx` | Keep at the app root for now because `check:shared` syncs it with `functions/slide-objects.js`. |
 
 ---
 

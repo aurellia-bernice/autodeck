@@ -15,50 +15,15 @@
 | `tests/home-screen-b.spec.js` | Removed retired `HomeScreenB` prototype coverage | Deleted because `HomeScreenB` is no longer shipped and the suite only added skipped tests. |
 | `docs/archive/BACKEND_RESTRUCTURE.md` | Historical execution plan | Archived. Current implementation source of truth is `docs/ARCHITECTURE.md` plus code. |
 | `docs/GENERATION_WORKFLOW.md` | Current generation flow notes | Kept with active docs. |
-| `docs/ARCHITECTURE.md` | Current architecture reference | Kept with active docs. |
+| `docs/ARCHITECTURE.md` | Current architecture reference | Source of truth for the component hierarchy and root-file decisions. |
 | `scripts/dev-server.js` | Root local development and test server | Replaces the removed `start-server.*` launchers and the Playwright Python server. Run with `npm run dev` or `npm start`. |
+| `firebase-debug.log` | Generated Firebase CLI log | Ignored local artifact. Do not commit. |
 
 ## Proposed Hierarchy
 
-Keep the hosted public root stable for now because Firebase Hosting serves from `AutoDeck AI/` and the no-build script order is path-sensitive.
+The current file hierarchy lives in `ARCHITECTURE.md`. Keep this document focused on cleanup decisions and completed stages so the hierarchy is not duplicated in two active docs.
 
-```text
-AutoDeck AI/
-├── index.html
-├── action.html
-├── config/
-│   ├── api-config.js
-│   └── firebase-config.example.js
-├── shared/
-├── app/
-│   ├── app.jsx
-│   ├── app-services.jsx
-│   ├── template-presets.jsx
-│   └── tokens.jsx
-├── components/
-│   ├── auth/
-│   ├── deck/
-│   ├── editor/
-│   ├── admin/
-│   └── shell/
-├── dev/
-│   └── preview/
-│       ├── preview-home.html
-│       ├── preview-conflict.html
-│       └── preview-conflict-loading.html
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── GENERATION_WORKFLOW.md
-│   ├── STRUCTURE_CLEANUP.md
-│   ├── assets/
-│   │   └── screenshots/
-│   └── archive/
-│       └── BACKEND_RESTRUCTURE.md
-├── functions/
-└── vendor/
-```
-
-This hierarchy should be introduced in stages. In the current no-build setup, each move must update `index.html`, `action.html`, preview harnesses, Playwright expectations that fetch source files by path, and `docs/ARCHITECTURE.md`.
+In the current no-build setup, each move must update `index.html`, `action.html`, preview harnesses, Playwright expectations that fetch source files by path, and `docs/ARCHITECTURE.md`.
 
 ## Execution Order
 
@@ -85,6 +50,7 @@ This hierarchy should be introduced in stages. In the current no-build setup, ea
    - Completed: grouped deck workflow screens under `components/deck/`.
    - Completed: grouped editor surface and helpers under `components/editor/`.
    - Completed: grouped shell and admin components under `components/shell/` and `components/admin/`.
+   - Completed: moved shared component primitive `motion.jsx` under `components/shared/`.
    - Keep shared browser/function mirrors in their existing locations until `check:shared` is updated for the new paths.
 
 ## Acceptance Checks
