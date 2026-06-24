@@ -10,6 +10,8 @@ const {
   deriveBrandColors,
   pptFontName,
 } = window.AutoDeckSlideEditorModel;
+const SlideEditorAgent = window.AutoDeckSlideEditorAgent;
+const { pptBox, toHex } = window.AutoDeckSlideEditorExport;
 
 const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, onBack, activeDeckId }) => {
   const isDemo = !Array.isArray(initialSlides) || initialSlides.length === 0;
@@ -72,27 +74,6 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
   const agentScrollRef = React.useRef(null);
   const saveTimerRef = React.useRef(null);
   const suppressSaveRef = React.useRef(true);
-
-  const layoutKeys = LAYOUTS.map((l) => l.key);
-  const layoutAliases = [
-    { key: 'standard', patterns: [/standard/, /default/] },
-    { key: 'split', patterns: [/split/, /two\s*column/, /side\s*by\s*side/] },
-    { key: 'bigTitle', patterns: [/big\s*title/, /bold/, /hero\s*title/, /headline/] },
-    { key: 'stat', patterns: [/\bstat\b/, /metric/, /number/] },
-    { key: 'quote', patterns: [/quote/, /pull\s*quote/] },
-    { key: 'image', patterns: [/image[-\s]?led/, /photo\s*\+\s*text/] },
-    { key: 'table_matrix', patterns: [/table/, /matrix/, /pricing/, /rows?/, /columns?/] },
-    { key: 'process_flow', patterns: [/process/, /\bflow\b/, /steps?/] },
-    { key: 'comparison', patterns: [/comparison/, /compare/, /\bvs\b/, /versus/] },
-    { key: 'timeline', patterns: [/timeline/, /chronolog/] },
-    { key: 'roadmap', patterns: [/roadmap/, /phase/, /milestone/] },
-    { key: 'problem_solution', patterns: [/problem\s*solution/, /problem.*solution/] },
-    { key: 'summary', patterns: [/summary/, /takeaways?/, /recap/] },
-    { key: 'image_focus', patterns: [/image\s*focus/, /full\s*bleed/, /visual/] },
-  ];
-  const ordinalSlideWords = {
-    first: 0, second: 1, third: 2, fourth: 3, fifth: 4, sixth: 5, seventh: 6, eighth: 7, ninth: 8, tenth: 9,
-  };
 
   React.useEffect(() => {
     setLocalSlides(normalizeSlideList(safeInitial));
@@ -395,45 +376,12 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     setEditingObjectId(null);
   };
 
-  const normalizeAgentLayout = (value) => {
-    const raw = String(value || '').trim();
-    if (!raw) return null;
-    if (layoutKeys.includes(raw)) return raw;
-    const lower = raw.toLowerCase().replace(/[_/-]+/g, ' ').replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
-    const direct = LAYOUTS.find((l) => l.key.toLowerCase().replace(/[_/-]+/g, ' ') === lower || l.name.toLowerCase().replace(/[_/-]+/g, ' ') === lower);
-    return direct?.key || layoutAliases.find((entry) => entry.patterns.some((pattern) => pattern.test(lower)))?.key || null;
-  };
-
-  const layoutFromAgentText = (value) => {
-    const lower = String(value || '').toLowerCase().replace(/[_/-]+/g, ' ').replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
-    if (!/(layout|slide|make|change|convert|switch|turn|use|as|into|table|matrix)/.test(lower)) return null;
-    return layoutAliases.find((entry) => entry.patterns.some((pattern) => pattern.test(lower)))?.key || null;
-  };
-
-  const agentTargetSlideIndex = (value, fallback = currentIndex) => {
-    const text = String(value || '').toLowerCase();
-    const numbered = text.match(/\b(?:slide|page)\s*(\d{1,2})\b/) || text.match(/\b(\d{1,2})(?:st|nd|rd|th)\s+(?:slide|page)\b/);
-    if (numbered) return Math.max(0, Math.min(localSlides.length - 1, parseInt(numbered[1], 10) - 1));
-    const word = Object.entries(ordinalSlideWords).find(([label]) => new RegExp(`\\b${label}\\s+(?:slide|page)\\b`).test(text));
-    if (word) return Math.max(0, Math.min(localSlides.length - 1, word[1]));
-    return Math.max(0, Math.min(localSlides.length - 1, fallback));
-  };
-
-  const quotedAgentValue = (value) => String(value || '').match(/["']([^"']{3,})["']/)?.[1]?.trim() || '';
-  const titleFromAgentText = (value, currentTitle = '') => {
-    const text = String(value || '').trim();
-    if (!/(title|heading|headline|rename)/i.test(text)) return '';
-    const quoted = quotedAgentValue(text);
-    if (quoted) return quoted;
-    if (/(shorter|shorten|concise|tighter)/i.test(text) && currentTitle) return currentTitle.split(/\s+/).slice(0, 6).join(' ');
-    return text.match(/(?:rename|change|set|make|update).{0,24}(?:title|heading|headline)?\s*(?:to|as|:)\s*(.+)$/i)?.[1]?.trim() || '';
-  };
-  const bulletFromAgentText = (value) => {
-    const text = String(value || '').trim();
-    const quoted = quotedAgentValue(text);
-    if (quoted && /bullet|point/i.test(text)) return quoted;
-    return text.match(/add\s+(?:a\s+)?(?:bullet|point)\s*(?:about|on|for|that|:)?\s*(.+)$/i)?.[1]?.replace(/\b(?:to|on|for)?\s*(?:slide|page)\s*\d{1,2}\b/ig, '').trim() || '';
-  };
+  const normalizeAgentLayout = (value) => SlideEditorAgent.normalizeAgentLayout(value, LAYOUTS);
+  const layoutFromAgentText = (value) => SlideEditorAgent.layoutFromAgentText(value);
+  const agentTargetSlideIndex = (value, fallback = currentIndex) => SlideEditorAgent.agentTargetSlideIndex(value, {
+    fallback,
+    total: localSlides.length,
+  });
 
   const applyAgentPatch = (idx, patch = {}) => {
     const targetIdx = Math.max(0, Math.min(localSlides.length - 1, idx));
@@ -476,26 +424,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
   };
 
   const localAgentPatch = (userText, idx) => {
-    const targetSlide = localSlides[idx] || {};
-    const patch = {};
-    const layoutKey = layoutFromAgentText(userText);
-    const title = titleFromAgentText(userText, targetSlide.title);
-    const bullet = bulletFromAgentText(userText);
-    if (layoutKey) patch.updatedLayout = layoutKey;
-    if (title) patch.updatedTitle = title.charAt(0).toUpperCase() + title.slice(1);
-    if (bullet) patch.addBullets = [bullet.charAt(0).toUpperCase() + bullet.slice(1)];
-    if (/(remove|delete).*(bullet|point|last)/i.test(userText)) patch.removeLastBullet = true;
-    if (/(concise|shorter|shorten|tighten|fewer)/i.test(userText)) patch.updatedBullets = (targetSlide.bullets || []).slice(0, Math.max(1, Math.ceil((targetSlide.bullets || []).length / 2)));
-    if (/(expand|longer|more detail|more context|more info|talk more|elaborate|explain more)/i.test(userText)) {
-      const facts = [...(targetSlide.bullets || []), targetSlide.title].filter(Boolean);
-      patch.updatedBullets = [
-        `What this means: ${facts[0] || 'Clarify the core idea'}`,
-        `Why it matters: ${facts[1] || 'Connect it to the audience decision'}`,
-        `What to show next: ${facts[2] || 'Add a concrete supporting detail'}`,
-      ];
-    }
-    if (!Object.keys(patch).length) patch.needsClarification = true;
-    return patch;
+    return SlideEditorAgent.localAgentPatch(userText, localSlides[idx] || {});
   };
 
   const simulateAgentResponse = (userText, fallbackIdx) => {
@@ -512,10 +441,9 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     return `Done - slide ${targetIdx + 1} is updated.`;
   };
 
-  const agentIntroMessage = (idx, fresh = false) => ({
-    role: 'assistant',
-    text: `${fresh ? 'New chat started. ' : ''}I am looking at slide ${idx + 1} - "${localSlides[idx]?.title || 'Untitled slide'}". Ask me to rewrite text, add detail, target another slide, or switch layout. What should I change?`,
-  });
+  const agentIntroMessage = (idx, fresh = false) => (
+    SlideEditorAgent.agentIntroMessage(idx, localSlides[idx]?.title, fresh)
+  );
 
   const openAgent = (idx) => {
     setAgentSlideIndex(idx);
@@ -663,18 +591,6 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     document.documentElement.requestFullscreen?.().catch(() => {});
     showToast('Press Esc to exit presentation', 'info');
   };
-
-  const toHex = (value, fallback = 'FFFFFF') => {
-    const longHex = String(value || '').match(/#([0-9a-f]{6})/i)?.[1];
-    return (longHex || fallback).replace('#', '').toUpperCase();
-  };
-
-  const pptBox = (obj) => ({
-    x: (obj.x / 100) * 13.333,
-    y: (obj.y / 56.25) * 7.5,
-    w: (obj.w / 100) * 13.333,
-    h: (obj.h / 56.25) * 7.5,
-  });
 
   const handleDownloadPPTX = async () => {
     setShowMenu(false);
