@@ -11,10 +11,11 @@
 | `preview-conflict.html` | Static visual demo harness | Keep in repo temporarily, but do not deploy. Move under a future `dev/preview/` folder or delete after screenshots/tests replace it. |
 | `preview-conflict-loading.html` | Static visual demo harness | Keep in repo temporarily, but do not deploy. Move under a future `dev/preview/` folder or delete after screenshots/tests replace it. |
 | `vendor/pdf.min.js` and `vendor/pdf.worker.min.js` | Removed legacy PDF.js bundles | Deleted after a full verify run confirmed `pdfjsLib` stays unused. |
-| `screenshots/` | Tracked visual artifacts, not referenced by docs/tests | Archive under docs assets or delete after confirming they are not needed for product/design review. Already ignored from Hosting. |
+| `docs/assets/screenshots/` | Archived visual artifacts, not referenced by code/tests | Kept for product/design review and ignored from Hosting through `docs/**`. |
 | `tests/home-screen-b.spec.js` | Removed retired `HomeScreenB` prototype coverage | Deleted because `HomeScreenB` is no longer shipped and the suite only added skipped tests. |
-| `BACKEND_RESTRUCTURE.md` | Historical execution plan | Archive under `docs/archive/` after the current implementation status is summarized in `ARCHITECTURE.md`. |
-| `GENERATION_WORKFLOW.md` | Current generation flow notes | Keep, but move under `docs/` when the docs hierarchy is introduced. |
+| `docs/archive/BACKEND_RESTRUCTURE.md` | Historical execution plan | Archived. Current implementation source of truth is `docs/ARCHITECTURE.md` plus code. |
+| `docs/GENERATION_WORKFLOW.md` | Current generation flow notes | Kept with active docs. |
+| `docs/ARCHITECTURE.md` | Current architecture reference | Kept with active docs. |
 | `start-server.*` | Local convenience launchers | Keep temporarily. Prefer root `package.json` scripts in a later pass. |
 
 ## Proposed Hierarchy
@@ -42,12 +43,18 @@ AutoDeck AI/
 ├── dev/
 │   └── preview/
 ├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── GENERATION_WORKFLOW.md
+│   ├── STRUCTURE_CLEANUP.md
+│   ├── assets/
+│   │   └── screenshots/
 │   └── archive/
+│       └── BACKEND_RESTRUCTURE.md
 ├── functions/
 └── vendor/
 ```
 
-This hierarchy should be introduced in stages. In the current no-build setup, each move must update `index.html`, `action.html`, preview harnesses, Playwright expectations that fetch source files by path, and `ARCHITECTURE.md`.
+This hierarchy should be introduced in stages. In the current no-build setup, each move must update `index.html`, `action.html`, preview harnesses, Playwright expectations that fetch source files by path, and `docs/ARCHITECTURE.md`.
 
 ## Execution Order
 
@@ -57,12 +64,11 @@ This hierarchy should be introduced in stages. In the current no-build setup, ea
 
 2. Delete or archive confirmed dead files.
    - Completed: removed `vendor/pdf.min.js`, `vendor/pdf.worker.min.js`, and `tests/home-screen-b.spec.js`.
-   - Continue with screenshots and historical docs only after confirming they are not needed for design/product review.
+   - Completed: moved tracked screenshots to `docs/assets/screenshots/` to preserve design artifacts without exposing them through Hosting.
 
 3. Move docs into a real docs hierarchy.
-   - Create `AutoDeck AI/docs/`.
-   - Move active docs there.
-   - Move historical plans to `AutoDeck AI/docs/archive/`.
+   - Completed: active docs live in `AutoDeck AI/docs/`.
+   - Completed: historical backend plan lives in `AutoDeck AI/docs/archive/`.
 
 4. Move local-only tools and previews.
    - Move `preview-*.html` to `AutoDeck AI/dev/preview/`.
@@ -76,6 +82,6 @@ This hierarchy should be introduced in stages. In the current no-build setup, ea
 ## Acceptance Checks
 
 - `npm run verify`
-- Firebase Hosting deploy preview does not include demo harnesses, unused PDF.js bundles, screenshots, docs, local scripts, examples, or Functions source.
+- Firebase Hosting deploy preview does not include demo harnesses, unused PDF.js bundles, `docs/`, local scripts, examples, or Functions source.
 - `index.html` and `action.html` still load without 404s.
 - No new skipped tests are introduced.

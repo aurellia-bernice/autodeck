@@ -1,6 +1,6 @@
 # AutoDeck AI — Backend Restructure Specification (v2)
 
-> Status note: this document is a historical restructure plan. Several Phase 1 items have since been implemented, including callable-backed deck/brand writes, server-side parsing, backend image search, and locked Firestore writes. Use `ARCHITECTURE.md` plus the current code as the source of truth before executing any remaining items.
+> Status note: this document is a historical restructure plan. Several Phase 1 items have since been implemented, including callable-backed deck/brand writes, server-side parsing, backend image search, and locked Firestore writes. Use `../ARCHITECTURE.md` plus the current code as the source of truth before executing any remaining items.
 
 **For any coding agent executing this plan:**
 Read every section in full before touching any file. Each phase is independently shippable and must be validated before the next begins. Do not skip phases, reorder steps, or remove any frontend function until the backend replacement is deployed and confirmed working. Violations of these constraints will break the running app.
@@ -179,7 +179,7 @@ Add the `firestore` and `storage` sections so it becomes:
       "firebase.json",
       "**/.*",
       "**/node_modules/**",
-      "screenshots/**",
+      "docs/**",
       "firebase-config.example.js",
       "**/*.sh",
       "**/*.bat",
@@ -1648,7 +1648,7 @@ PHASE 5 — SECURITY RULES GATE
 
 After all phases are complete, update these two documents so future agents and developers do not receive conflicting instructions:
 
-### `ARCHITECTURE.md`
+### `../ARCHITECTURE.md`
 
 Update to reflect:
 - Frontend no longer makes direct Firestore writes
@@ -1657,7 +1657,7 @@ Update to reflect:
 - `api-config.js` is present but intentionally empty
 - Firestore security rules deny all direct client writes
 
-### `GENERATION_WORKFLOW.md`
+### `../GENERATION_WORKFLOW.md`
 
 Update the generation pipeline diagram and description to show:
 1. Frontend calls `createDeck` → gets `deckId`

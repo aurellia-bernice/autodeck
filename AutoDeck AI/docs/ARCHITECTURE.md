@@ -39,7 +39,14 @@ autodeck/
     ├── index.html                        # Primary hosted entry point
     ├── AutoDeck AI.html                  # Compatibility redirect page
     ├── action.html                       # Firebase account action page
-    ├── STRUCTURE_CLEANUP.md              # File cleanup inventory and staged hierarchy plan
+    ├── docs/
+    │   ├── ARCHITECTURE.md               # Current architecture reference
+    │   ├── GENERATION_WORKFLOW.md        # Current generation flow notes
+    │   ├── STRUCTURE_CLEANUP.md          # File cleanup inventory and staged hierarchy plan
+    │   ├── assets/
+    │   │   └── screenshots/              # Archived product/design screenshots
+    │   └── archive/
+    │       └── BACKEND_RESTRUCTURE.md    # Historical backend execution plan
     ├── app-services.jsx                  # Browser-global app services and source-review helpers
     ├── app.jsx                           # Root router, auth, deck lifecycle, and screen coordination
     ├── tokens.jsx                        # qxTheme, QX colors, typography, radius, shadows
@@ -104,7 +111,7 @@ The browser and Functions copies of shared runtime logic are checked by `npm run
 
 Preview-only HTML files (`preview-home.html`, `preview-conflict.html`, `preview-conflict-loading.html`) are static demo harnesses for isolated visual checks. They are not part of the production navigation flow and are ignored from Firebase Hosting. `AutoDeck AI.html` is a local compatibility redirect, and `action.html` is the Firebase account-action page.
 
-`STRUCTURE_CLEANUP.md` tracks files that are active, demo-only, archival, or deletion candidates. Use it before moving or deleting files so the no-build script order and Hosting surface stay predictable.
+`docs/STRUCTURE_CLEANUP.md` tracks files that are active, demo-only, archival, or deletion candidates. The `docs/` tree, including archived screenshots, is ignored from Firebase Hosting.
 
 ---
 
@@ -391,4 +398,4 @@ Representative coverage includes login, home/generation forms, source conflict, 
 | Admin voice-doc uploads are filename-only state | Voice documents are not passed to `generateDeck` | Parse and persist voice docs, then include matching style guidance in the generation prompt |
 | Home layout-template mode is only partially wired | Selected `SLIDE_TEMPLATES` shape is captured in config but generation still relies on style presets | Pass `layoutTemplate` to `generateDeck` and merge it into the prompt contract |
 | PPTX export is high-fidelity but not pixel-perfect | Complex browser styling is represented with editable PowerPoint shapes | Add layout-by-layout export visual checks and consider optional flattened export |
-| Folder hierarchy still reflects the original static prototype | Demo harnesses, local scripts, docs, and runtime files live together at the hosted root | Execute `STRUCTURE_CLEANUP.md` in small path-update segments with `npm run verify` after each segment |
+| Folder hierarchy still reflects the original static prototype | Demo harnesses, local scripts, and runtime files still share the hosted root | Execute `docs/STRUCTURE_CLEANUP.md` in small path-update segments with `npm run verify` after each segment |
