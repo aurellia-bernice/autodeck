@@ -109,14 +109,15 @@ autodeck/
         │   ├── ProcessingScreen.jsx
         │   ├── PreviewScreen.jsx
         │   └── HistoryScreen.jsx
-        ├── slide-editor-model.jsx
-        ├── slide-editor-agent.jsx
-        ├── slide-editor-export.jsx
-        ├── SlideGenerator.jsx
+        ├── editor/
+        │   ├── slide-editor-model.jsx
+        │   ├── slide-editor-agent.jsx
+        │   ├── slide-editor-export.jsx
+        │   └── SlideGenerator.jsx
         └── AdminScreen.jsx
 ```
 
-Loading order matters because there are no ES modules. `index.html` loads vendor libraries, Firebase config, export libraries, `shared/source-review.js`, `app/tokens.jsx`, `slide-intelligence.jsx`, `slide-objects.jsx`, `app/template-presets.jsx`, component helpers such as `components/slide-editor-model.jsx`, `components/slide-editor-agent.jsx`, and `components/slide-editor-export.jsx`, deck workflow components under `components/deck/`, components, `app/app-services.jsx`, and finally `app/app.jsx`. JSX files expose globals on `window`.
+Loading order matters because there are no ES modules. `index.html` loads vendor libraries, Firebase config, export libraries, `shared/source-review.js`, `app/tokens.jsx`, `slide-intelligence.jsx`, `slide-objects.jsx`, `app/template-presets.jsx`, deck workflow components under `components/deck/`, editor helpers and `SlideGenerator` under `components/editor/`, remaining components, `app/app-services.jsx`, and finally `app/app.jsx`. JSX files expose globals on `window`.
 
 The browser and Functions copies of shared runtime logic are checked by `npm run check:shared`. Keep these pairs byte-for-byte aligned unless the sync script is intentionally updated:
 
@@ -193,7 +194,7 @@ ResetPasswordScreen is the standalone reset target.
 - Allows title and bullet editing, slide add/delete/reorder, regenerate, and opening the deck in slideshow mode.
 - Saves edited preview slides through `finalizeDeck` before opening `SlideGenerator` when needed.
 
-### `SlideGenerator`
+### `components/editor/SlideGenerator.jsx`
 
 - Renders the editable slide canvas and export menu.
 - Uses `AutoDeckSlideEditorModel` for demo slides, layout metadata, theme construction, brand color derivation, and PowerPoint font normalization.

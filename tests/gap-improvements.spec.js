@@ -405,7 +405,7 @@ test.describe('Phase 4 — API keys secured on backend', () => {
   test('SlideGenerator image search calls backend searchImages only', async ({ page }) => {
     await loadApp(page);
     const source = await page.evaluate(() =>
-      fetch('components/SlideGenerator.jsx').then((res) => res.text())
+      fetch('components/editor/SlideGenerator.jsx').then((res) => res.text())
     );
     expect(source).toContain("httpsCallable('searchImages'");
     expect(source).not.toContain('window.GEMINI_API_KEY');

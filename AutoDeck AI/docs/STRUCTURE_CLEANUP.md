@@ -83,7 +83,8 @@ This hierarchy should be introduced in stages. In the current no-build setup, ea
    - Completed: moved root orchestration file `app.jsx` under `AutoDeck AI/app/`.
    - Completed: grouped auth and account screens under `components/auth/` and `components/account/`.
    - Completed: grouped deck workflow screens under `components/deck/`.
-   - Group remaining editor/admin/shell components by domain.
+   - Completed: grouped editor surface and helpers under `components/editor/`.
+   - Group remaining admin/shell components by domain.
    - Keep shared browser/function mirrors in their existing locations until `check:shared` is updated for the new paths.
 
 ## Acceptance Checks
