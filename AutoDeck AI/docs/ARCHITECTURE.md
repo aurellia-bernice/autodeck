@@ -57,10 +57,10 @@ autodeck/
     │   │   └── screenshots/              # Archived product/design screenshots
     │   └── archive/
     │       └── BACKEND_RESTRUCTURE.md    # Historical backend execution plan
-    ├── app.jsx                           # Root router, auth, deck lifecycle, and screen coordination
     ├── slide-intelligence.jsx            # Browser visual-layout classifier helpers
     ├── slide-objects.jsx                 # Browser editable slide object composer
     ├── app/
+    │   ├── app.jsx                       # Root router, auth, deck lifecycle, and screen coordination
     │   ├── app-services.jsx              # Browser-global app services and source-review helpers
     │   ├── template-presets.jsx          # Built-in style/preset contract
     │   └── tokens.jsx                    # qxTheme, QX colors, typography, radius, shadows
@@ -113,7 +113,7 @@ autodeck/
         └── ResetPasswordScreen.jsx
 ```
 
-Loading order matters because there are no ES modules. `index.html` loads vendor libraries, Firebase config, export libraries, `shared/source-review.js`, `app/tokens.jsx`, `slide-intelligence.jsx`, `slide-objects.jsx`, `app/template-presets.jsx`, component helpers such as `components/slide-editor-model.jsx`, `components/slide-editor-agent.jsx`, and `components/slide-editor-export.jsx`, components, `app/app-services.jsx`, and finally `app.jsx`. JSX files expose globals on `window`.
+Loading order matters because there are no ES modules. `index.html` loads vendor libraries, Firebase config, export libraries, `shared/source-review.js`, `app/tokens.jsx`, `slide-intelligence.jsx`, `slide-objects.jsx`, `app/template-presets.jsx`, component helpers such as `components/slide-editor-model.jsx`, `components/slide-editor-agent.jsx`, and `components/slide-editor-export.jsx`, components, `app/app-services.jsx`, and finally `app/app.jsx`. JSX files expose globals on `window`.
 
 The browser and Functions copies of shared runtime logic are checked by `npm run check:shared`. Keep these pairs byte-for-byte aligned unless the sync script is intentionally updated:
 
@@ -152,7 +152,7 @@ ResetPasswordScreen is the standalone reset target.
 
 ## Frontend Responsibilities
 
-### `app.jsx`
+### `app/app.jsx`
 
 - Owns auth state, screen routing, admin gating, active deck id, generation status, and brand config.
 - Uses `AutoDeckAppServices` for Firebase callable wrappers, slide normalization, source-review issue construction, temp replacement-file parsing, source upload archiving, and generated-slide reads.
@@ -168,7 +168,7 @@ ResetPasswordScreen is the standalone reset target.
 - Supports prompt mode and layout-template mode.
 - Infers `inputMode` as `brief` or `content`; attached files force the textbox to act as a brief.
 - Accepts `.pdf`, `.docx`, `.pptx`, and `.txt`. Files are uploaded to `uploads/temp/{uid}/...`, parsed through `parseFile`, then deleted.
-- Sends `{ inputText, parsedFileText, slideCount, templateStyle, templatePreset, uploadedFile, inputMode, layoutTemplate }` to `app.jsx`.
+- Sends `{ inputText, parsedFileText, slideCount, templateStyle, templatePreset, uploadedFile, inputMode, layoutTemplate }` to `app/app.jsx`.
 - Built-in style options come from `AutoDeckTemplatePresets`.
 
 ### `SourceConflictScreen`
@@ -256,7 +256,7 @@ All functions are HTTPS callable, deployed in `us-central1`, require Firebase Au
 ### Generation Lifecycle
 
 1. `HomeScreenA` parses any uploaded source file through `parseFile`.
-2. `app.jsx` runs local source review and, when needed, calls `checkSourceConflict`.
+2. `app/app.jsx` runs local source review and, when needed, calls `checkSourceConflict`.
 3. If the source is accepted or acknowledged, `createDeck` creates a Firestore deck and returns `deckId`.
 4. The client subscribes to `decks/{deckId}` and starts `generateDeck`.
 5. `generateDeck` verifies ownership, cleans source text, resolves slide count, builds a preset-aware prompt, calls Claude, repairs/parses JSON, applies slide intelligence, and persists slides.
@@ -347,13 +347,13 @@ Temporary parsing uploads. Only the owner can read/write/delete; `parseFile` del
 uploads/{uid}/{deckId}/{fileName}
 ```
 
-Optional permanent source archive. `app.jsx` only uploads here when `window.AutoDeckSourceUploadsEnabled === true` or `localStorage["autodeck:sourceUploads"] === "enabled"`.
+Optional permanent source archive. `app/app.jsx` only uploads here when `window.AutoDeckSourceUploadsEnabled === true` or `localStorage["autodeck:sourceUploads"] === "enabled"`.
 
 ---
 
 ## Security Model
 
-- Client auth is restricted to `@quidax.com` in `LoginScreen` and again in `app.jsx` after Firebase Auth resolves.
+- Client auth is restricted to `@quidax.com` in `LoginScreen` and again in `app/app.jsx` after Firebase Auth resolves.
 - Admin UI access is controlled by `ADMIN_EMAILS = ['admin@quidax.com']` in the client and `ADMIN_EMAILS_BE` in Functions.
 - Firestore rules allow authenticated Quidax users to read only their own decks and slides. `config/brand` is readable by authenticated Quidax users.
 - Firestore client writes are denied; deck, slide, and brand writes go through Cloud Functions using Admin SDK.

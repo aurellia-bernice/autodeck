@@ -71,7 +71,7 @@ The generation path now treats that persistence failure as recoverable:
 
 - `functions/index.js` logs `generateDeck persistence failed`.
 - `generateDeck` still returns the Anthropic-generated slides to the client with `persisted: false`.
-- `app.jsx` sees `persisted: false`, attempts a signed-in browser backup write, and then opens preview from the returned generated slides.
+- `app/app.jsx` sees `persisted: false`, attempts a signed-in browser backup write, and then opens preview from the returned generated slides.
 
 Verification after the fix:
 
@@ -184,15 +184,15 @@ flowchart LR
 
 ## Implementation Notes
 
-- `app.jsx` owns the generation run id, delay notice, immediate deck id allocation, callable invocation, and Firestore status listener.
-- `app.jsx` enforces a hard overall client deadline because SDK/browser requests can otherwise stay pending longer than the Cloud Function timeout.
+- `app/app.jsx` owns the generation run id, delay notice, immediate deck id allocation, callable invocation, and Firestore status listener.
+- `app/app.jsx` enforces a hard overall client deadline because SDK/browser requests can otherwise stay pending longer than the Cloud Function timeout.
 - `ProcessingScreen.jsx` stays open while `generationStatus === 'loading'`.
 - `ProcessingScreen.jsx` shows the active deck id prefix, generation stage, elapsed time, and seconds left for Firestore/log inspection.
 - `PreviewScreen.jsx` only uses local/demo slides when opened directly in idle preview mode. Real generation errors do not fall back to demo or local draft slides.
 - `functions/index.js` merge-writes generated slides on `decks/{deckId}.slides` and in `decks/{deckId}/slides`, so the generated content can be inspected directly in Firebase even if the browser's first deck write is delayed.
 - `functions/index.js` returns generated slides with `persisted: false` when Admin Firestore persistence fails after Anthropic returns valid content.
-- `app.jsx` performs the backup browser persistence path for `persisted: false` and still previews the generated slides.
-- `app.jsx` skips optional original-file uploads by default; enable them only after applying `storage.cors.json` to the bucket.
+- `app/app.jsx` performs the backup browser persistence path for `persisted: false` and still previews the generated slides.
+- `app/app.jsx` skips optional original-file uploads by default; enable them only after applying `storage.cors.json` to the bucket.
 - `HomeScreenA.jsx` and `functions/index.js` both clean noisy parsed text; the backend remains authoritative because it re-cleans source material before prompting Anthropic.
 - `Sidebar.jsx` displays the build marker to confirm the loaded frontend is not stale.
 - `LoginScreen.jsx` maps Firebase Google sign-in errors to actionable messages, supports redirect fallback, and links pending Google credentials after password sign-in when Firebase reports an existing password account.

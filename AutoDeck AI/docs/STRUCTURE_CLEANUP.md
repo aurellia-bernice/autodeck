@@ -80,7 +80,7 @@ This hierarchy should be introduced in stages. In the current no-build setup, ea
 
 5. Re-section browser code.
    - Completed: moved low-risk browser globals `tokens.jsx`, `template-presets.jsx`, and `app-services.jsx` under `AutoDeck AI/app/`.
-   - Move remaining app orchestration files under `AutoDeck AI/app/`.
+   - Completed: moved root orchestration file `app.jsx` under `AutoDeck AI/app/`.
    - Group screen components by domain.
    - Keep shared browser/function mirrors in their existing locations until `check:shared` is updated for the new paths.
 
