@@ -1,10 +1,10 @@
 {
   "firestore": {
-    "rules": "AutoDeck AI/firestore.rules",
-    "indexes": "AutoDeck AI/firestore.indexes.json"
+    "rules": "AutoDeck AI/firebase/firestore.rules",
+    "indexes": "AutoDeck AI/firebase/firestore.indexes.json"
   },
   "storage": {
-    "rules": "AutoDeck AI/storage.rules"
+    "rules": "AutoDeck AI/firebase/storage.rules"
   },
   "functions": [
     {
@@ -21,15 +21,12 @@
       "**/node_modules/**",
       "docs/**",
       "functions/**",
-      "firestore.rules",
-      "firestore.indexes.json",
-      "storage.rules",
-      "storage.cors.json",
+      "firebase/**",
       "**/*.md",
       "AutoDeck AI.html",
       "dev/**",
-      "firebase-config.example.js",
-      "api-config.example.js",
+      "config/firebase-config.example.js",
+      "config/api-config.example.js",
       "**/*.sh",
       "**/*.bat",
       "**/*.ps1"
