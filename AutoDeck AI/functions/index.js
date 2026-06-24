@@ -9,6 +9,10 @@ const SlideIntelligence = require('./slide-intelligence');
 const SlideObjects = require('./slide-objects');
 const SourceReview = require('./shared/source-review');
 const { extractPptxText } = require('./lib/pptx-text');
+const { createDeckStorage } = require('./lib/deck-storage');
+const { createFileParsingHandlers } = require('./lib/file-parsing');
+const { createImageService } = require('./lib/image-search');
+const { createSourceConflictHandler } = require('./lib/source-conflict');
 const {
   cleanSourceMaterial,
   compactText,
@@ -39,11 +43,52 @@ const callableOptions = (overrides = {}) => ({
 });
 
 const {
-  keywordsFrom,
-  keywordOverlap,
-  hasTangibleSourceInfo,
   sourceFitGuide,
 } = SourceReview;
+
+const deckStorage = createDeckStorage({
+  HttpsError,
+  SlideObjects,
+  admin,
+  db,
+  logger,
+  maxInputChars: MAX_INPUT_CHARS,
+  maxSourceChars: MAX_SOURCE_CHARS,
+});
+
+const {
+  persistGeneratedSlides,
+  slideDocumentId,
+  templatePresetIdFromStyle,
+} = deckStorage;
+
+const imageService = createImageService({
+  HttpsError,
+  SlideObjects,
+  compactText,
+  logger,
+});
+
+const { hydrateGeneratedSlideImages } = imageService;
+
+const fileParsing = createFileParsingHandlers({
+  HttpsError,
+  getStorage,
+  mammoth,
+  pdfParse,
+  extractPptxText,
+  cleanSourceMaterial,
+  wordCount,
+  logger,
+  maxSourceChars: MAX_SOURCE_CHARS,
+});
+
+const handleCheckSourceConflict = createSourceConflictHandler({
+  AnthropicClient,
+  HttpsError,
+  SourceReview,
+  compactText,
+});
 
 const resolveSlideCount = (slideCount, content) => {
   const explicit = parseInt(slideCount, 10);
@@ -336,47 +381,6 @@ const parseGeneratedSlides = async ({ anthropic, raw, count, deckId }) => {
   }
 };
 
-const slideDocumentId = (index) => `slide-${String(index + 1).padStart(2, '0')}`;
-
-const persistGeneratedSlides = async ({ deckId, uid, slides }) => {
-  try {
-    const safeSlides = slides.map((slide, index) => sanitizeSlideForFirestore(slide, index, slides.length));
-    // Write deck-level slides and mark ready first so the Firestore listener
-    // on the client fires as early as possible. Subcollection batch follows.
-    await db.collection('decks').doc(deckId).set({
-      userId: uid,
-      status: 'ready',
-      stage: 'ready',
-      slideCount: safeSlides.length,
-      editorVersion: SlideObjects.EDITOR_VERSION,
-      slides: safeSlides,
-      completedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-
-    const batch = db.batch();
-    safeSlides.forEach((s, i) => {
-      const ref = db.collection('decks').doc(deckId).collection('slides').doc(slideDocumentId(i));
-      batch.set(ref, s);
-    });
-    await batch.commit();
-
-    logger.info('generateDeck completed', {
-      deckId,
-      slideCount: slides.length,
-      persisted: true,
-    });
-    return true;
-  } catch (e) {
-    logger.error('generateDeck persistence failed', {
-      deckId,
-      message: e.message,
-      name: e.name,
-      code: e.code,
-    });
-    return false;
-  }
-};
-
 const buildDeckPrompt = ({ userInstruction, sourceMaterial, sourceDocumentName, sourceFit, count, templateStyle, voiceGuide, templatePreset, inputMode }) => {
   const isContentMode = inputMode === 'content';
   const hasSourceMaterial = Boolean(String(sourceMaterial || '').trim());
@@ -493,122 +497,9 @@ Parsed source material:
 ${sourceMaterial || '(none provided)'}`;
 };
 
-// ── checkSourceConflict ───────────────────────────────────────
-// Fast pre-generation check: does the uploaded document support the brief?
-// Returns { hasConflict, docSummary, briefSummary, missingItems, recommendations }
 exports.checkSourceConflict = onCall(
   callableOptions({ timeoutSeconds: 30, memory: '256MiB', secrets: ['ANTHROPIC_API_KEY'] }),
-  async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
-
-    const { inputText, parsedFileText, sourceDocumentName } = request.data;
-    const briefHasInfo = hasTangibleSourceInfo(inputText, 'brief');
-    const sourceHasInfo = hasTangibleSourceInfo(parsedFileText, 'source');
-
-    if (sourceDocumentName && !sourceHasInfo) {
-      return {
-        hasConflict: true,
-        issueType: 'unusable_source',
-        title: 'Could not read usable source content',
-        message: 'The selected document did not provide enough extractable text to support this deck.',
-        sourceDocumentName: sourceDocumentName || 'uploaded file',
-        docSummary: 'The uploaded file did not provide enough usable text for this request.',
-        briefSummary: String(inputText || '').trim() || 'No concrete brief was provided.',
-        missingItems: [
-          'Extractable text from the uploaded file',
-          'Source facts that support the requested deck',
-          'Fallback pasted notes if the file is image-only or protected',
-        ],
-        recommendations: [
-          'Upload a text-based PDF, DOCX, PPTX, or TXT file instead of an image-only scan.',
-          'Or paste the key points from the document into the brief box and proceed with those notes.',
-        ],
-        uploadLabel: 'Upload replacement document',
-      };
-    }
-
-    if (!briefHasInfo && !sourceHasInfo) {
-      return {
-        hasConflict: true,
-        issueType: 'insufficient_context',
-        title: 'Need more source material',
-        message: 'AutoDeck needs a concrete brief, usable source document, or pasted notes before it can draft reliable slides.',
-        sourceDocumentName: sourceDocumentName || 'No source document',
-        docSummary: 'No source document or detailed pasted notes were provided.',
-        briefSummary: String(inputText || '').trim() || 'No concrete brief was provided.',
-        missingItems: [
-          'A specific deck objective or audience',
-          'Facts, metrics, decisions, examples, or source notes to support the slides',
-          'A source document that contains the topic the deck should cover',
-        ],
-        recommendations: [
-          'Upload a PDF, DOCX, PPTX, or TXT file with the facts and sections this deck should use.',
-          'Or paste concrete notes: audience, goal, key points, metrics, dates, decisions, risks, and desired next steps.',
-        ],
-        uploadLabel: 'Upload source document',
-      };
-    }
-
-    if (!inputText || !parsedFileText) return { hasConflict: false };
-
-    const briefKeywords = keywordsFrom(inputText);
-    if (briefKeywords.length < 3) return { hasConflict: false };
-
-    const overlap = keywordOverlap(inputText, parsedFileText);
-    const threshold = Math.min(3, Math.max(1, Math.floor(briefKeywords.length * 0.25)));
-    if (overlap.length >= threshold) return { hasConflict: false };
-
-    // Confirmed mismatch — ask Haiku for a human-readable breakdown
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return {
-        hasConflict: true,
-        issueType: 'source_mismatch',
-        title: 'Source mismatch detected',
-        message: 'The uploaded document does not appear to support what your brief is asking for.',
-        sourceDocumentName: sourceDocumentName || '',
-        docSummary: 'The uploaded document does not appear to match the requested topic.',
-        briefSummary: String(inputText).slice(0, 200),
-        missingItems: [],
-        recommendations: ['Upload a source document that covers the requested topic, audience, evidence, and desired direction.'],
-        uploadLabel: 'Upload replacement document',
-      };
-    }
-
-    const anthropic = new AnthropicClient({ apiKey });
-    const docExcerpt = compactText(parsedFileText, 800);
-    let parsed = {};
-    try {
-      const msg = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 320,
-        messages: [{
-          role: 'user',
-          content: `Brief: "${compactText(inputText, 280)}"
-Document "${sourceDocumentName || 'uploaded file'}": "${docExcerpt}"
-
-The brief and document don't match. Return only JSON:
-{"docSummary":"one sentence: what this document actually is","briefSummary":"one sentence: what the brief needs to build","missingItems":["2-4 specific things the document lacks for this brief"],"recommendations":["1-2 document types or sources that would actually work"]}`,
-        }],
-      });
-      const raw = msg.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
-      const match = raw.match(/\{[\s\S]*\}/);
-      if (match) parsed = JSON.parse(match[0]);
-    } catch (_) {}
-
-    return {
-      hasConflict: true,
-      issueType: 'source_mismatch',
-      title: 'Source mismatch detected',
-      message: 'The uploaded document does not appear to support what your brief is asking for.',
-      sourceDocumentName: sourceDocumentName || '',
-      docSummary: String(parsed.docSummary || 'The document does not contain the requested content.'),
-      briefSummary: String(parsed.briefSummary || compactText(inputText, 200)),
-      missingItems: Array.isArray(parsed.missingItems) ? parsed.missingItems.slice(0, 4).map(String) : [],
-      recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations.slice(0, 2).map(String) : [],
-      uploadLabel: 'Upload replacement document',
-    };
-  }
+  handleCheckSourceConflict
 );
 
 // ── generateDeck ──────────────────────────────────────────────
@@ -918,494 +809,68 @@ Rules:
   }
 );
 
-// ── geminiGenerateImage ────────────────────────────────────────
 exports.geminiGenerateImage = onCall(
   callableOptions({ timeoutSeconds: 60, memory: '512MiB', secrets: ['GEMINI_API_KEY'] }),
-  async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
-
-    const { prompt } = request.data;
-    if (!prompt || !String(prompt).trim()) throw new HttpsError('invalid-argument', 'Prompt is required');
-
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new HttpsError('internal', 'Gemini API key not configured. Set it with: firebase functions:secrets:set GEMINI_API_KEY');
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          instances: [{ prompt: compactText(prompt, 500) }],
-          parameters: { sampleCount: 4, aspectRatio: '16:9' },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new HttpsError('internal', 'Imagen API error: ' + errText.slice(0, 300));
-    }
-
-    const body = await response.json();
-    const images = (body.predictions || [])
-      .map((p) => p.bytesBase64Encoded)
-      .filter(Boolean)
-      .map((b64) => `data:image/png;base64,${b64}`);
-
-    if (!images.length) throw new HttpsError('internal', 'No images were generated — try a different prompt');
-
-    return { images };
-  }
+  imageService.geminiGenerateImage
 );
 
-const searchUnsplashImages = async ({ query, count = 6, orientation = 'landscape', page = 1, requireKey = true }) => {
-    const unsplashKey = process.env.UNSPLASH_ACCESS_KEY;
-    if (!unsplashKey) {
-      if (requireKey) throw new HttpsError('internal', 'Unsplash key not configured');
-      return { images: [], refinedQuery: String(query || '').trim() };
-    }
-
-    let searchQuery = String(query).trim();
-    const geminiKey = process.env.GEMINI_API_KEY;
-    if (geminiKey) {
-      try {
-        const gRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{
-                parts: [{
-                  text: `Convert this into 3 short stock-photo search keywords. Return ONLY the keywords as a comma-separated list, nothing else.\n\n"${compactText(query, 200)}"`,
-                }],
-              }],
-              generationConfig: { temperature: 0.1, maxOutputTokens: 30 },
-            }),
-          }
-        );
-        if (gRes.ok) {
-          const gData = await gRes.json();
-          const kw = gData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-          if (kw) searchQuery = kw;
-        }
-      } catch (err) {
-        logger.warn('searchImages Gemini refinement skipped', { message: err.message });
-      }
-    }
-
-    const perPage = Math.max(1, Math.min(parseInt(count, 10) || 6, 30));
-    const imageOrientation = ['landscape', 'portrait', 'squarish'].includes(orientation)
-      ? orientation
-      : 'landscape';
-    const pageNum = Math.max(1, parseInt(page, 10) || 1);
-
-    let rawPhotos;
-    if (pageNum > 1) {
-      // Regenerate: use the random endpoint to guarantee a different set each call
-      const params = new URLSearchParams({
-        query: searchQuery,
-        orientation: imageOrientation,
-        count: String(perPage),
-        client_id: unsplashKey,
-      });
-      const uRes = await fetch(`https://api.unsplash.com/photos/random?${params.toString()}`);
-      if (!uRes.ok) throw new HttpsError('internal', `Unsplash error: ${uRes.status}`);
-      const uData = await uRes.json();
-      rawPhotos = Array.isArray(uData) ? uData : [];
-    } else {
-      const params = new URLSearchParams({
-        query: searchQuery,
-        orientation: imageOrientation,
-        per_page: String(perPage),
-        page: '1',
-        client_id: unsplashKey,
-      });
-      const uRes = await fetch(`https://api.unsplash.com/search/photos?${params.toString()}`);
-      if (!uRes.ok) throw new HttpsError('internal', `Unsplash error: ${uRes.status}`);
-      const uData = await uRes.json();
-      rawPhotos = uData.results || [];
-    }
-
-    const images = rawPhotos.map((p, i) => ({
-      id: p.id || i,
-      src: p.urls?.full || p.urls?.regular || p.urls?.small || '',
-      thumb: p.urls?.small || p.urls?.thumb || p.urls?.regular || '',
-      alt: p.alt_description || p.description || searchQuery,
-      credit: p.user?.name || '',
-      creditUrl: p.user?.links?.html || '',
-    })).filter((image) => image.src && image.thumb);
-
-    return { images, refinedQuery: searchQuery };
-};
-
-const hydrateGeneratedSlideImages = async (slides = []) => {
-  const hydrated = [];
-  for (const slide of slides) {
-    let next = SlideObjects.ensureSlideObjects(slide, hydrated.length, slides.length);
-    if (SlideObjects.shouldHaveImage(next)) {
-      const imageObjects = (next.objects || []).filter((obj) => obj.type === 'image');
-      const hasImage = imageObjects.some((obj) => obj.src);
-      if (!hasImage) {
-        const prompt = next.imagePrompt || imageObjects[0]?.prompt || next.title || '';
-        if (prompt) {
-          try {
-            const { images } = await searchUnsplashImages({ query: prompt, count: 1, orientation: 'landscape', page: 1, requireKey: false });
-            const image = images[0];
-            if (image) {
-              next = {
-                ...next,
-                image: {
-                  src: image.src,
-                  alt: image.alt,
-                  credit: image.credit,
-                  creditUrl: image.creditUrl,
-                  prompt,
-                },
-                objects: next.objects.map((obj) => obj.type === 'image'
-                  ? { ...obj, src: image.src, alt: image.alt, credit: image.credit, creditUrl: image.creditUrl, prompt: obj.prompt || prompt }
-                  : obj),
-              };
-            }
-          } catch (err) {
-            logger.warn('generateDeck image hydration skipped', { message: err.message, title: next.title });
-          }
-        }
-      }
-    }
-    hydrated.push(SlideObjects.ensureSlideObjects(next, hydrated.length, slides.length));
-  }
-  return hydrated;
-};
-
-// ── searchImages ───────────────────────────────────────────────
 exports.searchImages = onCall(
   callableOptions({
     timeoutSeconds: 30,
     memory: '256MiB',
     secrets: ['UNSPLASH_ACCESS_KEY', 'GEMINI_API_KEY'],
   }),
-  async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
-
-    const { query, count = 6, orientation = 'landscape', page = 1 } = request.data || {};
-    if (!query || !String(query).trim()) throw new HttpsError('invalid-argument', 'query is required');
-
-    return searchUnsplashImages({ query, count, orientation, page, requireKey: true });
-  }
+  imageService.searchImages
 );
 
-// ── parseDocx ─────────────────────────────────────────────────
 exports.parseDocx = onCall(
   callableOptions({ timeoutSeconds: 30, memory: '256MiB' }),
-  async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
-    const { base64 } = request.data;
-    const buf = Buffer.from(base64, 'base64');
-    const { value } = await mammoth.extractRawText({ buffer: buf });
-    return { text: value };
-  }
+  fileParsing.parseDocx
 );
 
-// ── parsePptx ─────────────────────────────────────────────────
 exports.parsePptx = onCall(
   callableOptions({ timeoutSeconds: 30, memory: '256MiB' }),
-  async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
-    const { base64 } = request.data;
-    const buf = Buffer.from(base64, 'base64');
-    const text = await extractPptxText(buf);
-    return { text };
-  }
+  fileParsing.parsePptx
 );
 
-// ── parseFile ─────────────────────────────────────────────────
 exports.parseFile = onCall(
   callableOptions({ timeoutSeconds: 120, memory: '512MiB' }),
-  async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
-
-    const storagePath = String(request.data?.storagePath || '');
-    const fileName = String(request.data?.fileName || storagePath);
-    if (!storagePath) throw new HttpsError('invalid-argument', 'storagePath is required');
-
-    const expectedPrefix = `uploads/temp/${request.auth.uid}/`;
-    if (!storagePath.startsWith(expectedPrefix)) {
-      throw new HttpsError('permission-denied', 'storagePath must be under your own uploads/temp prefix');
-    }
-
-    const ext = fileName.split('.').pop().toLowerCase();
-    if (!['pdf', 'docx', 'pptx', 'txt'].includes(ext)) {
-      throw new HttpsError('invalid-argument', `Unsupported file type: .${ext}`);
-    }
-
-    const bucket = getStorage().bucket();
-    const file = bucket.file(storagePath);
-    const [exists] = await file.exists();
-    if (!exists) throw new HttpsError('not-found', 'File not found in storage');
-
-    const [buffer] = await file.download();
-    let text = '';
-    try {
-      if (ext === 'pdf') {
-        const result = await pdfParse(buffer);
-        text = result.text || '';
-      } else if (ext === 'docx') {
-        const result = await mammoth.extractRawText({ buffer });
-        text = result.value || '';
-      } else if (ext === 'pptx') {
-        text = await extractPptxText(buffer);
-      } else {
-        text = buffer.toString('utf8');
-      }
-    } finally {
-      await file.delete({ ignoreNotFound: true }).catch((err) => {
-        logger.warn('parseFile temp cleanup failed', { storagePath, message: err?.message });
-      });
-    }
-
-    const cleaned = cleanSourceMaterial(text, MAX_SOURCE_CHARS);
-    return {
-      text: cleaned,
-      wordCount: wordCount(cleaned),
-    };
-  }
+  fileParsing.parseFile
 );
-
-const ADMIN_EMAILS_BE = ['admin@quidax.com'];
-
-const templatePresetIdFromStyle = (style) => String(style || 'professional')
-  .toLowerCase()
-  .replace(/\s+/g, '-');
-
-const sanitizeSlideForFirestore = (slide = {}, index = 0, total = 1) => {
-  const editorSlide = SlideObjects.ensureSlideObjects(slide, index, total);
-  const derived = SlideObjects.deriveLegacyFields(editorSlide);
-  return {
-    index,
-    title: String(derived.title || '').trim(),
-    bullets: Array.isArray(derived.bullets)
-      ? derived.bullets.map((bullet) => String(bullet || '').trim()).filter(Boolean)
-      : [],
-    layout: slide.layout || slide.renderLayout || 'standard',
-    visualLayout: slide.visualLayout || slide.layout || null,
-    renderLayout: slide.renderLayout || null,
-    theme: slide.theme || null,
-    slideType: slide.slideType || null,
-    visualization: slide.visualization || null,
-    needsIcons: slide.needsIcons === true,
-    needsChart: slide.needsChart === true,
-    needsImage: slide.needsImage === true,
-    components: Array.isArray(slide.components) ? slide.components : [],
-    storytellingNote: String(slide.storytellingNote || ''),
-    contentType: slide.contentType || null,
-    kicker: slide.kicker || null,
-    speakerNotes: String(slide.speakerNotes || ''),
-    imagePrompt: String(slide.imagePrompt || ''),
-    editorVersion: SlideObjects.EDITOR_VERSION,
-    visualVersion: editorSlide.visualVersion || SlideObjects.OBJECT_VISUAL_VERSION || 2,
-    objects: editorSlide.objects,
-  };
-};
 
 // ── createDeck ─────────────────────────────────────────────────
 exports.createDeck = onCall(
   callableOptions({ timeoutSeconds: 30, memory: '256MiB' }),
-  async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
-
-    const { inputText, parsedFileText, templateStyle, slideCount, uploadedFileName } = request.data;
-    if (!inputText && !parsedFileText) throw new HttpsError('invalid-argument', 'No content provided');
-
-    const titleSource = String(inputText || parsedFileText || uploadedFileName || 'Untitled deck').trim();
-    const title = titleSource.split(/\s+/).slice(0, 8).join(' ');
-
-    const email = request.auth.token.email || '';
-    const author = request.auth.token.name || email.split('@')[0] || 'Unknown';
-
-    const explicit = parseInt(slideCount, 10);
-    const words = String(inputText || parsedFileText || '').trim().split(/\s+/).filter(Boolean).length;
-    const resolvedSlideCount = Number.isFinite(explicit) && explicit > 0
-      ? Math.max(3, Math.min(20, explicit))
-      : Math.max(5, Math.min(12, Math.round(words / 80) || 8));
-
-    const deckRef = db.collection('decks').doc();
-    await deckRef.set({
-      userId: request.auth.uid,
-      author,
-      title,
-      inputText: String(inputText || '').slice(0, MAX_INPUT_CHARS),
-      parsedFileText: String(parsedFileText || '').slice(0, MAX_SOURCE_CHARS),
-      templateStyle: templateStyle || 'Professional',
-      templatePresetId: templatePresetIdFromStyle(templateStyle),
-      slideCount: resolvedSlideCount,
-      uploadedFileName: String(uploadedFileName || ''),
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      status: 'processing',
-      stage: 'created',
-    });
-
-    logger.info('createDeck', { deckId: deckRef.id, uid: request.auth.uid });
-    return { deckId: deckRef.id };
-  }
+  deckStorage.createDeck
 );
 
 // ── finalizeDeck ───────────────────────────────────────────────
 exports.finalizeDeck = onCall(
   callableOptions({ timeoutSeconds: 60, memory: '256MiB' }),
-  async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
-
-    const { deckId, slides, config = {} } = request.data;
-    if (!Array.isArray(slides) || !slides.length) {
-      throw new HttpsError('invalid-argument', 'slides array is required');
-    }
-
-    let deckRef;
-    if (deckId) {
-      deckRef = db.collection('decks').doc(deckId);
-      const snap = await deckRef.get();
-      if (!snap.exists) throw new HttpsError('not-found', 'Deck not found');
-      if (snap.data().userId !== request.auth.uid) throw new HttpsError('permission-denied', 'Not your deck');
-    } else {
-      const email = request.auth.token.email || '';
-      const author = request.auth.token.name || email.split('@')[0] || 'Unknown';
-      const titleSource = String(config.inputText || config.parsedFileText || 'Untitled deck').trim();
-
-      deckRef = db.collection('decks').doc();
-      await deckRef.set({
-        userId: request.auth.uid,
-        author,
-        title: titleSource.split(/\s+/).slice(0, 8).join(' ') || 'Untitled deck',
-        inputText: String(config.inputText || '').slice(0, MAX_INPUT_CHARS),
-        parsedFileText: String(config.parsedFileText || '').slice(0, MAX_SOURCE_CHARS),
-        templateStyle: config.templateStyle || 'Professional',
-        templatePresetId: templatePresetIdFromStyle(config.templateStyle),
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        status: 'processing',
-        stage: 'created',
-      });
-    }
-
-    const safeSlides = slides.map((slide, index) => sanitizeSlideForFirestore(slide, index, slides.length));
-    const batch = db.batch();
-    batch.set(deckRef, {
-      status: 'ready',
-      stage: 'ready',
-      templatePresetId: templatePresetIdFromStyle(config.templateStyle),
-      slideCount: safeSlides.length,
-      editorVersion: SlideObjects.EDITOR_VERSION,
-      slides: safeSlides,
-      completedAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-
-    safeSlides.forEach((slide, index) => {
-      const slideRef = deckRef.collection('slides').doc(slideDocumentId(index));
-      batch.set(slideRef, slide);
-    });
-
-    await batch.commit();
-    logger.info('finalizeDeck', { deckId: deckRef.id, uid: request.auth.uid, slides: safeSlides.length });
-    return { deckId: deckRef.id, ok: true };
-  }
+  deckStorage.finalizeDeck
 );
 
 // ── saveDeckEdits ──────────────────────────────────────────────
 exports.saveDeckEdits = onCall(
   callableOptions({ timeoutSeconds: 60, memory: '256MiB' }),
-  async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
-
-    const { deckId, slides, editorVersion = SlideObjects.EDITOR_VERSION } = request.data;
-    if (!deckId) throw new HttpsError('invalid-argument', 'deckId is required');
-    if (!Array.isArray(slides) || !slides.length) throw new HttpsError('invalid-argument', 'slides array is required');
-
-    const deckRef = db.collection('decks').doc(deckId);
-    const snap = await deckRef.get();
-    if (!snap.exists) throw new HttpsError('not-found', 'Deck not found');
-    if (snap.data().userId !== request.auth.uid) throw new HttpsError('permission-denied', 'Not your deck');
-
-    const safeSlides = slides.map((slide, index) => sanitizeSlideForFirestore(slide, index, slides.length));
-    const batch = db.batch();
-    batch.set(deckRef, {
-      status: 'ready',
-      stage: 'ready',
-      editorVersion: Number(editorVersion) || SlideObjects.EDITOR_VERSION,
-      slideCount: safeSlides.length,
-      slides: safeSlides,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-
-    const existing = await deckRef.collection('slides').get();
-    existing.docs.forEach((doc) => {
-      const match = doc.id.match(/^slide-(\d+)$/);
-      const n = match ? parseInt(match[1], 10) : 0;
-      if (n > safeSlides.length) batch.delete(doc.ref);
-    });
-
-    safeSlides.forEach((slide, index) => {
-      batch.set(deckRef.collection('slides').doc(slideDocumentId(index)), slide);
-    });
-
-    await batch.commit();
-    logger.info('saveDeckEdits', { deckId, uid: request.auth.uid, slides: safeSlides.length });
-    return { ok: true, deckId };
-  }
+  deckStorage.saveDeckEdits
 );
 
 // ── attachSourceFile ───────────────────────────────────────────
 exports.attachSourceFile = onCall(
   callableOptions({ timeoutSeconds: 15, memory: '256MiB' }),
-  async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
-
-    const { deckId, uploadedFileUrl, uploadedFileName } = request.data;
-    if (!deckId) throw new HttpsError('invalid-argument', 'deckId is required');
-    if (!uploadedFileUrl) throw new HttpsError('invalid-argument', 'uploadedFileUrl is required');
-
-    const deckRef = db.collection('decks').doc(deckId);
-    const snap = await deckRef.get();
-    if (!snap.exists) throw new HttpsError('not-found', 'Deck not found');
-    if (snap.data().userId !== request.auth.uid) throw new HttpsError('permission-denied', 'Not your deck');
-
-    await deckRef.update({
-      uploadedFileUrl: String(uploadedFileUrl),
-      uploadedFileName: String(uploadedFileName || ''),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    return { ok: true };
-  }
+  deckStorage.attachSourceFile
 );
 
 // ── markDeckError ──────────────────────────────────────────────
 exports.markDeckError = onCall(
   callableOptions({ timeoutSeconds: 15, memory: '256MiB' }),
-  async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
-
-    const { deckId, error, stage } = request.data;
-    if (!deckId) throw new HttpsError('invalid-argument', 'deckId is required');
-
-    const deckRef = db.collection('decks').doc(deckId);
-    const snap = await deckRef.get();
-    if (!snap.exists) throw new HttpsError('not-found', 'Deck not found');
-    if (snap.data().userId !== request.auth.uid) throw new HttpsError('permission-denied', 'Not your deck');
-
-    await deckRef.update({
-      status: 'error',
-      error: String(error || 'Unknown error').slice(0, 500),
-      stage: String(stage || 'client-error'),
-      completedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    return { ok: true };
-  }
+  deckStorage.markDeckError
 );
 
 // ── saveBrand ─────────────────────────────────────────────────
+const ADMIN_EMAILS_BE = ['admin@quidax.com'];
+
 exports.saveBrand = onCall(
   callableOptions({ timeoutSeconds: 30, memory: '256MiB' }),
   async (request) => {
@@ -1441,54 +906,11 @@ exports.getBrand = onCall(
 // ── listDecks ─────────────────────────────────────────────────
 exports.listDecks = onCall(
   callableOptions({ timeoutSeconds: 30, memory: '256MiB' }),
-  async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
-
-    const snap = await db.collection('decks')
-      .where('userId', '==', request.auth.uid)
-      .orderBy('createdAt', 'desc')
-      .limit(50)
-      .get();
-
-    const decks = snap.docs.map((doc) => {
-      const d = doc.data();
-      return {
-        id: doc.id,
-        title: d.title || 'Untitled',
-        author: d.author || '',
-        template: d.templateStyle || 'Professional',
-        slideCount: d.slideCount || 0,
-        status: d.status || 'ready',
-        createdAt: d.createdAt?.toDate?.()?.toISOString() || null,
-        completedAt: d.completedAt?.toDate?.()?.toISOString() || null,
-      };
-    });
-
-    return { decks };
-  }
+  deckStorage.listDecks
 );
 
 // ── deleteDeck ────────────────────────────────────────────────
 exports.deleteDeck = onCall(
   callableOptions({ timeoutSeconds: 60, memory: '256MiB' }),
-  async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
-
-    const { deckId } = request.data;
-    if (!deckId) throw new HttpsError('invalid-argument', 'deckId is required');
-
-    const deckRef = db.collection('decks').doc(deckId);
-    const snap = await deckRef.get();
-    if (!snap.exists) throw new HttpsError('not-found', 'Deck not found');
-    if (snap.data().userId !== request.auth.uid) throw new HttpsError('permission-denied', 'Not your deck');
-
-    const slideSnap = await deckRef.collection('slides').get();
-    const batch = db.batch();
-    slideSnap.docs.forEach((doc) => batch.delete(doc.ref));
-    batch.delete(deckRef);
-    await batch.commit();
-
-    logger.info('deleteDeck', { deckId, uid: request.auth.uid });
-    return { ok: true };
-  }
+  deckStorage.deleteDeck
 );
