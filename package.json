@@ -7,11 +7,12 @@
   "scripts": {
     "check:shared": "node scripts/check-shared-sync.js",
     "check:functions": "node scripts/check-functions-smoke.js",
+    "check:generation": "node scripts/check-generation-helpers.js",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "test:report": "playwright show-report",
-    "verify": "npm run check:shared && npm run check:functions && npm test -- --project=chromium"
+    "verify": "npm run check:shared && npm run check:functions && npm run check:generation && npm test -- --project=chromium"
   },
   "devDependencies": {
     "@playwright/test": "^1.44.0"
