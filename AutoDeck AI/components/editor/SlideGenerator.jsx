@@ -250,6 +250,20 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     return id;
   };
 
+  const addNewSlide = () => {
+    const blank = window.AutoDeckSlideObjects?.ensureSlidesObjects
+      ? window.AutoDeckSlideObjects.ensureSlidesObjects([{ title: 'New Slide', renderLayout: 'standard', bullets: [] }])[0]
+      : { title: 'New Slide', renderLayout: 'standard', bullets: [], objects: [] };
+    const insertAt = currentIndex + 1;
+    setLocalSlides((prev) => {
+      const next = [...prev];
+      next.splice(insertAt, 0, blank);
+      return next;
+    });
+    setCurrentIndex(insertAt);
+    showToast('New slide added', 'success');
+  };
+
   const addTextbox = () => {
     const id = addObject({
       type: 'text',
@@ -1075,6 +1089,20 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
             </button>
             {showAddMenu && (
               <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, background: '#170729', border: '1px solid rgba(246,241,251,0.10)', borderRadius: 12, padding: 6, minWidth: 210, zIndex: 300, boxShadow: '0 18px 50px rgba(0,0,0,0.6)' }}>
+                {[
+                  { icon: '+', label: 'New Slide', sub: 'Insert after current', action: () => { addNewSlide(); setShowAddMenu(false); }, accent: true },
+                ].map(({ icon, label, sub, action, accent }) => (
+                  <button key={label} onClick={action} style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', padding: '10px 12px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(246,241,251,0.06)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: accent ? 'rgba(212,255,63,0.13)' : 'rgba(246,241,251,0.07)', border: `1px solid ${accent ? 'rgba(212,255,63,0.30)' : 'rgba(246,241,251,0.10)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: accent ? QX.lime : '#F6F1FB', fontSize: accent ? 20 : 14, fontWeight: 700, flexShrink: 0 }}>{icon}</div>
+                    <div>
+                      <div style={{ fontFamily: qxType.body, fontSize: 13, fontWeight: 650, color: '#F6F1FB' }}>{label}</div>
+                      <div style={{ fontFamily: qxType.mono, fontSize: 8.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.42)', marginTop: 2 }}>{sub}</div>
+                    </div>
+                  </button>
+                ))}
+                <div style={{ height: 1, background: 'rgba(246,241,251,0.08)', margin: '4px 6px' }} />
                 {[
                   { icon: 'T', label: 'Text box', sub: 'Heading or body', action: () => { addTextbox(); setShowAddMenu(false); } },
                   { icon: '⊞', label: 'Table', sub: 'Editable rows', action: () => { addTable(); setShowAddMenu(false); } },
