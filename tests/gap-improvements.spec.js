@@ -444,7 +444,7 @@ test.describe('Gap 8 — File parsing (backend parseFile)', () => {
   test('HomeScreen parser is wired to backend parseFile callable', async ({ page }) => {
     await loadApp(page);
     const source = await page.evaluate(() =>
-      fetch('components/HomeScreenA.jsx').then((res) => res.text())
+      fetch('components/deck/HomeScreenA.jsx').then((res) => res.text())
     );
     expect(source).toContain("httpsCallable('parseFile'");
     expect(source).toContain('uploads/temp/${uid}/');

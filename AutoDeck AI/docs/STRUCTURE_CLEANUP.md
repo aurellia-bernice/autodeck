@@ -82,7 +82,8 @@ This hierarchy should be introduced in stages. In the current no-build setup, ea
    - Completed: moved low-risk browser globals `tokens.jsx`, `template-presets.jsx`, and `app-services.jsx` under `AutoDeck AI/app/`.
    - Completed: moved root orchestration file `app.jsx` under `AutoDeck AI/app/`.
    - Completed: grouped auth and account screens under `components/auth/` and `components/account/`.
-   - Group remaining screen components by domain.
+   - Completed: grouped deck workflow screens under `components/deck/`.
+   - Group remaining editor/admin/shell components by domain.
    - Keep shared browser/function mirrors in their existing locations until `check:shared` is updated for the new paths.
 
 ## Acceptance Checks

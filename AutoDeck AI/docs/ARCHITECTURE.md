@@ -103,19 +103,20 @@ autodeck/
         ├── account/
         │   ├── AccountSettingsScreen.jsx
         │   └── ChangePasswordScreen.jsx
-        ├── HomeScreenA.jsx
-        ├── SourceConflictScreen.jsx
-        ├── ProcessingScreen.jsx
-        ├── PreviewScreen.jsx
+        ├── deck/
+        │   ├── HomeScreenA.jsx
+        │   ├── SourceConflictScreen.jsx
+        │   ├── ProcessingScreen.jsx
+        │   ├── PreviewScreen.jsx
+        │   └── HistoryScreen.jsx
         ├── slide-editor-model.jsx
         ├── slide-editor-agent.jsx
         ├── slide-editor-export.jsx
         ├── SlideGenerator.jsx
-        ├── HistoryScreen.jsx
         └── AdminScreen.jsx
 ```
 
-Loading order matters because there are no ES modules. `index.html` loads vendor libraries, Firebase config, export libraries, `shared/source-review.js`, `app/tokens.jsx`, `slide-intelligence.jsx`, `slide-objects.jsx`, `app/template-presets.jsx`, component helpers such as `components/slide-editor-model.jsx`, `components/slide-editor-agent.jsx`, and `components/slide-editor-export.jsx`, components, `app/app-services.jsx`, and finally `app/app.jsx`. JSX files expose globals on `window`.
+Loading order matters because there are no ES modules. `index.html` loads vendor libraries, Firebase config, export libraries, `shared/source-review.js`, `app/tokens.jsx`, `slide-intelligence.jsx`, `slide-objects.jsx`, `app/template-presets.jsx`, component helpers such as `components/slide-editor-model.jsx`, `components/slide-editor-agent.jsx`, and `components/slide-editor-export.jsx`, deck workflow components under `components/deck/`, components, `app/app-services.jsx`, and finally `app/app.jsx`. JSX files expose globals on `window`.
 
 The browser and Functions copies of shared runtime logic are checked by `npm run check:shared`. Keep these pairs byte-for-byte aligned unless the sync script is intentionally updated:
 
