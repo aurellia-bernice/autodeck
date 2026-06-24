@@ -7,8 +7,10 @@ const load = (relativePath) => require(path.join(functionsRoot, relativePath));
 
 const modules = [
   'index.js',
+  'lib/brand-config.js',
   'lib/deck-storage.js',
   'lib/file-parsing.js',
+  'lib/generation-service.js',
   'lib/image-search.js',
   'lib/pptx-text.js',
   'lib/source-cleaning.js',
