@@ -59,6 +59,9 @@ autodeck/
     │   │   ├── brand-config.js           # Admin brand read/write handlers
     │   │   ├── deck-storage.js           # Deck create/finalize/save/list/delete handlers
     │   │   ├── file-parsing.js           # Parse callable handlers
+    │   │   ├── generation-json.js        # Model JSON extraction/repair helpers
+    │   │   ├── generation-normalize.js   # Slide count, layout, component, and slide normalization
+    │   │   ├── generation-prompts.js     # Claude/Gemini prompt builders and voice selection
     │   │   ├── generation-service.js     # Claude/Gemini deck generation and agent edit handlers
     │   │   ├── image-search.js           # Unsplash/Imagen handlers and slide image hydration
     │   │   ├── pptx-text.js              # PPTX extraction helper
@@ -199,7 +202,10 @@ All functions are HTTPS callable, deployed in `us-central1`, require Firebase Au
 - `lib/brand-config.js`: admin-only brand config reads/writes.
 - `lib/deck-storage.js`: deck lifecycle, slide sanitization, persistence, list/delete.
 - `lib/file-parsing.js`: direct parse callables and temp-storage parse flow.
-- `lib/generation-service.js`: Claude deck generation, JSON repair/normalization, Gemini generation helper, and agent edit handler.
+- `lib/generation-json.js`: model JSON extraction, local syntax repair, and generation token sizing.
+- `lib/generation-normalize.js`: slide count resolution, layout aliases, boolean/component cleanup, and slide normalization.
+- `lib/generation-prompts.js`: deck generation, agent edit, Gemini prompt builders, and voice-guide selection.
+- `lib/generation-service.js`: callable orchestration for Claude deck generation, Gemini generation, and agent edit.
 - `lib/image-search.js`: Unsplash search, Gemini keyword refinement, Imagen helper, generated-slide image hydration.
 - `lib/source-conflict.js`: source-conflict callable handler.
 - `lib/source-cleaning.js` and `lib/pptx-text.js`: pure parsing/cleanup helpers.
@@ -364,11 +370,12 @@ The root package is Playwright-only.
 ```bash
 npm run check:shared
 npm run check:functions
+npm run check:generation
 npm test
 npm run verify
 ```
 
-Representative coverage includes login, home/generation forms, source conflict, generation source handling, processing, preview, slide intelligence, history, sidebar, account settings, and admin flows.
+Representative coverage includes login, home/generation forms, source conflict, generation source handling, generation helper smoke checks, processing, preview, slide intelligence, history, sidebar, account settings, and admin flows.
 
 ---
 
