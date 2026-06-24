@@ -5,6 +5,8 @@
   "description": "AutoDeck AI — Internal Quidax tool for AI-generated presentations",
   "license": "UNLICENSED",
   "scripts": {
+    "dev": "node scripts/dev-server.js",
+    "start": "npm run dev",
     "check:shared": "node scripts/check-shared-sync.js",
     "check:functions": "node scripts/check-functions-smoke.js",
     "check:generation": "node scripts/check-generation-helpers.js",

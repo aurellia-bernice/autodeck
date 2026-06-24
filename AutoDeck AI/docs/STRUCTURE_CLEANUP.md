@@ -16,7 +16,7 @@
 | `docs/archive/BACKEND_RESTRUCTURE.md` | Historical execution plan | Archived. Current implementation source of truth is `docs/ARCHITECTURE.md` plus code. |
 | `docs/GENERATION_WORKFLOW.md` | Current generation flow notes | Kept with active docs. |
 | `docs/ARCHITECTURE.md` | Current architecture reference | Kept with active docs. |
-| `start-server.*` | Local convenience launchers | Keep temporarily. Prefer root `package.json` scripts in a later pass. |
+| `scripts/dev-server.js` | Root local development and test server | Replaces the removed `start-server.*` launchers and the Playwright Python server. Run with `npm run dev` or `npm start`. |
 
 ## Proposed Hierarchy
 
@@ -75,7 +75,7 @@ This hierarchy should be introduced in stages. In the current no-build setup, ea
 
 4. Move local-only tools and previews.
    - Completed: moved `preview-*.html` to `AutoDeck AI/dev/preview/`.
-   - Replace `start-server.*` with root package scripts or move them to `scripts/`.
+   - Completed: replaced `start-server.*` and the Playwright Python server with root `npm run dev` / `npm start` scripts backed by `scripts/dev-server.js`.
 
 5. Re-section browser code.
    - Move app orchestration files under `AutoDeck AI/app/`.

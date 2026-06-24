@@ -15,7 +15,7 @@ module.exports = defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: {
-    command: "python3 -m http.server 8081 --directory 'AutoDeck AI'",
+    command: 'node scripts/dev-server.js --port 8081',
     url: 'http://localhost:8081',
     reuseExistingServer: !process.env.CI,
     timeout: 15000,

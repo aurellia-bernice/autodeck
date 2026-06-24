@@ -33,7 +33,12 @@ The app is intentionally build-step-free: Firebase Hosting serves static HTML/JS
 ```text
 autodeck/
 ├── firebase.json                         # Hosting, Functions, Firestore, Storage config
-├── package.json                          # Playwright test scripts
+├── package.json                          # Local dev, verification, and Playwright scripts
+├── scripts/
+│   ├── dev-server.js                     # Root local and Playwright static server for AutoDeck AI/
+│   ├── check-functions-smoke.js
+│   ├── check-generation-helpers.js
+│   └── check-shared-sync.js
 ├── tests/                                # Playwright specs
 └── AutoDeck AI/
     ├── index.html                        # Primary hosted entry point
