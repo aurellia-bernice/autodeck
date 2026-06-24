@@ -7,9 +7,9 @@
 | `index.html` | Production entry | Keep at the hosted root while the app remains build-step-free. |
 | `action.html` | Firebase account action entry | Keep. Covered by `tests/reset-password.spec.js`. |
 | `AutoDeck AI.html` | Local compatibility redirect | Keep for now, but keep ignored from Hosting. Remove in a later compatibility pass if no one still opens it locally. |
-| `preview-home.html` | Static visual demo harness | Keep in repo temporarily, but do not deploy. Move under a future `dev/preview/` folder or delete after screenshots/tests replace it. |
-| `preview-conflict.html` | Static visual demo harness | Keep in repo temporarily, but do not deploy. Move under a future `dev/preview/` folder or delete after screenshots/tests replace it. |
-| `preview-conflict-loading.html` | Static visual demo harness | Keep in repo temporarily, but do not deploy. Move under a future `dev/preview/` folder or delete after screenshots/tests replace it. |
+| `dev/preview/preview-home.html` | Static visual demo harness | Kept in a dev-only preview folder and ignored from Hosting through `dev/**`. Delete after screenshots/tests replace it. |
+| `dev/preview/preview-conflict.html` | Static visual demo harness | Kept in a dev-only preview folder and ignored from Hosting through `dev/**`. Delete after screenshots/tests replace it. |
+| `dev/preview/preview-conflict-loading.html` | Static visual demo harness | Kept in a dev-only preview folder and ignored from Hosting through `dev/**`. Delete after screenshots/tests replace it. |
 | `vendor/pdf.min.js` and `vendor/pdf.worker.min.js` | Removed legacy PDF.js bundles | Deleted after a full verify run confirmed `pdfjsLib` stays unused. |
 | `docs/assets/screenshots/` | Archived visual artifacts, not referenced by code/tests | Kept for product/design review and ignored from Hosting through `docs/**`. |
 | `tests/home-screen-b.spec.js` | Removed retired `HomeScreenB` prototype coverage | Deleted because `HomeScreenB` is no longer shipped and the suite only added skipped tests. |
@@ -42,6 +42,9 @@ AutoDeck AI/
 │   └── shell/
 ├── dev/
 │   └── preview/
+│       ├── preview-home.html
+│       ├── preview-conflict.html
+│       └── preview-conflict-loading.html
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   ├── GENERATION_WORKFLOW.md
@@ -71,7 +74,7 @@ This hierarchy should be introduced in stages. In the current no-build setup, ea
    - Completed: historical backend plan lives in `AutoDeck AI/docs/archive/`.
 
 4. Move local-only tools and previews.
-   - Move `preview-*.html` to `AutoDeck AI/dev/preview/`.
+   - Completed: moved `preview-*.html` to `AutoDeck AI/dev/preview/`.
    - Replace `start-server.*` with root package scripts or move them to `scripts/`.
 
 5. Re-section browser code.
@@ -82,6 +85,6 @@ This hierarchy should be introduced in stages. In the current no-build setup, ea
 ## Acceptance Checks
 
 - `npm run verify`
-- Firebase Hosting deploy preview does not include demo harnesses, unused PDF.js bundles, `docs/`, local scripts, examples, or Functions source.
+- Firebase Hosting deploy preview does not include demo harnesses, unused PDF.js bundles, `dev/`, `docs/`, local scripts, examples, or Functions source.
 - `index.html` and `action.html` still load without 404s.
 - No new skipped tests are introduced.

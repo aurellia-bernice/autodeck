@@ -39,6 +39,11 @@ autodeck/
     ├── index.html                        # Primary hosted entry point
     ├── AutoDeck AI.html                  # Compatibility redirect page
     ├── action.html                       # Firebase account action page
+    ├── dev/
+    │   └── preview/
+    │       ├── preview-home.html         # Isolated Home screen visual harness
+    │       ├── preview-conflict.html     # Source conflict visual harness
+    │       └── preview-conflict-loading.html
     ├── docs/
     │   ├── ARCHITECTURE.md               # Current architecture reference
     │   ├── GENERATION_WORKFLOW.md        # Current generation flow notes
@@ -109,7 +114,7 @@ The browser and Functions copies of shared runtime logic are checked by `npm run
 - `slide-objects.jsx` and `functions/slide-objects.js`
 - `shared/source-review.js` and `functions/shared/source-review.js`
 
-Preview-only HTML files (`preview-home.html`, `preview-conflict.html`, `preview-conflict-loading.html`) are static demo harnesses for isolated visual checks. They are not part of the production navigation flow and are ignored from Firebase Hosting. `AutoDeck AI.html` is a local compatibility redirect, and `action.html` is the Firebase account-action page.
+Preview-only HTML files under `dev/preview/` (`preview-home.html`, `preview-conflict.html`, `preview-conflict-loading.html`) are static demo harnesses for isolated visual checks. They are not part of the production navigation flow and are ignored from Firebase Hosting through `dev/**`. `AutoDeck AI.html` is a local compatibility redirect, and `action.html` is the Firebase account-action page.
 
 `docs/STRUCTURE_CLEANUP.md` tracks files that are active, demo-only, archival, or deletion candidates. The `docs/` tree, including archived screenshots, is ignored from Firebase Hosting.
 
