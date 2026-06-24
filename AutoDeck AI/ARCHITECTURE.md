@@ -56,8 +56,10 @@ autodeck/
     ├── functions/
     │   ├── index.js                      # Callable APIs
     │   ├── lib/
+    │   │   ├── brand-config.js           # Admin brand read/write handlers
     │   │   ├── deck-storage.js           # Deck create/finalize/save/list/delete handlers
     │   │   ├── file-parsing.js           # Parse callable handlers
+    │   │   ├── generation-service.js     # Claude/Gemini deck generation and agent edit handlers
     │   │   ├── image-search.js           # Unsplash/Imagen handlers and slide image hydration
     │   │   ├── pptx-text.js              # PPTX extraction helper
     │   │   ├── source-cleaning.js        # Source text cleanup helper
@@ -192,10 +194,12 @@ ResetPasswordScreen is the standalone reset target.
 
 All functions are HTTPS callable, deployed in `us-central1`, require Firebase Auth unless noted by implementation, and use explicit CORS origins for localhost and Firebase Hosting.
 
-`functions/index.js` remains the callable export layer plus the core generation/edit prompts. Focused backend modules own lower-level behavior:
+`functions/index.js` is the callable export layer. Focused backend modules own the implementation details:
 
+- `lib/brand-config.js`: admin-only brand config reads/writes.
 - `lib/deck-storage.js`: deck lifecycle, slide sanitization, persistence, list/delete.
 - `lib/file-parsing.js`: direct parse callables and temp-storage parse flow.
+- `lib/generation-service.js`: Claude deck generation, JSON repair/normalization, Gemini generation helper, and agent edit handler.
 - `lib/image-search.js`: Unsplash search, Gemini keyword refinement, Imagen helper, generated-slide image hydration.
 - `lib/source-conflict.js`: source-conflict callable handler.
 - `lib/source-cleaning.js` and `lib/pptx-text.js`: pure parsing/cleanup helpers.
