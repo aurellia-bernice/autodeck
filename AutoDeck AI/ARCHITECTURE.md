@@ -38,7 +38,8 @@ autodeck/
 └── AutoDeck AI/
     ├── index.html                        # Primary hosted entry point
     ├── AutoDeck AI.html                  # Compatibility redirect page
-    ├── app.jsx                           # Root router, auth, deck lifecycle, source review
+    ├── app-services.jsx                  # Browser-global app services and source-review helpers
+    ├── app.jsx                           # Root router, auth, deck lifecycle, and screen coordination
     ├── tokens.jsx                        # qxTheme, QX colors, typography, radius, shadows
     ├── slide-intelligence.jsx            # Browser visual-layout classifier helpers
     ├── template-presets.jsx              # Built-in style/preset contract
@@ -55,8 +56,12 @@ autodeck/
     ├── functions/
     │   ├── index.js                      # Callable APIs
     │   ├── lib/
+    │   │   ├── deck-storage.js           # Deck create/finalize/save/list/delete handlers
+    │   │   ├── file-parsing.js           # Parse callable handlers
+    │   │   ├── image-search.js           # Unsplash/Imagen handlers and slide image hydration
     │   │   ├── pptx-text.js              # PPTX extraction helper
-    │   │   └── source-cleaning.js        # Source text cleanup helper
+    │   │   ├── source-cleaning.js        # Source text cleanup helper
+    │   │   └── source-conflict.js        # Source-conflict callable handler
     │   ├── shared/
     │   │   └── source-review.js          # Functions copy of browser source-review heuristics
     │   ├── slide-intelligence.js         # Node copy of visual slide intelligence
@@ -72,6 +77,8 @@ autodeck/
         ├── ProcessingScreen.jsx
         ├── PreviewScreen.jsx
         ├── slide-editor-model.jsx
+        ├── slide-editor-agent.jsx
+        ├── slide-editor-export.jsx
         ├── SlideGenerator.jsx
         ├── HistoryScreen.jsx
         ├── AdminScreen.jsx
@@ -80,7 +87,7 @@ autodeck/
         └── ResetPasswordScreen.jsx
 ```
 
-Loading order matters because there are no ES modules. `index.html` loads vendor libraries, Firebase config, export libraries, `shared/source-review.js`, `tokens.jsx`, `slide-intelligence.jsx`, `slide-objects.jsx`, `template-presets.jsx`, component helpers such as `components/slide-editor-model.jsx`, components, and finally `app.jsx`. JSX files expose globals on `window`.
+Loading order matters because there are no ES modules. `index.html` loads vendor libraries, Firebase config, export libraries, `shared/source-review.js`, `tokens.jsx`, `slide-intelligence.jsx`, `slide-objects.jsx`, `template-presets.jsx`, component helpers such as `components/slide-editor-model.jsx`, `components/slide-editor-agent.jsx`, and `components/slide-editor-export.jsx`, components, `app-services.jsx`, and finally `app.jsx`. JSX files expose globals on `window`.
 
 The browser and Functions copies of shared runtime logic are checked by `npm run check:shared`. Keep these pairs byte-for-byte aligned unless the sync script is intentionally updated:
 
@@ -120,6 +127,7 @@ ResetPasswordScreen is the standalone reset target.
 ### `app.jsx`
 
 - Owns auth state, screen routing, admin gating, active deck id, generation status, and brand config.
+- Uses `AutoDeckAppServices` for Firebase callable wrappers, slide normalization, source-review issue construction, temp replacement-file parsing, source upload archiving, and generated-slide reads.
 - Enforces the Quidax email domain after Firebase Auth resolves; non-Quidax users are signed out.
 - Loads `config/brand` from Firestore and passes it into `AdminScreen` and `SlideGenerator`.
 - Runs source review before generation. Client heuristics catch insufficient context, unreadable uploads, and likely mismatches; source mismatches can be confirmed by the `checkSourceConflict` callable.
@@ -158,6 +166,7 @@ ResetPasswordScreen is the standalone reset target.
 
 - Renders the editable slide canvas and export menu.
 - Uses `AutoDeckSlideEditorModel` for demo slides, layout metadata, theme construction, brand color derivation, and PowerPoint font normalization.
+- Uses `AutoDeckSlideEditorAgent` for agent text parsing/local fallback patches and `AutoDeckSlideEditorExport` for PPTX color/geometry helpers.
 - Supports legacy layouts (`standard`, `split`, `bigTitle`, `stat`, `quote`, `image`, `minimal`, `centered`) and intelligent visual layouts (`process_flow`, `comparison`, `timeline`, `statistics`, `hierarchy`, `image_focus`, `roadmap`, `problem_solution`, `feature_breakdown`, `summary`).
 - Uses `AutoDeckTemplatePresets` and slide metadata (`layout`, `renderLayout`, `slideType`, `components`, `speakerNotes`, `imagePrompt`) to choose visual treatment.
 - Reads admin typography and color config from `brandConfig`.
@@ -182,6 +191,14 @@ ResetPasswordScreen is the standalone reset target.
 ## Cloud Functions
 
 All functions are HTTPS callable, deployed in `us-central1`, require Firebase Auth unless noted by implementation, and use explicit CORS origins for localhost and Firebase Hosting.
+
+`functions/index.js` remains the callable export layer plus the core generation/edit prompts. Focused backend modules own lower-level behavior:
+
+- `lib/deck-storage.js`: deck lifecycle, slide sanitization, persistence, list/delete.
+- `lib/file-parsing.js`: direct parse callables and temp-storage parse flow.
+- `lib/image-search.js`: Unsplash search, Gemini keyword refinement, Imagen helper, generated-slide image hydration.
+- `lib/source-conflict.js`: source-conflict callable handler.
+- `lib/source-cleaning.js` and `lib/pptx-text.js`: pure parsing/cleanup helpers.
 
 | Function | Purpose |
 |---|---|
@@ -342,6 +359,7 @@ The root package is Playwright-only.
 
 ```bash
 npm run check:shared
+npm run check:functions
 npm test
 npm run verify
 ```
