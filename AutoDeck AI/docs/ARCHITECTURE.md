@@ -97,7 +97,12 @@ autodeck/
         ├── motion.jsx
         ├── tweaks-panel.jsx
         ├── Sidebar.jsx
-        ├── LoginScreen.jsx
+        ├── auth/
+        │   ├── LoginScreen.jsx
+        │   └── ResetPasswordScreen.jsx
+        ├── account/
+        │   ├── AccountSettingsScreen.jsx
+        │   └── ChangePasswordScreen.jsx
         ├── HomeScreenA.jsx
         ├── SourceConflictScreen.jsx
         ├── ProcessingScreen.jsx
@@ -107,10 +112,7 @@ autodeck/
         ├── slide-editor-export.jsx
         ├── SlideGenerator.jsx
         ├── HistoryScreen.jsx
-        ├── AdminScreen.jsx
-        ├── AccountSettingsScreen.jsx
-        ├── ChangePasswordScreen.jsx
-        └── ResetPasswordScreen.jsx
+        └── AdminScreen.jsx
 ```
 
 Loading order matters because there are no ES modules. `index.html` loads vendor libraries, Firebase config, export libraries, `shared/source-review.js`, `app/tokens.jsx`, `slide-intelligence.jsx`, `slide-objects.jsx`, `app/template-presets.jsx`, component helpers such as `components/slide-editor-model.jsx`, `components/slide-editor-agent.jsx`, and `components/slide-editor-export.jsx`, components, `app/app-services.jsx`, and finally `app/app.jsx`. JSX files expose globals on `window`.
@@ -353,7 +355,7 @@ Optional permanent source archive. `app/app.jsx` only uploads here when `window.
 
 ## Security Model
 
-- Client auth is restricted to `@quidax.com` in `LoginScreen` and again in `app/app.jsx` after Firebase Auth resolves.
+- Client auth is restricted to `@quidax.com` in `components/auth/LoginScreen.jsx` and again in `app/app.jsx` after Firebase Auth resolves.
 - Admin UI access is controlled by `ADMIN_EMAILS = ['admin@quidax.com']` in the client and `ADMIN_EMAILS_BE` in Functions.
 - Firestore rules allow authenticated Quidax users to read only their own decks and slides. `config/brand` is readable by authenticated Quidax users.
 - Firestore client writes are denied; deck, slide, and brand writes go through Cloud Functions using Admin SDK.
