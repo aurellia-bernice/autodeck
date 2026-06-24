@@ -10,9 +10,9 @@
 | `preview-home.html` | Static visual demo harness | Keep in repo temporarily, but do not deploy. Move under a future `dev/preview/` folder or delete after screenshots/tests replace it. |
 | `preview-conflict.html` | Static visual demo harness | Keep in repo temporarily, but do not deploy. Move under a future `dev/preview/` folder or delete after screenshots/tests replace it. |
 | `preview-conflict-loading.html` | Static visual demo harness | Keep in repo temporarily, but do not deploy. Move under a future `dev/preview/` folder or delete after screenshots/tests replace it. |
-| `vendor/pdf.min.js` and `vendor/pdf.worker.min.js` | Unreferenced legacy PDF.js bundles | Do not deploy. Delete in the next cleanup pass after one full verify run confirms `pdfjsLib` stays unused. |
+| `vendor/pdf.min.js` and `vendor/pdf.worker.min.js` | Removed legacy PDF.js bundles | Deleted after a full verify run confirmed `pdfjsLib` stays unused. |
 | `screenshots/` | Tracked visual artifacts, not referenced by docs/tests | Archive under docs assets or delete after confirming they are not needed for product/design review. Already ignored from Hosting. |
-| `tests/home-screen-b.spec.js` | Skipped tests for retired `HomeScreenB` prototype | Delete or move to `tests/archive/` in the next cleanup pass. It no longer tests shipped UI. |
+| `tests/home-screen-b.spec.js` | Removed retired `HomeScreenB` prototype coverage | Deleted because `HomeScreenB` is no longer shipped and the suite only added skipped tests. |
 | `BACKEND_RESTRUCTURE.md` | Historical execution plan | Archive under `docs/archive/` after the current implementation status is summarized in `ARCHITECTURE.md`. |
 | `GENERATION_WORKFLOW.md` | Current generation flow notes | Keep, but move under `docs/` when the docs hierarchy is introduced. |
 | `start-server.*` | Local convenience launchers | Keep temporarily. Prefer root `package.json` scripts in a later pass. |
@@ -56,8 +56,8 @@ This hierarchy should be introduced in stages. In the current no-build setup, ea
    - Keep examples, scripts, screenshots, Functions source, and docs ignored from Hosting.
 
 2. Delete or archive confirmed dead files.
-   - Start with `vendor/pdf.min.js`, `vendor/pdf.worker.min.js`, and `tests/home-screen-b.spec.js`.
-   - Run `npm run verify` after each deletion segment.
+   - Completed: removed `vendor/pdf.min.js`, `vendor/pdf.worker.min.js`, and `tests/home-screen-b.spec.js`.
+   - Continue with screenshots and historical docs only after confirming they are not needed for design/product review.
 
 3. Move docs into a real docs hierarchy.
    - Create `AutoDeck AI/docs/`.

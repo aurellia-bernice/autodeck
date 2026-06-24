@@ -1206,13 +1206,7 @@ const parseFile = async (file) => {
 
 **If the original function used different state setter names** (e.g. `setFileLoading`, `onParsed`, a prop callback), preserve those exact names. The pattern above uses `setParsing` / `setParsedFileText` as representative names — match whatever is in the actual component.
 
-**Remove from `index.html`** (only after confirming no other component uses `pdfjsLib`):
-```html
-<script src="vendor/pdf.min.js"></script>
-<script src="vendor/pdf.worker.min.js"></script>
-```
-
-Search all `.jsx` files for `pdfjsLib` before removing these scripts.
+**Completed in cleanup:** `index.html` no longer loads PDF.js, `pdfjsLib` is unused, and the legacy `vendor/pdf.min.js` / `vendor/pdf.worker.min.js` bundles were removed.
 
 ---
 
@@ -1629,7 +1623,7 @@ PHASE 3 — FILE PARSING
 [ ] 39. Deploy functions: firebase deploy --only functions
 [ ] 40. Update HomeScreenA.jsx parseFile function (Section 6.2)
 [ ] 41. Run Phase 3 validation (all four file types)
-[ ] 42. Search all .jsx files for 'pdfjsLib' — if zero results, remove pdf.min.js and pdf.worker.min.js from index.html
+[x] 42. Confirm no `.jsx` files use `pdfjsLib` and remove legacy PDF.js bundles
 
 PHASE 4 — API KEY SECURITY
 [ ] 43. Fix geminiGenerateImage and geminiGenerate to use callableOptions + secrets (Section 7.3)
