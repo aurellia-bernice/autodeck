@@ -11,9 +11,7 @@ const AutoDeckSlideEditorAgent = (() => {
     { key: 'table_matrix', patterns: [/table/, /matrix/, /pricing/, /rows?/, /columns?/] },
     { key: 'process_flow', patterns: [/process/, /\bflow\b/, /steps?/] },
     { key: 'comparison', patterns: [/comparison/, /compare/, /\bvs\b/, /versus/] },
-    { key: 'timeline', patterns: [/timeline/, /chronolog/] },
     { key: 'roadmap', patterns: [/roadmap/, /phase/, /milestone/] },
-    { key: 'problem_solution', patterns: [/problem\s*solution/, /problem.*solution/] },
     { key: 'summary', patterns: [/summary/, /takeaways?/, /recap/] },
     { key: 'image_focus', patterns: [/image\s*focus/, /full\s*bleed/, /visual/] },
   ];

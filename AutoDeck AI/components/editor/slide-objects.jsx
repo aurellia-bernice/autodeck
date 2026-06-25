@@ -400,27 +400,22 @@
       return zSort(objects);
     }
 
-    if (layout === 'split' || layout === 'comparison' || layout === 'problem_solution') {
-      if (layout === 'comparison' || layout === 'problem_solution') {
-        titleBlock(objects, index, title, c, layout === 'problem_solution' ? 'Problem / solution' : 'Comparison', 76);
+    if (layout === 'split' || layout === 'comparison') {
+      if (layout === 'comparison') {
+        titleBlock(objects, index, title, c, 'Comparison', 76);
         const items = visualItemsFor(slide);
         const comparisonItems = items.filter((item) => item.type === 'comparison_column');
-        const columns = layout === 'problem_solution'
-          ? [
-              items.find((item) => item.type === 'problem') || { label: 'Problem', detail: bullets[0] || '' },
-              items.find((item) => item.type === 'solution') || { label: 'Solution', detail: bullets[1] || bullets[0] || '' },
-            ]
-          : (comparisonItems.length >= 2 ? comparisonItems.slice(0, 2) : [
-              { label: 'Current', items: bullets.slice(0, Math.ceil(bullets.length / 2)) },
-              { label: 'Future', items: bullets.slice(Math.ceil(bullets.length / 2)) },
-            ]);
+        const columns = comparisonItems.length >= 2 ? comparisonItems.slice(0, 2) : [
+          { label: 'Current', items: bullets.slice(0, Math.ceil(bullets.length / 2)) },
+          { label: 'Future', items: bullets.slice(Math.ceil(bullets.length / 2)) },
+        ];
         columns.slice(0, 2).forEach((item, i) => {
           const x = i === 0 ? 7 : 55;
           const accent = i === 1;
           addCardObjects(objects, index, item, i, { x, y: 24, w: 38, h: 18, z: 8 }, c, {
             role: i === 0 ? 'comparison-left' : 'comparison-right',
             accent,
-            meta: i === 0 ? (layout === 'problem_solution' ? '01 PROBLEM' : '01 BEFORE') : (layout === 'problem_solution' ? '02 SOLUTION' : '02 AFTER'),
+            meta: i === 0 ? '01 BEFORE' : '02 AFTER',
             titleWords: 8,
             titleSize: 16,
             detailSize: 12,
@@ -484,15 +479,15 @@
       return zSort(objects);
     }
 
-    if (layout === 'timeline' || layout === 'roadmap') {
-      titleBlock(objects, index, title, c, layout === 'roadmap' ? 'Roadmap' : 'Timeline', 76);
+    if (layout === 'roadmap') {
+      titleBlock(objects, index, title, c, 'Roadmap', 76);
       const items = visualItemsFor(slide).slice(0, 5);
       const count = Math.max(1, items.length);
       objects.push(shapeObject(index, 'timeline-rule', { x: 9, y: 30, w: 82, h: 0.12, z: 8 }, { fill: c.rule, opacity: 1 }));
       items.forEach((item, i) => {
         const x = count === 1 ? 47 : 9 + i * (82 / (count - 1));
         objects.push(shapeObject(index, 'timeline-dot', { x: x - 1.8, y: 28.2, w: 3.6, h: 3.6, z: 12 }, { shape: 'ellipse', fill: i === 0 ? c.accent : c.bg, stroke: i === 0 ? c.accent : c.rule, strokeWidth: 1, opacity: 1 }, i));
-        objects.push(textObject(index, 'timeline-label', itemLabel(item, layout === 'roadmap' ? `Phase ${i + 1}` : `Moment ${i + 1}`), { x: Math.max(5, Math.min(79, x - 7)), y: i % 2 ? 34 : 21.5, w: 15, h: 4.8, z: 14 }, { fontSize: 11.5, bold: true, color: c.title, align: 'center', lineHeight: 1.2 }, i));
+        objects.push(textObject(index, 'timeline-label', itemLabel(item, `Phase ${i + 1}`), { x: Math.max(5, Math.min(79, x - 7)), y: i % 2 ? 34 : 21.5, w: 15, h: 4.8, z: 14 }, { fontSize: 11.5, bold: true, color: c.title, align: 'center', lineHeight: 1.2 }, i));
         const detail = itemDetail(item) || bullets[i] || '';
         if (detail) objects.push(textObject(index, 'timeline-detail', trimWords(detail, 12), { x: Math.max(5, Math.min(79, x - 7)), y: i % 2 ? 39.2 : 18.1, w: 15, h: 3.2, z: 14 }, { fontSize: 9.5, color: c.muted, align: 'center', lineHeight: 1.2 }, i));
       });
@@ -610,5 +605,9 @@
     tableRowsFromSlide,
     shouldHaveImage,
     imageDataFromSlide,
+    visualItemsFor,
+    itemLabel,
+    itemDetail,
+    itemPoints,
   };
 });

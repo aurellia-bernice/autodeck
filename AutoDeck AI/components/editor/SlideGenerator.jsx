@@ -446,7 +446,7 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     const patch = localAgentPatch(userText, targetIdx);
     if (patch.needsClarification) {
       setAgentSlideIndex(targetIdx);
-      return `I can edit slide ${targetIdx + 1}, but I need a clearer change. Ask me to rename the title, add a bullet, or switch to a layout like Split, Table, Timeline, or Summary.`;
+      return `I can edit slide ${targetIdx + 1}, but I need a clearer change. Ask me to rename the title, add a bullet, or switch to a layout like Split, Table, Features, or Summary.`;
     }
     applyAgentPatch(targetIdx, patch);
     const layoutName = patch.updatedLayout ? (LAYOUTS.find((l) => l.key === patch.updatedLayout)?.name || patch.updatedLayout) : '';
@@ -905,7 +905,10 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
   };
 
   const ResizeHandle = () => {
+    // Only show resize handle for overlay objects (images, tables, freeform textboxes)
     if (!selectedObject || selectedObject.locked) return null;
+    const isOverlay = selectedObject.role === 'textbox' || selectedObject.type === 'table' || (selectedObject.type === 'image' && selectedObject.role !== 'hero-image');
+    if (!isOverlay) return null;
     return (
       <button
         aria-label="Resize selected object"
@@ -928,11 +931,47 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     );
   };
 
+  // Overlay objects: images, tables, and freeform textboxes added via + Add.
+  // Layout-managed text and shape objects are rendered by the CSS layout component.
+  // hero-image in image_focus is also excluded — the CSS layout renders it directly.
+  const overlayObjects = React.useMemo(() => {
+    return [...(slide.objects || [])]
+      .filter(o =>
+        o.role === 'textbox' ||
+        o.type === 'table'   ||
+        (o.type === 'image' && o.role !== 'hero-image')
+      )
+      .sort((a, b) => (a.z || 0) - (b.z || 0));
+  }, [slide.objects]);
+
+  const handleLayoutSelect = (objId) => {
+    setSelectedObjectId(objId);
+    setSelectedCell(null);
+    setEditPanelOpen(true);
+    setEditTab('style');
+  };
+
+  const handleLayoutEdit = (objId) => {
+    setSelectedObjectId(objId);
+    setSelectedCell(null);
+    setEditingObjectId(objId);
+    setEditPanelOpen(true);
+    setEditTab('style');
+  };
+
+  const handleLayoutContentChange = (objId, content) => {
+    updateCurrentSlide((s) => syncLegacyFields({
+      ...s,
+      objects: (s.objects || []).map((o) => o.id === objId ? { ...o, content } : o),
+    }));
+    setEditingObjectId(null);
+  };
+
   const ObjectStage = () => (
     <div
       id="main-slide"
       ref={stageRef}
-      onClick={() => { setSelectedObjectId(null); setSelectedCell(null); }}
+      onClick={() => { setSelectedObjectId(null); setSelectedCell(null); setEditingObjectId(null); }}
       style={{
         width: '100%',
         aspectRatio: '16/9',
@@ -945,16 +984,32 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
         boxShadow: '0 30px 90px rgba(0,0,0,0.55), 0 0 0 1px rgba(246,241,251,0.06)',
       }}
     >
-      <div aria-hidden="true" style={{ position: 'absolute', inset: 0, zIndex: -1, pointerEvents: 'none', background: theme.gradient, backgroundImage: theme.gradient, backgroundColor: '#0B0118' }} />
-      {showGrid && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 350, pointerEvents: 'none', backgroundImage: 'linear-gradient(rgba(246,241,251,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(246,241,251,0.08) 1px, transparent 1px)', backgroundSize: '8.333% 12.5%' }} />
+      {/* CSS layout layer */}
+      {window.AutoDeckSlideLayouts && (
+        <window.AutoDeckSlideLayouts.SlideLayoutRenderer
+          layout={layout}
+          slide={slide}
+          theme={theme}
+          slideIndex={currentIndex}
+          total={total}
+          selectedObjectId={selectedObjectId}
+          editingObjectId={editingObjectId}
+          onSelect={handleLayoutSelect}
+          onEdit={handleLayoutEdit}
+          onContentChange={handleLayoutContentChange}
+        />
       )}
-      {[...(slide.objects || [])].sort((a, b) => (a.z || 0) - (b.z || 0)).map((obj) => {
-        if (obj.type === 'shape') return renderShapeObject(obj);
+
+      {/* Overlay layer: images, tables, freeform textboxes */}
+      {overlayObjects.map((obj) => {
         if (obj.type === 'image') return renderImageObject(obj);
         if (obj.type === 'table') return renderTableObject(obj);
         return renderTextObject(obj);
       })}
+
+      {showGrid && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 350, pointerEvents: 'none', backgroundImage: 'linear-gradient(rgba(246,241,251,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(246,241,251,0.08) 1px, transparent 1px)', backgroundSize: '8.333% 12.5%' }} />
+      )}
       <ResizeHandle />
     </div>
   );
@@ -1332,11 +1387,9 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
                     process_flow:      (<><rect x="2" y="7" width="7" height="8" rx="1" fill={f} stroke={s} strokeWidth="0.6" /><rect x="11" y="7" width="7" height="8" rx="1" fill={f} stroke={s} strokeWidth="0.6" /><rect x="20" y="7" width="6" height="8" rx="1" fill={f} stroke={s} strokeWidth="0.6" /></>),
                     comparison:        (<><rect x="3" y="4" width="10" height="14" rx="1" fill={f} stroke={s} strokeWidth="0.6" /><rect x="15" y="4" width="10" height="14" rx="1" fill={f} stroke={s} strokeWidth="0.6" /></>),
                     table_matrix:      (<><rect x="3" y="4" width="22" height="3" rx="0.5" fill={s} opacity="0.75" /><rect x="3" y="9" width="22" height="2" rx="0.5" fill={s} opacity="0.3" /><rect x="3" y="13" width="22" height="2" rx="0.5" fill={s} opacity="0.3" /></>),
-                    timeline:          (<><line x1="3" y1="11" x2="25" y2="11" stroke={s} strokeWidth="1.5" opacity="0.5" /><circle cx="8" cy="11" r="2" fill={s} /><circle cx="15" cy="11" r="2" fill={s} /><circle cx="22" cy="11" r="2" fill={s} /></>),
                     statistics:        (<><rect x="2" y="4" width="10" height="7" rx="1" fill={f} stroke={s} strokeWidth="0.5" /><rect x="14" y="4" width="10" height="7" rx="1" fill={f} stroke={s} strokeWidth="0.5" /><rect x="2" y="13" width="10" height="6" rx="1" fill={f} stroke={s} strokeWidth="0.5" /><rect x="14" y="13" width="10" height="6" rx="1" fill={f} stroke={s} strokeWidth="0.5" /></>),
                     hierarchy:         (<><rect x="9" y="3" width="10" height="4" rx="1" fill={s} opacity="0.8" /><rect x="4" y="10" width="8" height="4" rx="1" fill={s} opacity="0.5" /><rect x="16" y="10" width="8" height="4" rx="1" fill={s} opacity="0.5" /></>),
                     roadmap:           (<><rect x="2" y="7" width="7" height="8" rx="1" fill={f} stroke={s} strokeWidth="0.6" /><rect x="11" y="7" width="7" height="8" rx="1" fill={f} stroke={s} strokeWidth="0.6" /><rect x="20" y="7" width="6" height="8" rx="1" fill={f} stroke={s} strokeWidth="0.6" /></>),
-                    problem_solution:  (<><rect x="3" y="5" width="10" height="12" rx="1" fill={f} stroke={s} strokeWidth="0.6" /><rect x="15" y="5" width="10" height="12" rx="1" fill={active ? 'rgba(212,255,63,0.28)' : 'rgba(246,241,251,0.12)'} stroke={s} strokeWidth="0.6" /></>),
                     feature_breakdown: (<><rect x="2" y="4" width="7" height="14" rx="1" fill={f} stroke={s} strokeWidth="0.6" /><rect x="11" y="4" width="6" height="14" rx="1" fill={f} stroke={s} strokeWidth="0.6" /><rect x="19" y="4" width="7" height="14" rx="1" fill={f} stroke={s} strokeWidth="0.6" /></>),
                     summary:           (<><rect x="3" y="5" width="22" height="2" rx="1" fill={s} /><rect x="3" y="9.5" width="22" height="1.5" rx="0.75" fill={s} opacity="0.5" /><rect x="3" y="13" width="22" height="1.5" rx="0.75" fill={s} opacity="0.5" /><rect x="3" y="16.5" width="14" height="1.5" rx="0.75" fill={s} opacity="0.35" /></>),
                     image_focus:       (<><rect x="0" y="0" width="28" height="22" fill={f} stroke={s} strokeWidth="0.5" /><rect x="4" y="7" width="20" height="3" rx="1" fill={s} /><rect x="7" y="13" width="14" height="1.5" rx="0.75" fill={s} opacity="0.4" /></>),
