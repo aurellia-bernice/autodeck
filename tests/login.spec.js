@@ -61,6 +61,45 @@ test.describe('LoginScreen', () => {
     await expect(page.getByText('Enter your email and password.')).toBeVisible();
   });
 
+  test('sign-in: invalid Firebase credentials show a credential error', async ({ page }) => {
+    await page.evaluate(() => {
+      window.firebaseAuth.signInWithEmailAndPassword = () =>
+        Promise.reject({ code: 'auth/invalid-credential', message: 'Invalid credentials' });
+    });
+
+    await page.getByPlaceholder('you@quidax.com').fill('test@quidax.com');
+    await page.getByPlaceholder('Enter your password').fill('password123');
+    await page.locator('button[type="submit"]').click();
+
+    await expect(page.getByText('Incorrect email or password.')).toBeVisible();
+  });
+
+  test('sign-in: disabled Firebase account shows an actionable error', async ({ page }) => {
+    await page.evaluate(() => {
+      window.firebaseAuth.signInWithEmailAndPassword = () =>
+        Promise.reject({ code: 'auth/user-disabled', message: 'User disabled' });
+    });
+
+    await page.getByPlaceholder('you@quidax.com').fill('admin@quidax.com');
+    await page.getByPlaceholder('Enter your password').fill('password123');
+    await page.locator('button[type="submit"]').click();
+
+    await expect(page.getByText('This account is disabled in Firebase Auth. Ask an admin to re-enable it.')).toBeVisible();
+  });
+
+  test('sign-in: unknown Firebase auth errors include the Firebase code', async ({ page }) => {
+    await page.evaluate(() => {
+      window.firebaseAuth.signInWithEmailAndPassword = () =>
+        Promise.reject({ code: 'auth/custom-blocked', message: 'Custom block' });
+    });
+
+    await page.getByPlaceholder('you@quidax.com').fill('admin@quidax.com');
+    await page.getByPlaceholder('Enter your password').fill('password123');
+    await page.locator('button[type="submit"]').click();
+
+    await expect(page.getByText('Sign in failed (auth/custom-blocked). Check Firebase Auth for this account.')).toBeVisible();
+  });
+
   // ── Sign-up validation ────────────────────────────────────────────────────
 
   test('sign-up: missing name shows error', async ({ page }) => {

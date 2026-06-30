@@ -37,6 +37,34 @@ const localGoogleSignInMessage = () => {
   return `Google sign-in is not authorized for ${hostname || 'this domain'}. Add this domain in Firebase Auth settings.`;
 };
 
+const emailSignInErrorMessage = (err) => {
+  const code = getFirebaseErrorCode(err);
+  const messages = {
+    'auth/user-not-found': 'No account found.',
+    'auth/wrong-password': 'Incorrect password.',
+    'auth/invalid-credential': 'Incorrect email or password.',
+    'auth/invalid-email': 'Enter a valid @quidax.com email address.',
+    'auth/missing-password': 'Enter your password.',
+    'auth/user-disabled': 'This account is disabled in Firebase Auth. Ask an admin to re-enable it.',
+    'auth/too-many-requests': 'Too many attempts. Try again later.',
+    'auth/operation-not-allowed': 'Email/password sign-in is not enabled in Firebase Auth.',
+    'auth/app-not-authorized': 'This app is not authorized to use Firebase Auth with the configured API key.',
+    'auth/invalid-api-key': 'Firebase Auth is using an invalid API key.',
+    'auth/network-request-failed': 'Network error during sign-in. Check your connection and try again.',
+    'auth/web-storage-unsupported': 'Your browser is blocking storage needed for sign-in.',
+    'auth/multi-factor-auth-required': 'This account requires multi-factor sign-in. Use Google sign-in or ask an admin to update the account.',
+  };
+  return messages[code] || (code ? `Sign in failed (${code}). Check Firebase Auth for this account.` : 'Sign in failed.');
+};
+
+const logEmailSignInError = (err) => {
+  console.warn('Email sign-in failed', {
+    code: getFirebaseErrorCode(err),
+    email: getFirebaseErrorEmail(err),
+    message: err?.message,
+  });
+};
+
 const googleSignInErrorMessage = (err) => {
   const code = getFirebaseErrorCode(err);
   const email = getFirebaseErrorEmail(err);
@@ -129,8 +157,8 @@ const LoginScreen = ({ onLogin, authError, onClearAuthError }) => {
       onLogin && onLogin({ email: r.user.email, uid: r.user.uid, displayName: r.user.displayName });
     } catch (err) {
       setLoading(false);
-      const m = { 'auth/user-not-found':'No account found.','auth/wrong-password':'Incorrect password.','auth/invalid-credential':'Incorrect email or password.','auth/too-many-requests':'Too many attempts. Try later.' };
-      setError(m[err.code] || 'Sign in failed.');
+      logEmailSignInError(err);
+      setError(emailSignInErrorMessage(err));
     }
   };
   const handleSignUp = async (e) => {
