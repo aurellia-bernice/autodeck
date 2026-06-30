@@ -55,6 +55,11 @@ window.AutoDeckSlideLayouts = (() => {
     const isSelected = !!(obj.id && selectedId === obj.id);
     return (
       <Tag
+        data-object-id={obj.id || undefined}
+        data-object-type={obj.type || undefined}
+        data-object-role={obj.role || undefined}
+        role={obj.role === 'title' ? 'heading' : undefined}
+        aria-level={obj.role === 'title' ? 2 : undefined}
         onClick={(e)       => { e.stopPropagation(); obj.id && onSelect(obj.id); }}
         onDoubleClick={(e) => { e.stopPropagation(); obj.id && onEdit(obj.id);   }}
         contentEditable={isEditing || undefined}
@@ -97,6 +102,9 @@ window.AutoDeckSlideLayouts = (() => {
     if (isEditing) {
       return (
         <div
+          data-object-id={obj.id || undefined}
+          data-object-type={obj.type || undefined}
+          data-object-role={obj.role || undefined}
           contentEditable suppressContentEditableWarning
           onBlur={(e)    => onChange(obj.id, e.currentTarget.textContent || '')}
           onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') { e.preventDefault(); onChange(obj.id, e.currentTarget.textContent || ''); } }}
@@ -108,6 +116,9 @@ window.AutoDeckSlideLayouts = (() => {
 
     return (
       <div
+        data-object-id={obj.id || undefined}
+        data-object-type={obj.type || undefined}
+        data-object-role={obj.role || undefined}
         onClick={(e)       => { e.stopPropagation(); obj.id && onSelect(obj.id); }}
         onDoubleClick={(e) => { e.stopPropagation(); obj.id && onEdit(obj.id);   }}
         style={{ outline: isSelected ? `1px solid ${QX.lime}` : '1px solid transparent', borderRadius: 4, padding: isSelected ? 2 : 0, ...style }}
@@ -129,9 +140,9 @@ window.AutoDeckSlideLayouts = (() => {
 
   const Chrome = ({ slideIndex, total, theme }) => (
     <>
-      <div style={{ position: 'absolute', left: '3.2%', top: '3.9%', fontFamily: qxType.mono, fontSize: 7, fontWeight: 800, color: theme.accent, letterSpacing: '0.18em', textTransform: 'uppercase', lineHeight: 1, zIndex: 10, pointerEvents: 'none', userSelect: 'none' }}>QUIDAX</div>
-      <div style={{ position: 'absolute', right: '3.2%', top: '3.9%', fontFamily: qxType.mono, fontSize: 7, color: theme.title, opacity: 0.55, lineHeight: 1, zIndex: 10, pointerEvents: 'none', userSelect: 'none' }}>{String(slideIndex + 1).padStart(2, '0')}</div>
-      <div style={{ position: 'absolute', left: '3.2%', bottom: '3.8%', fontFamily: qxType.mono, fontSize: 6, color: theme.text, opacity: 0.4, lineHeight: 1, zIndex: 10, pointerEvents: 'none', userSelect: 'none' }}>Internal | Confidential | {String(slideIndex + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}</div>
+      <div data-object-type="text" data-object-role="brand" style={{ position: 'absolute', left: '3.2%', top: '3.9%', fontFamily: qxType.mono, fontSize: 7, fontWeight: 800, color: theme.accent, letterSpacing: '0.18em', textTransform: 'uppercase', lineHeight: 1, zIndex: 10, pointerEvents: 'none', userSelect: 'none' }}>QUIDAX</div>
+      <div data-object-type="text" data-object-role="slide-number" style={{ position: 'absolute', right: '3.2%', top: '3.9%', fontFamily: qxType.mono, fontSize: 7, color: theme.title, opacity: 0.55, lineHeight: 1, zIndex: 10, pointerEvents: 'none', userSelect: 'none' }}>{String(slideIndex + 1).padStart(2, '0')}</div>
+      <div data-object-type="text" data-object-role="footer" style={{ position: 'absolute', left: '3.2%', bottom: '3.8%', fontFamily: qxType.mono, fontSize: 6, color: theme.text, opacity: 0.4, lineHeight: 1, zIndex: 10, pointerEvents: 'none', userSelect: 'none' }}>Internal | Confidential | {String(slideIndex + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}</div>
     </>
   );
 

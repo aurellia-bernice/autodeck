@@ -11,7 +11,29 @@ const {
   pptFontName,
 } = window.AutoDeckSlideEditorModel;
 const SlideEditorAgent = window.AutoDeckSlideEditorAgent;
-const { pptBox, toHex } = window.AutoDeckSlideEditorExport;
+const { imageSrcForPptx, normalizeBrandAssetUrl, pptBox, toHex } = window.AutoDeckSlideEditorExport;
+
+const normalizeEditorBrandAssets = (assets = []) => Array.isArray(assets)
+  ? assets
+      .filter((asset) => asset && typeof asset === 'object')
+      .map((asset, index) => {
+        const rawUrl = asset.url || asset.sourceUrl || '';
+        return {
+          id: String(asset.id || `brand-asset-${index + 1}`).trim(),
+          name: String(asset.name || asset.fileName || `Brand asset ${index + 1}`).trim(),
+          kind: String(asset.kind || 'image').trim().toLowerCase(),
+          url: normalizeBrandAssetUrl(rawUrl),
+          sourceUrl: String(asset.sourceUrl || rawUrl || '').trim(),
+          sourceType: String(asset.sourceType || 'url').trim().toLowerCase(),
+          usage: String(asset.usage || '').trim(),
+          fileName: String(asset.fileName || '').trim(),
+        };
+      })
+      .filter((asset) => asset.id && asset.name && asset.url)
+  : [];
+
+const isLogoBrandAsset = (asset) => /logo|mark/.test(`${asset.kind} ${asset.name} ${asset.usage}`.toLowerCase());
+const isVisualBrandAsset = (asset) => asset.kind !== 'source' && asset.url;
 
 const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, onBack, activeDeckId }) => {
   const isDemo = !Array.isArray(initialSlides) || initialSlides.length === 0;
@@ -32,14 +54,60 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
   } : null;
 
   const THEMES = buildThemes(customTheme);
+  const brandAssets = React.useMemo(
+    () => normalizeEditorBrandAssets(brandConfig?.brandAssets),
+    [JSON.stringify(brandConfig?.brandAssets || [])]
+  );
+  const primaryLogoAsset = React.useMemo(
+    () => brandAssets.find(isLogoBrandAsset) || null,
+    [brandAssets]
+  );
+  const visualBrandAssets = React.useMemo(
+    () => brandAssets.filter(isVisualBrandAsset),
+    [brandAssets]
+  );
+
+  const applyBrandAssetsToSlides = React.useCallback((slides = []) => {
+    if (!primaryLogoAsset) return slides;
+    return slides.map((s, index) => {
+      const logoObject = {
+        id: `s${index + 1}-brand-asset-logo`,
+        type: 'image',
+        role: 'brand-asset-logo',
+        x: 3.1,
+        y: 1.55,
+        w: 10.5,
+        h: 3.3,
+        z: 88,
+        locked: true,
+        src: primaryLogoAsset.url,
+        prompt: primaryLogoAsset.usage || primaryLogoAsset.name,
+        alt: primaryLogoAsset.name || 'Quidax logo',
+        credit: 'Quidax',
+        creditUrl: primaryLogoAsset.sourceUrl || primaryLogoAsset.url,
+        brandAssetId: primaryLogoAsset.id,
+        brandAssetName: primaryLogoAsset.name,
+        fit: 'contain',
+        style: { fill: 'transparent', stroke: 'transparent', radius: 0 },
+      };
+      const objects = (s.objects || [])
+        .filter((obj) => obj.role !== 'brand-asset-logo')
+        .map((obj) => obj.role === 'brand' && obj.type === 'text' ? { ...obj, content: '' } : obj);
+      return {
+        ...s,
+        objects: [...objects, logoObject].sort((a, b) => (a.z || 0) - (b.z || 0)),
+      };
+    });
+  }, [primaryLogoAsset]);
 
   const normalizeSlideList = (slides) => {
     const enhanced = window.AutoDeckTemplatePresets?.enhanceSlides
       ? window.AutoDeckTemplatePresets.enhanceSlides(slides, config?.templateStyle)
       : slides;
-    return window.AutoDeckSlideObjects?.ensureSlidesObjects
+    const objectSlides = window.AutoDeckSlideObjects?.ensureSlidesObjects
       ? window.AutoDeckSlideObjects.ensureSlidesObjects(enhanced)
       : enhanced;
+    return applyBrandAssetsToSlides(objectSlides);
   };
 
   const [localSlides, setLocalSlides] = React.useState(() => normalizeSlideList(safeInitial));
@@ -82,7 +150,11 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     setSelectedCell(null);
     suppressSaveRef.current = true;
     setTimeout(() => { suppressSaveRef.current = false; }, 500);
-  }, [JSON.stringify((safeInitial || []).map((s) => ({ title: s.title, bullets: s.bullets, objects: s.objects?.length })))] );
+  }, [
+    JSON.stringify((safeInitial || []).map((s) => ({ title: s.title, bullets: s.bullets, objects: s.objects?.length }))),
+    primaryLogoAsset?.id,
+    primaryLogoAsset?.url,
+  ]);
 
   React.useEffect(() => {
     if (agentScrollRef.current) agentScrollRef.current.scrollTop = agentScrollRef.current.scrollHeight;
@@ -549,6 +621,8 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
         alt: image.alt || prompt || '',
         credit: image.credit || '',
         creditUrl: image.creditUrl || '',
+        brandAssetId: image.brandAssetId || '',
+        brandAssetName: image.brandAssetName || '',
       });
     } else {
       const id = addObject({
@@ -565,6 +639,8 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
         alt: image.alt || prompt || '',
         credit: image.credit || '',
         creditUrl: image.creditUrl || '',
+        brandAssetId: image.brandAssetId || '',
+        brandAssetName: image.brandAssetName || '',
         fit: 'cover',
         style: { radius: 4 },
       });
@@ -579,6 +655,18 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
     if (!url) return;
     applyImage({ src: url, thumb: url, alt: imgQuery.trim() || selectedObject?.alt || slide.title || 'Slide image' });
     setImgUrl('');
+  };
+
+  const applyBrandAsset = (asset) => {
+    applyImage({
+      src: asset.url,
+      thumb: asset.url,
+      alt: asset.name,
+      credit: 'Quidax',
+      creditUrl: asset.sourceUrl || asset.url,
+      brandAssetId: asset.id,
+      brandAssetName: asset.name,
+    });
   };
 
   const removeImage = () => {
@@ -618,10 +706,25 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
       const displayFont = pptFontName(brandConfig?.displayFont, qxType.display, 'display');
       const bodyFont = pptFontName(brandConfig?.bodyFont, qxType.body, 'body');
       pptx.theme = { headFontFace: displayFont, bodyFontFace: bodyFont, lang: 'en-US' };
+      const imageCache = new Map();
+      const resolvePptxImage = async (src) => {
+        const key = String(src || '');
+        if (!key) return null;
+        if (!imageCache.has(key)) imageCache.set(key, imageSrcForPptx(key));
+        return imageCache.get(key);
+      };
+      const exportSlides = applyBrandAssetsToSlides(localSlides);
+      const brandAssetNotes = brandAssets.length
+        ? [
+            'Quidax brand assets:',
+            ...brandAssets.map((asset) => `- ${asset.name}${asset.kind ? ` (${asset.kind})` : ''}: ${asset.sourceUrl || asset.url}`),
+          ].join('\n')
+        : '';
 
-      localSlides.forEach((s) => {
+      for (const [slideIndex, s] of exportSlides.entries()) {
         const pSlide = pptx.addSlide();
-        [...(s.objects || [])].sort((a, b) => (a.z || 0) - (b.z || 0)).forEach((obj) => {
+        const sortedObjects = [...(s.objects || [])].sort((a, b) => (a.z || 0) - (b.z || 0));
+        for (const obj of sortedObjects) {
           const box = pptBox(obj);
           if (obj.type === 'shape') {
             pSlide.addShape(obj.style?.shape === 'ellipse' ? pptx.ShapeType.ellipse : pptx.ShapeType.rect, {
@@ -630,8 +733,12 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
               line: { color: obj.style?.stroke === 'transparent' ? toHex(obj.style?.fill, '1A0530') : toHex(obj.style?.stroke, '1A0530'), transparency: obj.style?.stroke === 'transparent' ? 100 : 0, width: obj.style?.strokeWidth || 0 },
             });
           } else if (obj.type === 'image') {
-            if (obj.src) pSlide.addImage({ path: obj.src, ...box });
-            else pSlide.addShape(pptx.ShapeType.rect, { ...box, fill: { color: '320067', transparency: 35 }, line: { color: 'B890FE', transparency: 20 } });
+            if (obj.src) {
+              const imageSource = await resolvePptxImage(obj.src);
+              if (imageSource) pSlide.addImage({ ...imageSource, ...box });
+            } else {
+              pSlide.addShape(pptx.ShapeType.rect, { ...box, fill: { color: '320067', transparency: 35 }, line: { color: 'B890FE', transparency: 20 } });
+            }
           } else if (obj.type === 'table') {
             const rows = (obj.rows || []).map((row) => row.map((cell) => ({
               text: cell.text || '',
@@ -665,9 +772,10 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
               breakLine: false,
             });
           }
-        });
-        if (s.speakerNotes && pSlide.addNotes) pSlide.addNotes(s.speakerNotes);
-      });
+        }
+        const notes = [s.speakerNotes, slideIndex === 0 ? brandAssetNotes : ''].filter(Boolean).join('\n\n');
+        if (notes && pSlide.addNotes) pSlide.addNotes(notes);
+      }
       await pptx.writeFile({ fileName: `${deckTitle || 'AutoDeck'}.pptx` });
       showToast('PPTX downloaded', 'success');
     } catch (err) {
@@ -1445,6 +1553,36 @@ const SlideGenerator = ({ slides: initialSlides, config, tweaks, brandConfig, on
                       </div>
                     )}
                   </div>
+                  {visualBrandAssets.length > 0 && (
+                    <div style={inspectorCard}>
+                      <div style={sectionTitle}>Brand assets</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9 }}>
+                        {visualBrandAssets.map((asset) => (
+                          <button
+                            key={asset.id}
+                            onClick={() => applyBrandAsset(asset)}
+                            title={asset.name}
+                            aria-label={`Use brand asset ${asset.name}`}
+                            style={{
+                              padding: 0,
+                              border: selectedObject?.brandAssetId === asset.id ? `2px solid ${QX.lime}` : '1px solid rgba(246,241,251,0.10)',
+                              borderRadius: 10,
+                              overflow: 'hidden',
+                              cursor: 'pointer',
+                              background: 'rgba(246,241,251,0.045)',
+                              textAlign: 'left',
+                            }}
+                          >
+                            <div style={{ aspectRatio: '16/9', background: `url(${asset.url}) center/contain no-repeat`, borderBottom: '1px solid rgba(246,241,251,0.08)' }} />
+                            <div style={{ padding: '7px 8px 8px' }}>
+                              <div style={{ fontFamily: qxType.body, fontSize: 11.5, fontWeight: 750, color: '#F6F1FB', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{asset.name}</div>
+                              <div style={{ marginTop: 2, fontFamily: qxType.mono, fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(246,241,251,0.38)' }}>{asset.kind || 'asset'}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div style={inspectorCard}>
                     <div style={sectionTitle}>Search Unsplash</div>
                     <input value={imgQuery} onChange={(e) => setImgQuery(e.target.value)} placeholder={selectedObject?.prompt || slide.imagePrompt || 'Describe the image you need'} style={compactField} />

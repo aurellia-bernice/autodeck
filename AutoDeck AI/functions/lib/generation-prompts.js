@@ -12,13 +12,32 @@ const getVoiceGuide = ({ brandVoice, templatePreset }) => ({
   data: 'Evidence-led. Put numbers, facts, trends, tradeoffs, and assumptions front and centre.',
 }[brandVoice] || templatePreset?.tone || DEFAULT_VOICE_GUIDE);
 
+const summarizeBrandAssets = (assets = []) => {
+  if (!Array.isArray(assets) || !assets.length) return '(none configured)';
+  const compact = (value, max = 160) => String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
+  const safeAssets = assets
+    .filter((asset) => asset && typeof asset === 'object' && (asset.url || asset.sourceUrl))
+    .slice(0, 24)
+    .map((asset) => ({
+      id: compact(asset.id, 80),
+      name: compact(asset.name || asset.fileName || 'Brand asset', 100),
+      kind: compact(asset.kind || 'image', 40),
+      usage: compact(asset.usage || '', 180),
+      sourceType: compact(asset.sourceType || 'url', 40),
+    }))
+    .filter((asset) => asset.id && asset.name);
+
+  return safeAssets.length ? JSON.stringify(safeAssets, null, 2) : '(none configured)';
+};
+
 const buildDeckSystemPrompt = () => `You are AutoDeck AI, an expert presentation strategist for Quidax.
 You transform messy user context into accurate, useful slide content.
 You must be faithful to the source. If a fact is not in the source, do not add it.`;
 
-const buildDeckPrompt = ({ userInstruction, sourceMaterial, sourceDocumentName, sourceFit, count, templateStyle, voiceGuide, templatePreset, inputMode }) => {
+const buildDeckPrompt = ({ userInstruction, sourceMaterial, sourceDocumentName, sourceFit, count, templateStyle, voiceGuide, templatePreset, inputMode, brandAssets }) => {
   const isContentMode = inputMode === 'content';
   const hasSourceMaterial = Boolean(String(sourceMaterial || '').trim());
+  const brandAssetGuide = summarizeBrandAssets(brandAssets);
 
   const modeRequirements = isContentMode ? `
 Mode: STRUCTURE AND STYLE (the user has supplied the complete slide content)
@@ -63,6 +82,8 @@ Universal requirements:
 - Use "statistics" only when there is a real number or metric in the source.
 - Never create placeholder/default metrics.
 - Use "image_focus" only when you can provide a concrete imagePrompt.
+- Available Quidax brand assets are visual/design material, not factual evidence. Use them only to improve brand fit.
+- If a provided brand asset is the right visual for a slide, set brandAssetId to the exact asset id. Do not invent asset ids.
 - Before writing JSON, silently identify the source thesis, 5-8 evidence clusters, conflicts/missing information, and the cleanest narrative arc. Use that plan to produce the slides.
 
 Voice: ${voiceGuide}
@@ -93,7 +114,8 @@ JSON shape:
     ],
     "storytellingNote": "Short instruction for why this visual treatment helps the slide",
     "speakerNotes": "Optional short presenter guidance grounded in the source",
-    "imagePrompt": "Optional concrete visual prompt if slideType is image_focus"
+    "imagePrompt": "Optional concrete visual prompt if slideType is image_focus",
+    "brandAssetId": "Optional exact id from Available Quidax brand assets when that asset should be used"
   }
 ]
 
@@ -121,6 +143,9 @@ Slide structure guidance:
 
 Source document name:
 ${sourceDocumentName || '(none)'}
+
+Available Quidax brand assets:
+${brandAssetGuide}
 
 Brief/source fit guidance:
 ${sourceFit || 'No source-fit warning.'}

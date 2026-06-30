@@ -131,6 +131,8 @@ const createSlideNormalizer = ({
         kicker: trimWords(slide?.kicker || slide?.contentType || 'Section', 4),
         speakerNotes: trimWords(slide?.speakerNotes, 60),
         imagePrompt: trimWords(slide?.imagePrompt, 24),
+        brandAssetId: String(slide?.brandAssetId || '').trim().slice(0, 120),
+        brandAssetName: trimWords(slide?.brandAssetName, 10),
       };
     })
     .filter((slide) => slide.title && !isNoisySourceUnit(slide.title) && slide.bullets.length >= 2)

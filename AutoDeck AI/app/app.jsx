@@ -329,6 +329,7 @@ const App = () => {
         templateStyle: config.templateStyle || 'Professional',
         templatePreset: config.templatePreset || window.AutoDeckTemplatePresets?.summarizeForPrompt?.(config.templateStyle),
         brandVoice: brandConfig?.voice || config.templatePreset?.id || window.AutoDeckTemplatePresets?.normalizeTemplateStyle?.(config.templateStyle) || 'professional',
+        brandAssets: Array.isArray(brandConfig?.brandAssets) ? brandConfig.brandAssets : [],
         inputMode: config.inputMode || 'brief',
       }), GENERATION_CLIENT_DEADLINE_MS, `AI generation exceeded the ${Math.round(GENERATION_CLIENT_DEADLINE_MS / 1000)} second client deadline before generated slides were returned.`);
       setGenerationTrace((prev) => ({ ...prev, stage: 'callable-returned', deckId: deckRef.id }));

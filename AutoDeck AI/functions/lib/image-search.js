@@ -4,6 +4,84 @@ const createImageService = ({
   compactText,
   logger,
 }) => {
+  const normalizeBrandAssets = (assets = []) => Array.isArray(assets)
+    ? assets
+        .filter((asset) => asset && typeof asset === 'object')
+        .map((asset) => ({
+          id: String(asset.id || '').trim(),
+          name: compactText(asset.name || asset.fileName || 'Quidax brand asset', 80),
+          kind: compactText(asset.kind || 'image', 30).toLowerCase(),
+          url: String(asset.url || asset.sourceUrl || '').trim(),
+          sourceUrl: String(asset.sourceUrl || asset.url || '').trim(),
+          usage: compactText(asset.usage || '', 120),
+        }))
+        .filter((asset) => asset.id && asset.url)
+    : [];
+
+  const applyBrandAssetToSlide = (slide, index, total, asset) => {
+    const prompt = slide.imagePrompt || asset.usage || asset.name || slide.title || '';
+    const image = {
+      src: asset.url,
+      alt: asset.name || prompt || 'Quidax brand asset',
+      credit: 'Quidax',
+      creditUrl: asset.sourceUrl || asset.url,
+      prompt,
+      brandAssetId: asset.id,
+      brandAssetName: asset.name,
+    };
+    let next = SlideObjects.ensureSlideObjects({
+      ...slide,
+      needsImage: true,
+      imagePrompt: prompt,
+      image,
+      brandAssetId: asset.id,
+      brandAssetName: asset.name,
+    }, index, total);
+
+    const imageObjects = (next.objects || []).filter((obj) => obj.type === 'image');
+    let applied = false;
+    const objects = (next.objects || []).map((obj) => {
+      if (obj.type !== 'image') return obj;
+      if (applied && obj.src) return obj;
+      applied = true;
+      return {
+        ...obj,
+        src: asset.url,
+        alt: image.alt,
+        credit: image.credit,
+        creditUrl: image.creditUrl,
+        prompt: obj.prompt || prompt,
+        brandAssetId: asset.id,
+        brandAssetName: asset.name,
+      };
+    });
+
+    if (!imageObjects.length) {
+      objects.push({
+        id: `s${index + 1}-brand-asset-0`,
+        type: 'image',
+        role: 'brand-asset',
+        x: 62,
+        y: 13,
+        w: 31,
+        h: 24,
+        z: 7,
+        locked: false,
+        src: asset.url,
+        prompt,
+        alt: image.alt,
+        credit: image.credit,
+        creditUrl: image.creditUrl,
+        brandAssetId: asset.id,
+        brandAssetName: asset.name,
+        fit: 'contain',
+        style: { fill: 'transparent', stroke: 'transparent', radius: 4 },
+      });
+    }
+
+    return SlideObjects.ensureSlideObjects({ ...next, image, objects }, index, total);
+  };
+
   const searchUnsplashImages = async ({ query, count = 6, orientation = 'landscape', page = 1, requireKey = true }) => {
     const unsplashKey = process.env.UNSPLASH_ACCESS_KEY;
     if (!unsplashKey) {
@@ -84,10 +162,14 @@ const createImageService = ({
     return { images, refinedQuery: searchQuery };
   };
 
-  const hydrateGeneratedSlideImages = async (slides = []) => {
+  const hydrateGeneratedSlideImages = async (slides = [], brandAssets = []) => {
+    const normalizedAssets = normalizeBrandAssets(brandAssets);
     const hydrated = [];
     for (const slide of slides) {
-      let next = SlideObjects.ensureSlideObjects(slide, hydrated.length, slides.length);
+      const asset = normalizedAssets.find((item) => item.id === String(slide?.brandAssetId || '').trim());
+      let next = asset
+        ? applyBrandAssetToSlide(slide, hydrated.length, slides.length, asset)
+        : SlideObjects.ensureSlideObjects(slide, hydrated.length, slides.length);
       if (SlideObjects.shouldHaveImage(next)) {
         const imageObjects = (next.objects || []).filter((obj) => obj.type === 'image');
         const hasImage = imageObjects.some((obj) => obj.src);

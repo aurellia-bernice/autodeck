@@ -89,6 +89,8 @@
     alt: image.alt || image.prompt || image.imagePrompt || '',
     credit: image.credit || '',
     creditUrl: image.creditUrl || '',
+    brandAssetId: image.brandAssetId || '',
+    brandAssetName: image.brandAssetName || '',
     fit: image.fit || 'cover',
     style: {
       fill: image.src || image.url || image.path ? 'transparent' : '#3C0076',
@@ -193,6 +195,8 @@
         alt: String(obj.alt || ''),
         credit: String(obj.credit || ''),
         creditUrl: String(obj.creditUrl || ''),
+        brandAssetId: String(obj.brandAssetId || ''),
+        brandAssetName: String(obj.brandAssetName || ''),
         fit: obj.fit || 'cover',
       };
     }
@@ -610,5 +614,9 @@
     tableRowsFromSlide,
     shouldHaveImage,
     imageDataFromSlide,
+    visualItemsFor,
+    itemLabel,
+    itemDetail,
+    itemPoints,
   };
 });

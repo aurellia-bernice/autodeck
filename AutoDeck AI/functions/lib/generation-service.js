@@ -44,6 +44,23 @@ const createGenerationHandlers = ({
     sourceUnitKey,
   });
 
+  const normalizeBrandAssetsForGeneration = (assets = []) => {
+    if (!Array.isArray(assets)) return [];
+    return assets
+      .filter((asset) => asset && typeof asset === 'object')
+      .slice(0, 30)
+      .map((asset, index) => ({
+        id: String(asset.id || `asset-${index + 1}`).trim().slice(0, 120),
+        name: compactText(asset.name || asset.fileName || `Brand asset ${index + 1}`, 160),
+        kind: compactText(asset.kind || 'image', 40).toLowerCase(),
+        url: String(asset.url || asset.sourceUrl || '').trim().slice(0, 2000),
+        sourceUrl: String(asset.sourceUrl || asset.url || '').trim().slice(0, 2000),
+        sourceType: compactText(asset.sourceType || 'url', 40).toLowerCase(),
+        usage: compactText(asset.usage || '', 260),
+      }))
+      .filter((asset) => asset.id && asset.name && asset.url);
+  };
+
   const repairGeneratedSlidesJson = async ({ anthropic, raw, count, parseError }) => {
     const jsonText = extractJsonArrayText(raw);
     const msg = await anthropic.messages.create({
@@ -115,9 +132,10 @@ const createGenerationHandlers = ({
     }
     const anthropic = new AnthropicClient({ apiKey });
 
-    const { deckId, inputText, parsedFileText, sourceDocumentName, slideCount, templateStyle, brandVoice, templatePreset, inputMode } = request.data;
+    const { deckId, inputText, parsedFileText, sourceDocumentName, slideCount, templateStyle, brandVoice, templatePreset, inputMode, brandAssets } = request.data;
     const userInstruction = compactText(inputText, maxInputChars);
     const sourceMaterial = cleanSourceMaterial(parsedFileText, maxSourceChars);
+    const safeBrandAssets = normalizeBrandAssetsForGeneration(brandAssets);
     const content = [userInstruction, sourceMaterial].filter(Boolean).join('\n\n');
     if (!deckId) throw new HttpsError('invalid-argument', 'No deckId was provided for generation.');
     if (!content) throw new HttpsError('invalid-argument', 'No content was provided for deck generation.');
@@ -140,6 +158,7 @@ const createGenerationHandlers = ({
       inputChars: userInstruction.length,
       sourceChars: sourceMaterial.length,
       contentChars: content.length,
+      brandAssetCount: safeBrandAssets.length,
     });
 
     const voiceGuide = getVoiceGuide({ brandVoice, templatePreset });
@@ -154,6 +173,7 @@ const createGenerationHandlers = ({
       voiceGuide,
       templatePreset,
       inputMode: inputMode || 'brief',
+      brandAssets: safeBrandAssets,
     });
 
     let slides = [];
@@ -178,7 +198,7 @@ const createGenerationHandlers = ({
         .join('\n')
         .trim();
       const parsed = await parseGeneratedSlides({ anthropic, raw, count, deckId });
-      slides = await hydrateGeneratedSlideImages(parsed.slides);
+      slides = await hydrateGeneratedSlideImages(parsed.slides, safeBrandAssets);
       logger.info('generateDeck anthropic response parsed', {
         deckId,
         rawChars: raw.length,

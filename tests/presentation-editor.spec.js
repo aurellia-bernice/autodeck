@@ -150,7 +150,12 @@ test.describe('Presentation object editor', () => {
   test('dragging and resizing updates object geometry on the stage', async ({ page }) => {
     await loadEditor(page, objectSlides);
 
-    const body = await selectBodyObject(page);
+    await page.getByRole('button', { name: /Add/i }).click();
+    await page.getByRole('button', { name: 'T Text box Heading or body', exact: true }).click();
+    const body = page.locator('[data-object-role="textbox"]').first();
+    await expect(body).toBeVisible();
+    await page.keyboard.press('Escape');
+    await body.click();
     const before = await body.evaluate((el) => ({
       left: el.style.left,
       top: el.style.top,
@@ -197,6 +202,7 @@ test.describe('Presentation object editor', () => {
 
     await page.evaluate(() => {
       window.__pptxCalls = [];
+      window.fetch = async () => new Response(new Blob(['mock-image'], { type: 'image/png' }), { status: 200 });
       window.PptxGenJS = function MockPptxGenJS() {
         this.ShapeType = { rect: 'rect', ellipse: 'ellipse' };
         this.addSlide = () => ({

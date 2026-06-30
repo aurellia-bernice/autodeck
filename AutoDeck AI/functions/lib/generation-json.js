@@ -30,6 +30,8 @@ const repairJsonArrayText = (jsonText) => {
     'storytellingNote',
     'speakerNotes',
     'imagePrompt',
+    'brandAssetId',
+    'brandAssetName',
     'type',
     'label',
     'icon',

@@ -37,6 +37,8 @@ const createDeckStorage = ({
       kicker: slide.kicker || null,
       speakerNotes: String(slide.speakerNotes || ''),
       imagePrompt: String(slide.imagePrompt || ''),
+      brandAssetId: String(slide.brandAssetId || ''),
+      brandAssetName: String(slide.brandAssetName || ''),
       editorVersion: SlideObjects.EDITOR_VERSION,
       visualVersion: editorSlide.visualVersion || SlideObjects.OBJECT_VISUAL_VERSION || 2,
       objects: editorSlide.objects,

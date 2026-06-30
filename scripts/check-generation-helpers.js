@@ -122,10 +122,13 @@ const deckPrompt = buildDeckPrompt({
   voiceGuide: 'Plain and factual.',
   templatePreset: { tone: 'Plain and factual.' },
   inputMode: 'brief',
+  brandAssets: [{ id: 'asset-logo', name: 'Quidax logo', kind: 'logo', usage: 'Primary logo for internal decks', url: 'https://example.com/logo.png' }],
 });
 assert.match(deckPrompt, /Create exactly 6 presentation slides/);
 assert.match(deckPrompt, /Mode: GENERATE FROM BRIEF \+ SOURCE/);
 assert.match(deckPrompt, /Nigeria volume rose 18% in Q2/);
+assert.match(deckPrompt, /Available Quidax brand assets/);
+assert.match(deckPrompt, /asset-logo/);
 
 const contentPrompt = buildDeckPrompt({
   userInstruction: 'Use this exact text',
