@@ -15,17 +15,18 @@ async function injectAdminAuth(page) {
       configurable: true,
       get: () => _wrapped,
       set: (realAuth) => {
+        const adminUser = { uid: 'admin-test-uid', email: 'admin@quidax.com', displayName: 'Test Admin' };
         _wrapped = {
           onAuthStateChanged: (cb) => {
             // Fire the callback asynchronously so the component has mounted
             Promise.resolve().then(() =>
-              cb({ uid: 'admin-test-uid', email: 'admin@quidax.com', displayName: 'Test Admin' })
+              cb(adminUser)
             );
             return () => {};
           },
           signOut: () => Promise.resolve(),
           // Forward any other methods that may be called
-          currentUser: null,
+          currentUser: adminUser,
         };
       },
     });
@@ -62,9 +63,10 @@ test.describe('AdminScreen — admin role', () => {
 
   // ── Tab navigation ───────────────────────────────────────────────────────
 
-  test('renders all four admin tabs', async ({ page }) => {
+  test('renders all five admin tabs', async ({ page }) => {
     await expect(page.getByRole('button', { name: 'Brand colours' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Typography' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Assets' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Templates' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Voice' })).toBeVisible();
   });
@@ -81,6 +83,14 @@ test.describe('AdminScreen — admin role', () => {
   test('clicking Templates tab shows template upload UI', async ({ page }) => {
     await page.getByRole('button', { name: 'Templates' }).click();
     await expect(page.getByText(/Upload template|PPTX|template/i).first()).toBeVisible();
+  });
+
+  test('clicking Assets tab shows brand asset library controls', async ({ page }) => {
+    await page.getByRole('button', { name: 'Assets' }).click();
+    await expect(page.getByText('Brand assets', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Upload from computer' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add external link' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save assets' })).toBeVisible();
   });
 
   test('clicking Voice tab shows voice guide section', async ({ page }) => {
@@ -128,6 +138,50 @@ test.describe('AdminScreen — admin role', () => {
     await page.getByRole('button', { name: 'Typography' }).click();
     // Default display font is Space Grotesk
     await expect(page.getByText(/Display font · Space Grotesk/)).toBeVisible();
+  });
+
+  test('Assets tab adds a Google Drive brand asset link', async ({ page }) => {
+    await page.getByRole('button', { name: 'Assets' }).click();
+    await page.getByPlaceholder('https://drive.google.com/... or https://...').fill('https://drive.google.com/file/d/abc123/view?usp=sharing');
+    await page.getByPlaceholder('Asset name').fill('Quidax logo');
+    await page.getByPlaceholder(/Usage hint/).first().fill('Primary logo for deck exports');
+    await page.getByRole('button', { name: 'Add external link' }).click();
+
+    await expect(page.getByLabel('Asset name')).toHaveValue('Quidax logo');
+    await expect(page.getByLabel('Asset description')).toHaveValue('Primary logo for deck exports');
+    await expect(page.getByText(/google/i)).toBeVisible();
+  });
+
+  test('Assets tab upload creates an editable asset description row', async ({ page }) => {
+    await page.getByRole('button', { name: 'Assets' }).click();
+    await page.evaluate(() => {
+      window.firebaseStorage = {
+        ref: (path) => ({
+          put: (file) => {
+            window.__lastBrandAssetUpload = { path, name: file.name, type: file.type };
+            return Promise.resolve({
+              ref: {
+                getDownloadURL: () => Promise.resolve(`https://storage.example/${encodeURIComponent(file.name)}`),
+              },
+            });
+          },
+        }),
+      };
+    });
+
+    const chooserPromise = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Upload from computer' }).click();
+    const chooser = await chooserPromise;
+    await chooser.setFiles({
+      name: 'hero-illustration.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from('fake-image'),
+    });
+
+    await expect(page.getByLabel('Asset name')).toHaveValue('hero-illustration');
+    await expect(page.getByLabel('Asset type')).toHaveValue('image');
+    await page.getByLabel('Asset description').fill('Hero illustration for onboarding decks');
+    await expect(page.getByLabel('Asset description')).toHaveValue('Hero illustration for onboarding decks');
   });
 });
 

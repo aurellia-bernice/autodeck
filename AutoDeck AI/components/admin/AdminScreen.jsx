@@ -16,6 +16,79 @@ const adminCallFn = (name, payload = {}, timeoutMs = 30000) => {
   return fn(payload).then((result) => result.data);
 };
 
+const BRAND_ASSET_KINDS = [
+  { value: 'logo', label: 'Logo / mark' },
+  { value: 'icon', label: 'Icon' },
+  { value: 'image', label: 'Image' },
+  { value: 'illustration', label: 'Illustration' },
+  { value: 'pattern', label: 'Pattern / background' },
+  { value: 'source', label: 'Design source' },
+  { value: 'other', label: 'Other' },
+];
+
+const safeBrandAssetFileName = (value) => String(value || 'brand-asset')
+  .replace(/[^\w.-]+/g, '_')
+  .replace(/^_+|_+$/g, '')
+  .slice(0, 120) || 'brand-asset';
+
+const normalizeBrandAssetUrlForAdmin = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return { url: '', sourceUrl: '', sourceType: 'url' };
+  try {
+    const parsed = new URL(raw);
+    const host = parsed.hostname.toLowerCase();
+    const driveId = parsed.searchParams.get('id')
+      || raw.match(/\/file\/d\/([^/?#]+)/)?.[1]
+      || raw.match(/\/presentation\/d\/([^/?#]+)/)?.[1]
+      || raw.match(/\/document\/d\/([^/?#]+)/)?.[1];
+    if (driveId && host.includes('drive.google.com')) {
+      return {
+        url: `https://drive.google.com/uc?export=download&id=${encodeURIComponent(driveId)}`,
+        sourceUrl: raw,
+        sourceType: 'google',
+      };
+    }
+    return {
+      url: parsed.href,
+      sourceUrl: raw,
+      sourceType: host.includes('google.') || host.includes('googleusercontent.com') ? 'google' : 'url',
+    };
+  } catch (_) {
+    return { url: raw, sourceUrl: raw, sourceType: 'url' };
+  }
+};
+
+const inferBrandAssetKind = (file) => {
+  const name = String(file?.name || '').toLowerCase();
+  const type = String(file?.type || '').toLowerCase();
+  if (/logo|mark/.test(name)) return 'logo';
+  if (/icon|glyph/.test(name)) return 'icon';
+  if (/pattern|background|texture/.test(name)) return 'pattern';
+  if (type.startsWith('image/')) return 'image';
+  return 'source';
+};
+
+const normalizeBrandAssetRows = (assets = []) => Array.isArray(assets)
+  ? assets
+      .filter((asset) => asset && typeof asset === 'object')
+      .map((asset, index) => {
+        const normalized = normalizeBrandAssetUrlForAdmin(asset.url || asset.sourceUrl || '');
+        return {
+          id: String(asset.id || `asset-${Date.now()}-${index}`).trim(),
+          name: String(asset.name || asset.fileName || `Brand asset ${index + 1}`).trim(),
+          kind: String(asset.kind || 'image').trim().toLowerCase(),
+          url: normalized.url,
+          sourceUrl: asset.sourceUrl || normalized.sourceUrl,
+          sourceType: asset.sourceType || normalized.sourceType,
+          usage: String(asset.usage || '').trim(),
+          fileName: String(asset.fileName || '').trim(),
+          storagePath: String(asset.storagePath || '').trim(),
+          addedAt: String(asset.addedAt || '').trim(),
+        };
+      })
+      .filter((asset) => asset.name && asset.url)
+  : [];
+
 const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
   const T = qxTheme(tweaks?.darkMode);
   const [tab, setTab] = React.useState('brand');
@@ -44,10 +117,22 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
   };
   const removeVoiceDoc = (id) => setVoiceDocs(p => ({ ...p, [id]: null }));
   const [saved, setSaved] = React.useState(false);
+  const [brandAssets, setBrandAssets] = React.useState(() => normalizeBrandAssetRows(brandConfig?.brandAssets));
+  const [assetName, setAssetName] = React.useState('');
+  const [assetUrl, setAssetUrl] = React.useState('');
+  const [assetKind, setAssetKind] = React.useState('logo');
+  const [assetKindTouched, setAssetKindTouched] = React.useState(false);
+  const [assetUsage, setAssetUsage] = React.useState('');
+  const [assetUploading, setAssetUploading] = React.useState(false);
+  const [assetSaved, setAssetSaved] = React.useState(false);
+  const [assetError, setAssetError] = React.useState('');
+  const assetFileRef = React.useRef(null);
+  const [dragOver, setDragOver] = React.useState(false);
 
   const tabs = [
     { id: 'brand', label: 'Brand colours' },
     { id: 'type',  label: 'Typography' },
+    { id: 'assets', label: 'Assets' },
     { id: 'tpl',   label: 'Templates' },
     { id: 'voice', label: 'Voice' },
   ];
@@ -157,6 +242,96 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
     };
   };
 
+  React.useEffect(() => {
+    setBrandAssets(normalizeBrandAssetRows(brandConfig?.brandAssets));
+  }, [JSON.stringify(brandConfig?.brandAssets || [])]);
+
+  const updateAsset = (id, patch) => {
+    setBrandAssets((prev) => prev.map((asset) => asset.id === id ? { ...asset, ...patch } : asset));
+  };
+
+  const deleteAsset = (id) => setBrandAssets((prev) => prev.filter((asset) => asset.id !== id));
+
+  const resetAssetDraft = () => {
+    setAssetName('');
+    setAssetUrl('');
+    setAssetUsage('');
+    setAssetKind('logo');
+    setAssetKindTouched(false);
+  };
+
+  const addAssetFromUrl = () => {
+    const normalized = normalizeBrandAssetUrlForAdmin(assetUrl);
+    if (!normalized.url) {
+      setAssetError('Paste a valid asset link first.');
+      return;
+    }
+    setBrandAssets((prev) => [
+      ...prev,
+      {
+        id: `asset-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: assetName.trim() || `Brand asset ${prev.length + 1}`,
+        kind: assetKind,
+        url: normalized.url,
+        sourceUrl: normalized.sourceUrl,
+        sourceType: normalized.sourceType,
+        usage: assetUsage.trim(),
+        fileName: '',
+        storagePath: '',
+        addedAt: new Date().toISOString(),
+      },
+    ]);
+    setAssetError('');
+    resetAssetDraft();
+  };
+
+  const uploadBrandAssetFile = async (file) => {
+    if (!file) return;
+    const uid = window.firebaseAuth?.currentUser?.uid;
+    if (!uid || !window.firebaseStorage) {
+      setAssetError('Sign in as an admin to upload brand assets.');
+      return;
+    }
+    setAssetUploading(true);
+    setAssetError('');
+    const safeName = safeBrandAssetFileName(file.name);
+    const storagePath = `brand-assets/${uid}/${Date.now()}_${safeName}`;
+    try {
+      const ref = window.firebaseStorage.ref(storagePath);
+      const snap = await ref.put(file);
+      const url = await snap.ref.getDownloadURL();
+      const inferredKind = inferBrandAssetKind(file);
+      setBrandAssets((prev) => [
+        ...prev,
+        {
+          id: `asset-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: assetName.trim() || file.name.replace(/\.[^.]+$/, ''),
+          kind: assetKindTouched ? assetKind : inferredKind,
+          url,
+          sourceUrl: url,
+          sourceType: 'upload',
+          usage: assetUsage.trim(),
+          fileName: file.name,
+          storagePath,
+          addedAt: new Date().toISOString(),
+        },
+      ]);
+      resetAssetDraft();
+    } catch (err) {
+      setAssetError(err?.message || 'Brand asset upload failed.');
+    } finally {
+      setAssetUploading(false);
+    }
+  };
+
+  const saveBrandAssets = () => {
+    const cfg = { brandAssets: normalizeBrandAssetRows(brandAssets) };
+    onBrandSave && onBrandSave(cfg);
+    adminCallFn('saveBrand', { brand: cfg }).catch(() => {});
+    setAssetSaved(true);
+    setTimeout(() => setAssetSaved(false), 2000);
+  };
+
   const Card = ({ children }) => (
     <div style={{ background: T.surface, borderRadius: qxRadius.lg, border: `1px solid ${T.border}`, padding: 28, boxShadow: qxShadow(tweaks?.darkMode).md }}>
       {children}
@@ -169,17 +344,22 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: T.bg, fontFamily: qxType.body, color: T.ink, padding: '40px 48px' }}>
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <span style={{ padding: '4px 10px', borderRadius: qxRadius.full, background: 'rgba(245,166,35,0.10)', border: '1px solid rgba(245,166,35,0.25)', color: '#B27000', fontFamily: qxType.mono, fontSize: 10, fontWeight: 500, letterSpacing: '0.18em', textTransform: 'uppercase' }}>
+    <div style={{ minHeight: '100vh', background: T.bg, fontFamily: qxType.body, color: T.ink, position: 'relative' }}>
+      {/* Subtle purple gradient wash at top */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 280, background: 'linear-gradient(180deg, rgba(95,42,145,0.06) 0%, transparent 100%)', pointerEvents: 'none' }} />
+
+      <div style={{ position: 'relative', padding: '40px 48px' }}>
+      <div style={{ marginBottom: 32 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 11px', borderRadius: qxRadius.full, background: 'rgba(245,166,35,0.10)', border: '1px solid rgba(245,166,35,0.28)', color: '#9A6000', fontFamily: qxType.mono, fontSize: 10, fontWeight: 600, letterSpacing: '0.18em', textTransform: 'uppercase' }}>
+            <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><path d="M5 0l1.12 3.45H8.9L6.69 5.58l.85 3.32L5 7.13 2.46 8.9l.85-3.32L1.1 3.45H3.88L5 0z"/></svg>
             Design team only
           </span>
         </div>
-        <h1 style={{ fontFamily: qxType.display, fontSize: 40, fontWeight: 500, color: T.ink, margin: '0 0 6px', letterSpacing: '-0.025em' }}>
+        <h1 style={{ fontFamily: qxType.display, fontSize: 42, fontWeight: 500, color: T.ink, margin: '0 0 8px', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
           Brand admin
         </h1>
-        <p style={{ fontSize: 15, color: T.inkDim, margin: 0 }}>
+        <p style={{ fontSize: 15, color: T.inkDim, margin: 0, lineHeight: 1.6 }}>
           Manage Quidax brand configuration and slide templates.
         </p>
       </div>
@@ -188,11 +368,11 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
             padding: '8px 18px', borderRadius: qxRadius.full, border: 'none',
-            background: tab === t.id ? T.bgElev : 'transparent',
-            color: tab === t.id ? T.ink : T.inkDim,
+            background: tab === t.id ? T.primary : 'transparent',
+            color: tab === t.id ? '#F6F1FB' : T.inkDim,
             fontFamily: qxType.body, fontSize: 13, fontWeight: tab === t.id ? 600 : 500,
-            cursor: 'pointer', transition: `all 140ms ${qxEase}`,
-            boxShadow: tab === t.id ? qxShadow(tweaks?.darkMode).sm : 'none',
+            cursor: 'pointer', transition: `all 160ms ${qxEase}`,
+            boxShadow: tab === t.id ? '0 2px 10px rgba(95,42,145,0.28)' : 'none',
           }}>{t.label}</button>
         ))}
       </div>
@@ -341,6 +521,218 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
               Save typography
             </button>
           </div>
+        </div>
+      )}
+
+      {tab === 'assets' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Card>
+            <Eyebrow>Brand assets</Eyebrow>
+            <p style={{ fontSize: 14, color: T.inkDim, margin: '0 0 20px', lineHeight: 1.55, maxWidth: 680 }}>
+              Add logos, icons, patterns, and source links. Logo assets are stamped into exports; others are available to the editor and generation.
+            </p>
+
+            {/* Hidden file input */}
+            <input
+              ref={assetFileRef}
+              type="file"
+              accept=".png,.jpg,.jpeg,.webp,.gif,.svg,.pdf,.ai,.eps,.fig"
+              style={{ display: 'none' }}
+              onChange={e => { const file = e.target.files?.[0]; if (file) uploadBrandAssetFile(file); e.target.value = ''; }}
+            />
+
+            {/* Drag & drop zone */}
+            <div
+              onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={e => { e.preventDefault(); setDragOver(false); const file = e.dataTransfer.files?.[0]; if (file) uploadBrandAssetFile(file); }}
+              onClick={() => !assetUploading && assetFileRef.current?.click()}
+              style={{
+                border: `2px dashed ${dragOver ? T.primary : T.border}`,
+                borderRadius: qxRadius.lg,
+                background: dragOver ? 'rgba(95,42,145,0.05)' : T.bgElev,
+                padding: '36px 24px',
+                textAlign: 'center',
+                cursor: assetUploading ? 'wait' : 'pointer',
+                transition: `all 160ms ${qxEase}`,
+                marginBottom: 20,
+                userSelect: 'none',
+              }}
+            >
+              <div style={{ width: 48, height: 48, borderRadius: qxRadius.lg, background: dragOver ? 'rgba(95,42,145,0.10)' : T.ghostBg, border: `1.5px solid ${dragOver ? T.primary : T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', transition: `all 160ms ${qxEase}` }}>
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="M10 13V4M7 7l3-3 3 3M3.5 14.5v1A1.5 1.5 0 005 17h10a1.5 1.5 0 001.5-1.5v-1" stroke={dragOver ? T.primary : T.inkDim} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+              {assetUploading ? (
+                <div style={{ fontSize: 14, color: T.inkDim, fontWeight: 500 }}>Uploading…</div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: dragOver ? T.primary : T.ink, marginBottom: 4, transition: `color 160ms ${qxEase}` }}>
+                    {dragOver ? 'Drop to upload' : 'Drop files here or click to browse'}
+                  </div>
+                  <div style={{ fontSize: 12.5, color: T.inkMute, fontFamily: qxType.mono, letterSpacing: '0.06em' }}>
+                    PNG · JPG · SVG · PDF · AI · EPS · FIG
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Asset type pills */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontFamily: qxType.mono, fontSize: 10.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.inkMute, marginBottom: 8 }}>Asset type</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {BRAND_ASSET_KINDS.map(k => (
+                  <button key={k.value}
+                    onClick={() => { setAssetKind(k.value); setAssetKindTouched(true); }}
+                    style={{
+                      padding: '5px 13px', borderRadius: qxRadius.full, cursor: 'pointer',
+                      border: `1px solid ${assetKind === k.value ? T.primary : T.border}`,
+                      background: assetKind === k.value ? T.primary : 'transparent',
+                      color: assetKind === k.value ? '#F6F1FB' : T.inkDim,
+                      fontSize: 12.5, fontFamily: qxType.body, fontWeight: assetKind === k.value ? 600 : 400,
+                      transition: `all 140ms ${qxEase}`,
+                    }}>
+                    {k.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Name + usage */}
+            <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 12, marginBottom: 18 }}>
+              <input
+                value={assetName}
+                onChange={e => setAssetName(e.target.value)}
+                placeholder="Asset name"
+                style={{ padding: '11px 13px', borderRadius: qxRadius.sm, border: `1px solid ${T.border}`, background: T.bgElev, color: T.ink, fontFamily: qxType.body, fontSize: 13.5, outline: 'none' }}
+              />
+              <input
+                value={assetUsage}
+                onChange={e => setAssetUsage(e.target.value)}
+                placeholder="Usage hint, e.g. primary logo for every deck, product screenshots"
+                style={{ padding: '11px 13px', borderRadius: qxRadius.sm, border: `1px solid ${T.border}`, background: T.bgElev, color: T.ink, fontFamily: qxType.body, fontSize: 13.5, outline: 'none' }}
+              />
+            </div>
+
+            {/* Divider */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <div style={{ flex: 1, height: 1, background: T.border }} />
+              <span style={{ fontSize: 11, color: T.inkMute, fontFamily: qxType.mono, letterSpacing: '0.14em', textTransform: 'uppercase', flexShrink: 0 }}>or add via link</span>
+              <div style={{ flex: 1, height: 1, background: T.border }} />
+            </div>
+
+            {/* External URL row */}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <input
+                value={assetUrl}
+                onChange={e => setAssetUrl(e.target.value)}
+                placeholder="https://drive.google.com/... or https://..."
+                style={{ flex: 1, padding: '11px 13px', borderRadius: qxRadius.sm, border: `1px solid ${T.border}`, background: T.bgElev, color: T.ink, fontFamily: qxType.body, fontSize: 13.5, outline: 'none' }}
+              />
+              <button
+                onClick={addAssetFromUrl}
+                style={{ padding: '11px 20px', borderRadius: qxRadius.full, border: `1px solid ${T.border}`, background: T.bgElev, color: T.ink, fontSize: 13, fontFamily: qxType.body, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, transition: `all 140ms ${qxEase}` }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = T.primary; e.currentTarget.style.color = T.primary; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.ink; }}
+              >
+                Add link
+              </button>
+            </div>
+            {assetError && <div style={{ marginTop: 10, fontSize: 12.5, color: '#C2410C' }}>{assetError}</div>}
+          </Card>
+
+          {/* Asset library */}
+          <Card>
+            <Eyebrow>Asset library</Eyebrow>
+            {brandAssets.length === 0 ? (
+              <div style={{ padding: '40px 0', textAlign: 'center' }}>
+                <div style={{ width: 48, height: 48, borderRadius: qxRadius.lg, background: T.ghostBg, border: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2.5" y="4.5" width="15" height="12" rx="1.5" stroke={T.inkMute} strokeWidth="1.3"/><path d="M2.5 8.5h15M7 4.5V2.5" stroke={T.inkMute} strokeWidth="1.3" strokeLinecap="round"/></svg>
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: T.inkDim, marginBottom: 4 }}>No brand assets yet</div>
+                <div style={{ fontSize: 13, color: T.inkMute }}>Upload files or add links above to build your library.</div>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 14 }}>
+                {brandAssets.map(asset => (
+                  <div key={asset.id} style={{ position: 'relative', borderRadius: qxRadius.lg, border: `1px solid ${T.border}`, background: T.bgElev, overflow: 'hidden', transition: `box-shadow 140ms ${qxEase}` }}
+                    onMouseEnter={e => { e.currentTarget.style.boxShadow = qxShadow(tweaks?.darkMode).md; }}
+                    onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; }}
+                  >
+                    {/* Thumbnail */}
+                    <div style={{
+                      height: 120,
+                      background: T.ghostBg,
+                      backgroundImage: asset.kind !== 'source' ? `url(${asset.url})` : 'none',
+                      backgroundSize: 'contain',
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'center',
+                      borderBottom: `1px solid ${T.border}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {asset.kind === 'source' && (
+                        <span style={{ fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.inkMute, background: T.surface, padding: '4px 9px', borderRadius: qxRadius.xs, border: `1px solid ${T.border}` }}>Source file</span>
+                      )}
+                    </div>
+
+                    {/* Kind badge — top left */}
+                    <div style={{ position: 'absolute', top: 8, left: 8, padding: '3px 8px', borderRadius: qxRadius.full, background: T.surface, border: `1px solid ${T.border}`, fontFamily: qxType.mono, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.inkMute }}>
+                      {asset.kind}
+                    </div>
+
+                    {/* Delete button — top right */}
+                    <button
+                      onClick={() => deleteAsset(asset.id)}
+                      title="Delete asset"
+                      style={{ position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: qxRadius.sm, border: `1px solid ${T.border}`, background: T.surface, color: T.inkDim, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: `all 120ms ${qxEase}` }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = '#E05A5A'; e.currentTarget.style.color = '#E05A5A'; e.currentTarget.style.background = 'rgba(224,90,90,0.07)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.inkDim; e.currentTarget.style.background = T.surface; }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 13 13" fill="none"><path d="M2 3h9M5 3V2h3v1M4 3l.5 8h4L9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+
+                    {/* Card body */}
+                    <div style={{ padding: '12px 12px 14px' }}>
+                      <input
+                        aria-label="Asset name"
+                        value={asset.name}
+                        onChange={e => updateAsset(asset.id, { name: e.target.value })}
+                        placeholder="Asset name"
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: qxRadius.sm, border: `1px solid ${T.border}`, background: T.surface, color: T.ink, fontFamily: qxType.body, fontSize: 13, fontWeight: 600, outline: 'none', marginBottom: 8 }}
+                      />
+                      <select
+                        aria-label="Asset type"
+                        value={asset.kind}
+                        onChange={e => updateAsset(asset.id, { kind: e.target.value })}
+                        style={{ width: '100%', padding: '7px 10px', borderRadius: qxRadius.sm, border: `1px solid ${T.border}`, background: T.surface, color: T.ink, fontFamily: qxType.body, fontSize: 12, outline: 'none', marginBottom: 8 }}
+                      >
+                        {BRAND_ASSET_KINDS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
+                      </select>
+                      <textarea
+                        aria-label="Asset description"
+                        value={asset.usage || ''}
+                        onChange={e => updateAsset(asset.id, { usage: e.target.value })}
+                        placeholder="Where should this asset be used?"
+                        rows={2}
+                        style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', minHeight: 52, padding: '7px 10px', borderRadius: qxRadius.sm, border: `1px solid ${T.border}`, background: T.surface, color: T.ink, fontFamily: qxType.body, fontSize: 12, lineHeight: 1.4, outline: 'none' }}
+                      />
+                      {(asset.fileName || asset.sourceType) && (
+                        <div style={{ marginTop: 7, fontFamily: qxType.mono, fontSize: 9, color: T.inkMute, letterSpacing: '0.06em', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {asset.sourceType || 'url'}{asset.fileName ? ` · ${asset.fileName}` : ''}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12, marginTop: 20 }}>
+              {assetSaved && <span style={{ fontSize: 13, color: '#1F8A5B' }}>✓ Saved</span>}
+              <button onClick={saveBrandAssets} style={primaryLimeButton()}>Save assets</button>
+            </div>
+          </Card>
         </div>
       )}
 
@@ -510,6 +902,7 @@ const AdminScreen = ({ tweaks, brandConfig, onBrandSave }) => {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };
